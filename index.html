@@ -324,6 +324,117 @@
   }
   .norm-code { color: var(--green-dark); font-weight: 700; font-size: 0.78rem; }
 
+  /* ---------- Inteligencia ---------- */
+  .intel-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 860px) { .intel-grid { grid-template-columns: 1fr; } }
+  .chart-title { font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+  .chart-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 16px; }
+
+  .column-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 22px;
+    height: 180px;
+    padding: 0 8px;
+  }
+  .column-chart .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .column-chart .bar {
+    width: 100%;
+    max-width: 64px;
+    border-radius: 6px 6px 0 0;
+    transition: height 0.4s ease;
+  }
+  .column-chart .bar-value { font-size: 0.82rem; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .column-chart .bar-label { font-size: 0.78rem; color: var(--muted); margin-top: 8px; text-align: center; }
+
+  .hbar-row { margin-bottom: 14px; }
+  .hbar-row:last-child { margin-bottom: 0; }
+  .hbar-top { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; }
+  .hbar-top .hbar-name { font-weight: 600; color: var(--text); }
+  .hbar-top .hbar-val { color: var(--muted); font-weight: 700; }
+  .hbar-track { background: #eef2f7; border-radius: 999px; height: 10px; overflow: hidden; }
+  .hbar-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+
+  .intel-note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; }
+
+  /* ---------- Analisis Avanzado ---------- */
+  .risk-summary {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+  .risk-summary.show { display: block; }
+  .risk-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .risk-score { font-size: 2.2rem; font-weight: 800; color: var(--navy); }
+  .risk-score span { font-size: 1rem; color: var(--muted); font-weight: 600; }
+  .risk-level-badge { padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+  .risk-gauge-track { background: linear-gradient(90deg, #1f9d55, #e0c341, #c0392b); height: 12px; border-radius: 999px; position: relative; margin-bottom: 6px; }
+  .risk-gauge-marker { position: absolute; top: -5px; width: 4px; height: 22px; background: var(--navy); border-radius: 2px; transform: translateX(-2px); transition: left 0.4s ease; }
+  .risk-scale-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); }
+  .risk-recommendation { margin-top: 14px; padding: 12px 14px; background: #f7faf8; border-left: 4px solid var(--green); border-radius: 8px; font-size: 0.86rem; }
+
+  /* ---------- IA Assistant ---------- */
+  .chat-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    height: 480px;
+    overflow: hidden;
+  }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 0.88rem; line-height: 1.45; }
+  .msg.bot { align-self: flex-start; background: #eef2f7; color: var(--text); border-bottom-left-radius: 3px; }
+  .msg.user { align-self: flex-end; background: var(--navy); color: white; border-bottom-right-radius: 3px; }
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 14px; }
+  .chat-chip {
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--navy);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .chat-chip:hover { border-color: var(--green); color: var(--green-dark); }
+  .chat-input-row { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); }
+  .chat-input-row input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    outline: none;
+  }
+  .chat-input-row input:focus { border-color: var(--green); }
+  .chat-send {
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .chat-send:hover { background: var(--green-dark); }
+
   @media (max-width: 640px) {
     .status-card { flex-direction: column; align-items: flex-start; }
     .status-actions { width: 100%; }
@@ -368,6 +479,18 @@
   <button class="tab-btn" data-tab="normativa">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4S7 3 3 4v12c4-1 7 0 7 0s3-1 7 0V4c-4-1-7 0-7 0z"/><path d="M10 4v12"/></svg>
     Normativa
+  </button>
+  <button class="tab-btn" data-tab="inteligencia">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17V9M8 17V4M13 17v-6M18 17V7"/></svg>
+    Inteligencia
+  </button>
+  <button class="tab-btn" data-tab="analisisAvanzado">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
+    Análisis Avanzado
+  </button>
+  <button class="tab-btn" data-tab="iaAssistant">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 17l3-3 3 3M7 8h.01M13 8h.01"/></svg>
+    IA Assistant
   </button>
 </nav>
 
@@ -626,6 +749,81 @@
     </div>
   </section>
 
+  <!-- ===== INTELIGENCIA ===== -->
+  <section id="inteligencia" class="tab-content">
+    <h2 class="section-title">Inteligencia de mercado</h2>
+    <p class="section-sub">Panel de referencia con datos ilustrativos a partir del comparador. Actualiza los valores con datos reales cuando los tengas.</p>
+
+    <div class="intel-grid">
+      <div class="card">
+        <div class="chart-title">Cuota mensual media</div>
+        <div class="chart-sub">Verisure vs Securitas Direct vs Tyco</div>
+        <div class="column-chart" id="priceChart"></div>
+      </div>
+      <div class="card">
+        <div class="chart-title">Equipos más solicitados</div>
+        <div class="chart-sub">Distribución de demanda por dispositivo</div>
+        <div id="equipoChart"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chart-title">Margen competitivo</div>
+      <div class="chart-sub">Diferencia de cuota mensual media frente a la media de mercado (4 empresas)</div>
+      <div id="marginChart"></div>
+      <p class="intel-note">Verde = por debajo de la media (más competitivo) · Rojo = por encima de la media.</p>
+    </div>
+  </section>
+
+  <!-- ===== ANALISIS AVANZADO ===== -->
+  <section id="analisisAvanzado" class="tab-content">
+    <h2 class="section-title">Análisis avanzado de contratos</h2>
+    <p class="section-sub">Detección ampliada de cláusulas de riesgo con puntuación 1-10. Procesado localmente en tu navegador, sin envío a servidores.</p>
+
+    <div class="dropzone" id="dropzoneAdv">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      <div class="dropzone-title">Suelta el contrato aquí o haz clic para seleccionarlo</div>
+      <div class="dropzone-sub">Admite .txt para el motor de puntuación de riesgo</div>
+      <input type="file" id="fileInputAdv" accept=".txt,.pdf,.doc,.docx">
+    </div>
+
+    <div class="risk-summary" id="riskSummary">
+      <div class="risk-top">
+        <div class="risk-score" id="riskScoreValue">0<span>/10</span></div>
+        <div class="risk-level-badge" id="riskLevelBadge">—</div>
+      </div>
+      <div class="risk-gauge-track">
+        <div class="risk-gauge-marker" id="riskMarker" style="left:0%"></div>
+      </div>
+      <div class="risk-scale-labels"><span>1 · Bajo</span><span>5 · Medio</span><span>10 · Muy alto</span></div>
+      <div class="risk-recommendation" id="riskRecommendation"></div>
+    </div>
+
+    <div class="analysis-results" id="analysisResultsAdv"></div>
+  </section>
+
+  <!-- ===== IA ASSISTANT ===== -->
+  <section id="iaAssistant" class="tab-content">
+    <h2 class="section-title">IA Assistant</h2>
+    <p class="section-sub">Chat con respuestas predefinidas sobre normativas, equipos y argumentos para negociar tu baja o permanencia.</p>
+
+    <div class="chat-wrap">
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg bot">Hola, soy el asistente de SegurPanel. Puedo ayudarte con normativas, comparativas de equipos, precios o cómo negociar tu baja. ¿Qué necesitas?</div>
+      </div>
+      <div class="chat-suggestions">
+        <button class="chat-chip" data-q="¿Qué normativa regula las alarmas?">Normativa aplicable</button>
+        <button class="chat-chip" data-q="¿Cómo cancelo sin penalización?">Cancelar sin penalización</button>
+        <button class="chat-chip" data-q="Diferencias entre Ajax y Jablotron">Ajax vs Jablotron</button>
+        <button class="chat-chip" data-q="¿Cómo negociar la retención?">Negociar retención</button>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="Escribe tu pregunta...">
+        <button class="chat-send" id="chatSend">Enviar</button>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <script>
@@ -738,6 +936,234 @@
   function escapeHtml(str) {
     return str.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+
+  /* ---------- Inteligencia: gráficas ---------- */
+  const PRICE_DATA = [
+    { label: 'Verisure', value: 49.5, color: '#0b2545' },
+    { label: 'Securitas Direct', value: 45, color: '#1f6fb8' },
+    { label: 'Tyco', value: 32.5, color: '#1f9d55' }
+  ];
+  const EQUIPO_DATA = [
+    { label: 'Ajax MotionCam', value: 32, color: '#1f9d55' },
+    { label: 'Ajax Hub 2', value: 24, color: '#1f9d55' },
+    { label: 'Jablotron JA-107K', value: 18, color: '#1f6fb8' },
+    { label: 'Ajax DoorProtect', value: 15, color: '#1f9d55' },
+    { label: 'Jablotron JA-150P', value: 11, color: '#1f6fb8' }
+  ];
+  const MARGIN_DATA = [
+    { label: 'Verisure', value: 49.5 },
+    { label: 'Securitas Direct', value: 45 },
+    { label: 'Tyco', value: 32.5 },
+    { label: 'Grupo Control', value: 36 }
+  ];
+
+  function renderColumnChart(containerId, data) {
+    const container = document.getElementById(containerId);
+    const max = Math.max(...data.map(d => d.value)) * 1.15;
+    container.innerHTML = data.map(d => `
+      <div class="col">
+        <div class="bar-value">${d.value}€</div>
+        <div class="bar" style="height:${(d.value / max * 100).toFixed(1)}%; background:${d.color};"></div>
+        <div class="bar-label">${escapeHtml(d.label)}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderHBarChart(containerId, data, unit) {
+    const container = document.getElementById(containerId);
+    const max = Math.max(...data.map(d => d.value));
+    container.innerHTML = data.map(d => `
+      <div class="hbar-row">
+        <div class="hbar-top"><span class="hbar-name">${escapeHtml(d.label)}</span><span class="hbar-val">${d.value}${unit}</span></div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${(d.value / max * 100).toFixed(1)}%; background:${d.color};"></div></div>
+      </div>
+    `).join('');
+  }
+
+  function renderMarginChart() {
+    const avg = MARGIN_DATA.reduce((s, d) => s + d.value, 0) / MARGIN_DATA.length;
+    const container = document.getElementById('marginChart');
+    const maxDiff = Math.max(...MARGIN_DATA.map(d => Math.abs(d.value - avg))) || 1;
+    container.innerHTML = MARGIN_DATA.map(d => {
+      const diff = d.value - avg;
+      const pct = (diff / avg * 100).toFixed(1);
+      const width = Math.min(100, Math.abs(diff) / maxDiff * 100).toFixed(1);
+      const color = diff <= 0 ? '#1f9d55' : '#c0392b';
+      return `
+        <div class="hbar-row">
+          <div class="hbar-top"><span class="hbar-name">${escapeHtml(d.label)}</span><span class="hbar-val">${diff >= 0 ? '+' : ''}${pct}% vs media</span></div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${width}%; background:${color};"></div></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  renderColumnChart('priceChart', PRICE_DATA);
+  renderHBarChart('equipoChart', EQUIPO_DATA, '%');
+  renderMarginChart();
+
+  /* ---------- Analisis Avanzado: motor de riesgo ---------- */
+  const dropzoneAdv = document.getElementById('dropzoneAdv');
+  const fileInputAdv = document.getElementById('fileInputAdv');
+  const resultsAdvEl = document.getElementById('analysisResultsAdv');
+  const riskSummary = document.getElementById('riskSummary');
+
+  const CLAUSE_RULES_ADV = [
+    { re: /penalizaci[oó]n|indemnizaci[oó]n por baja/i, label: 'Penalización por baja anticipada', level: 'danger', weight: 3 },
+    { re: /permanencia|per[ií]odo m[ií]nimo/i, label: 'Cláusula de permanencia', level: 'warn', weight: 2 },
+    { re: /renovaci[oó]n autom[aá]tica|pr[oó]rroga t[aá]cita/i, label: 'Renovación automática', level: 'warn', weight: 2 },
+    { re: /cesi[oó]n de datos|terceros|finalidad comercial/i, label: 'Cesión de datos a terceros', level: 'warn', weight: 2 },
+    { re: /subida de precio|revisi[oó]n de tarifa|actualizaci[oó]n anual/i, label: 'Revisión / subida de precio', level: 'info', weight: 1 },
+    { re: /propiedad del equipo|cesi[oó]n de uso|comodato/i, label: 'Titularidad del equipo', level: 'info', weight: 1 },
+    { re: /exclusividad|mantenimiento obligatorio/i, label: 'Exclusividad de mantenimiento', level: 'info', weight: 1 },
+    { re: /preaviso/i, label: 'Plazo de preaviso para cancelar', level: 'info', weight: 1 }
+  ];
+
+  dropzoneAdv.addEventListener('click', () => fileInputAdv.click());
+  fileInputAdv.addEventListener('change', () => { if (fileInputAdv.files[0]) handleFileAdv(fileInputAdv.files[0]); });
+  ['dragenter', 'dragover'].forEach(evt =>
+    dropzoneAdv.addEventListener(evt, e => { e.preventDefault(); dropzoneAdv.classList.add('dragover'); })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    dropzoneAdv.addEventListener(evt, e => { e.preventDefault(); dropzoneAdv.classList.remove('dragover'); })
+  );
+  dropzoneAdv.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileAdv(file);
+  });
+
+  function handleFileAdv(file) {
+    const sizeKb = (file.size / 1024).toFixed(1);
+    resultsAdvEl.innerHTML = `<div class="file-chip">📄 ${escapeHtml(file.name)} · ${sizeKb} KB</div>`;
+    riskSummary.classList.remove('show');
+
+    if (/\.txt$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = () => renderClausesAdv(reader.result);
+      reader.readAsText(file);
+    } else {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      note.textContent = 'La puntuación automática de riesgo solo está disponible para archivos .txt. Convierte el contrato a texto plano para analizarlo.';
+      resultsAdvEl.appendChild(note);
+    }
+  }
+
+  function renderClausesAdv(text) {
+    const found = [];
+    let rawScore = 0;
+    CLAUSE_RULES_ADV.forEach(rule => {
+      const match = text.match(rule.re);
+      if (match) {
+        rawScore += rule.weight;
+        const idx = match.index;
+        const start = Math.max(0, idx - 50);
+        const end = Math.min(text.length, idx + match[0].length + 50);
+        const snippet = (start > 0 ? '…' : '') + text.slice(start, end).replace(/\s+/g, ' ').trim() + (end < text.length ? '…' : '');
+        found.push({ ...rule, snippet });
+      }
+    });
+
+    const score = found.length === 0 ? 1 : Math.min(10, 1 + rawScore);
+    let level, levelColor;
+    if (score <= 3) { level = 'Bajo'; levelColor = '#1f9d55'; }
+    else if (score <= 6) { level = 'Medio'; levelColor = '#b8860b'; }
+    else if (score <= 8) { level = 'Alto'; levelColor = '#d97706'; }
+    else { level = 'Muy alto'; levelColor = '#c0392b'; }
+
+    document.getElementById('riskScoreValue').innerHTML = score + '<span>/10</span>';
+    const badge = document.getElementById('riskLevelBadge');
+    badge.textContent = 'Riesgo ' + level;
+    badge.style.background = levelColor + '22';
+    badge.style.color = levelColor;
+    document.getElementById('riskMarker').style.left = ((score - 1) / 9 * 100).toFixed(1) + '%';
+
+    const recEl = document.getElementById('riskRecommendation');
+    if (found.length === 0) {
+      recEl.textContent = 'No se han detectado cláusulas de riesgo relevantes. Aun así, revisa el contrato completo antes de firmar.';
+    } else {
+      const riskyLabels = found.filter(f => f.level !== 'info').map(f => f.label);
+      recEl.textContent = riskyLabels.length
+        ? `Se recomienda revisar y negociar antes de firmar: ${riskyLabels.join(', ')}.`
+        : 'Se han detectado cláusulas informativas sin alto riesgo aparente. Revisa igualmente las condiciones completas.';
+    }
+    riskSummary.classList.add('show');
+
+    resultsAdvEl.querySelectorAll('.clause-item, .empty-note').forEach(el => el.remove());
+    if (found.length === 0) {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      note.textContent = 'No se han detectado cláusulas relevantes automáticamente. Revisa el documento manualmente.';
+      resultsAdvEl.appendChild(note);
+      return;
+    }
+    found.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'clause-item level-' + item.level;
+      div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)} <span style="font-weight:400;color:var(--muted);">(peso ${item.weight})</span></div><div class="clause-snippet">"${escapeHtml(item.snippet)}"</div></div>`;
+      resultsAdvEl.appendChild(div);
+    });
+  }
+
+  /* ---------- IA Assistant: chat ---------- */
+  const CHAT_RULES = [
+    {
+      keywords: ['normativa', 'ley', 'legal', 'une', 'reglamento', 'proteccion de datos', 'protección de datos', 'rgpd'],
+      response: 'La seguridad privada en España se regula principalmente por la Ley 5/2014 y el Reglamento (RD 195/2023). Los sistemas de alarma deben cumplir la norma técnica UNE-EN 50131 (intrusión) y UNE-EN 50136 (transmisión). Si el sistema trata datos personales (vídeo, biometría) aplica también el RGPD y la LOPDGDD. Consulta la pestaña Normativa para más detalle.'
+    },
+    {
+      keywords: ['permanencia', 'penalizacion', 'penalización', 'cancelar', 'baja', 'anular', 'cancelación', 'cancelacion'],
+      response: 'Para darte de baja sin penalización revisa la fecha de fin de permanencia en tu contrato original y envía un burofax o email fehaciente con al menos el preaviso indicado (normalmente 30 días). Si la permanencia ya venció, la empresa no puede cobrarte penalización. Si sigue vigente, puedes negociar una compensación menor. Usa la pestaña Análisis Avanzado para detectar estas cláusulas en tu contrato.'
+    },
+    {
+      keywords: ['ajax', 'jablotron', 'equipo', 'sensor', 'comparar equipos', 'diferencia'],
+      response: 'Ajax destaca por su ecosistema propio con el Hub 2 (WiFi + Ethernet + doble SIM) y sensores con hasta 7 años de batería. Jablotron JA-107K ofrece prestaciones similares con buena integración en instalaciones profesionales. Ambos cumplen el Grado 2 de la norma EN 50131. Consulta la pestaña Equipos para fichas detalladas.'
+    },
+    {
+      keywords: ['precio', 'tarifa', 'coste', 'cuota', 'cuanto cuesta', 'cuánto cuesta'],
+      response: 'Las cuotas mensuales orientativas van desde ~25-32€ (Tyco) hasta ~50-55€ (Verisure), según equipo y verificación incluida. Consulta las pestañas Comparador e Inteligencia para ver el detalle y las gráficas comparativas.'
+    },
+    {
+      keywords: ['retencion', 'retención', 'negociar', 'como evitar', 'cómo evitar', 'descuento retencion', 'quiero dar de baja'],
+      response: 'Al llamar para dar de baja es habitual que te ofrezcan descuentos de retención. Argumentos útiles: menciona que has recibido una oferta mejor de otra compañía (revisa la pestaña Ofertas), indica que no estás satisfecho con el servicio, y pide siempre por escrito cualquier condición que te ofrezcan antes de aceptar.'
+    }
+  ];
+  const CHAT_FALLBACK = 'No tengo una respuesta predefinida para eso. Prueba a preguntar sobre normativas, equipos, precios o cómo negociar la baja.';
+
+  const chatMessages = document.getElementById('chatMessages');
+  const chatInput = document.getElementById('chatInput');
+  const chatSend = document.getElementById('chatSend');
+
+  function addMessage(text, who) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + who;
+    div.textContent = text;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function botReply(userText) {
+    const normalized = userText.toLowerCase();
+    const rule = CHAT_RULES.find(r => r.keywords.some(k => normalized.includes(k)));
+    setTimeout(() => addMessage(rule ? rule.response : CHAT_FALLBACK, 'bot'), 300);
+  }
+
+  function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    addMessage(text, 'user');
+    chatInput.value = '';
+    botReply(text);
+  }
+
+  chatSend.addEventListener('click', sendChat);
+  chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+  document.querySelectorAll('.chat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chatInput.value = chip.dataset.q;
+      sendChat();
+    });
+  });
 </script>
 </body>
 </html>
