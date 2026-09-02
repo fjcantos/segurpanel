@@ -335,30 +335,6 @@
   .chart-title { font-weight: 700; color: var(--navy); margin-bottom: 4px; }
   .chart-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 16px; }
 
-  .column-chart {
-    display: flex;
-    align-items: flex-end;
-    gap: 22px;
-    height: 180px;
-    padding: 0 8px;
-  }
-  .column-chart .col {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    height: 100%;
-    justify-content: flex-end;
-  }
-  .column-chart .bar {
-    width: 100%;
-    max-width: 64px;
-    border-radius: 6px 6px 0 0;
-    transition: height 0.4s ease;
-  }
-  .column-chart .bar-value { font-size: 0.82rem; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
-  .column-chart .bar-label { font-size: 0.78rem; color: var(--muted); margin-top: 8px; text-align: center; }
-
   .hbar-row { margin-bottom: 14px; }
   .hbar-row:last-child { margin-bottom: 0; }
   .hbar-top { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 5px; }
@@ -573,19 +549,43 @@
             <td class="rating">4.2 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Securitas Direct</td>
+            <td class="company-name">Sector Alarm</td>
             <td>Desde 0€ (promo)</td>
-            <td>~40 – 50 €/mes</td>
-            <td>24 – 60 meses</td>
-            <td>Central Alfa, verificación por vídeo, sensores</td>
+            <td>~35 – 45 €/mes</td>
+            <td>24 – 36 meses</td>
+            <td>Central, sensores movimiento/apertura, cámara, app propia</td>
             <td class="rating">4.0 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Tyco</td>
+            <td class="company-name">Sicor</td>
             <td>Variable según instalador</td>
-            <td>~25 – 40 €/mes</td>
-            <td>12 – 36 meses</td>
-            <td>Central, detectores, CCTV opcional</td>
+            <td>~28 – 38 €/mes</td>
+            <td>12 – 24 meses</td>
+            <td>Central, detectores volumétricos, contactos magnéticos</td>
+            <td class="rating">3.8 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Segurma</td>
+            <td>Variable según instalador</td>
+            <td>~25 – 35 €/mes</td>
+            <td>12 – 24 meses</td>
+            <td>Central, sensores básicos, sirena interior/exterior</td>
+            <td class="rating">3.6 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">ADT</td>
+            <td>Desde 0€ (promo)</td>
+            <td>~35 – 45 €/mes</td>
+            <td>24 – 36 meses</td>
+            <td>Central, sensores movimiento/apertura, videoverificación</td>
+            <td class="rating">3.9 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Seguridad 3D</td>
+            <td>Variable según instalador</td>
+            <td>~25 – 32 €/mes</td>
+            <td>Sin permanencia / 12 meses</td>
+            <td>Central, sensores, app de control remoto</td>
             <td class="rating">3.7 / 5</td>
           </tr>
           <tr>
@@ -594,6 +594,22 @@
             <td>~30 – 42 €/mes</td>
             <td>Sin permanencia / 12 meses</td>
             <td>Central, sensores, app propia</td>
+            <td class="rating">3.9 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Trablisa</td>
+            <td>Variable según instalador</td>
+            <td>~28 – 38 €/mes</td>
+            <td>12 – 24 meses</td>
+            <td>Central, sensores, videovigilancia opcional</td>
+            <td class="rating">3.6 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">MPA/Prosegur</td>
+            <td>Desde 0€ (promo)</td>
+            <td>~30 – 40 €/mes</td>
+            <td>12 – 36 meses</td>
+            <td>Central, sensores, videoverificación, app propia</td>
             <td class="rating">3.9 / 5</td>
           </tr>
         </tbody>
@@ -615,16 +631,16 @@
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
       <div class="offer-card">
-        <div class="offer-company">Securitas Direct</div>
-        <span class="offer-badge">-50% 3 meses</span>
-        <div class="offer-desc">50% de descuento en la cuota durante los primeros 3 meses de contrato.</div>
+        <div class="offer-company">Sector Alarm</div>
+        <span class="offer-badge">2 meses gratis</span>
+        <div class="offer-desc">Cuota gratuita durante los 2 primeros meses al contratar online.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
       <div class="offer-card">
-        <div class="offer-company">Tyco</div>
-        <span class="offer-badge">Kit incluido</span>
-        <div class="offer-desc">Kit de sensores adicional sin coste al firmar contrato de 24 meses.</div>
-        <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
+        <div class="offer-company">ADT</div>
+        <span class="offer-badge">-30% primer año</span>
+        <div class="offer-desc">30% de descuento en la cuota durante el primer año de contrato.</div>
+        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
       <div class="offer-card">
         <div class="offer-company">Grupo Control</div>
@@ -757,8 +773,8 @@
     <div class="intel-grid">
       <div class="card">
         <div class="chart-title">Cuota mensual media</div>
-        <div class="chart-sub">Verisure vs Securitas Direct vs Tyco</div>
-        <div class="column-chart" id="priceChart"></div>
+        <div class="chart-sub">Comparativa de las 9 principales compañías</div>
+        <div id="priceChart"></div>
       </div>
       <div class="card">
         <div class="chart-title">Equipos más solicitados</div>
@@ -769,7 +785,7 @@
 
     <div class="card">
       <div class="chart-title">Margen competitivo</div>
-      <div class="chart-sub">Diferencia de cuota mensual media frente a la media de mercado (4 empresas)</div>
+      <div class="chart-sub">Diferencia de cuota mensual media frente a la media de mercado (9 empresas)</div>
       <div id="marginChart"></div>
       <p class="intel-note">Verde = por debajo de la media (más competitivo) · Rojo = por encima de la media.</p>
     </div>
@@ -940,8 +956,14 @@
   /* ---------- Inteligencia: gráficas ---------- */
   const PRICE_DATA = [
     { label: 'Verisure', value: 49.5, color: '#0b2545' },
-    { label: 'Securitas Direct', value: 45, color: '#1f6fb8' },
-    { label: 'Tyco', value: 32.5, color: '#1f9d55' }
+    { label: 'Sector Alarm', value: 40, color: '#1f6fb8' },
+    { label: 'Sicor', value: 33, color: '#1f9d55' },
+    { label: 'Segurma', value: 30, color: '#1f6fb8' },
+    { label: 'ADT', value: 40, color: '#0b2545' },
+    { label: 'Seguridad 3D', value: 28.5, color: '#1f9d55' },
+    { label: 'Grupo Control', value: 36, color: '#1f6fb8' },
+    { label: 'Trablisa', value: 33, color: '#1f9d55' },
+    { label: 'MPA/Prosegur', value: 35, color: '#0b2545' }
   ];
   const EQUIPO_DATA = [
     { label: 'Ajax MotionCam', value: 32, color: '#1f9d55' },
@@ -952,22 +974,15 @@
   ];
   const MARGIN_DATA = [
     { label: 'Verisure', value: 49.5 },
-    { label: 'Securitas Direct', value: 45 },
-    { label: 'Tyco', value: 32.5 },
-    { label: 'Grupo Control', value: 36 }
+    { label: 'Sector Alarm', value: 40 },
+    { label: 'Sicor', value: 33 },
+    { label: 'Segurma', value: 30 },
+    { label: 'ADT', value: 40 },
+    { label: 'Seguridad 3D', value: 28.5 },
+    { label: 'Grupo Control', value: 36 },
+    { label: 'Trablisa', value: 33 },
+    { label: 'MPA/Prosegur', value: 35 }
   ];
-
-  function renderColumnChart(containerId, data) {
-    const container = document.getElementById(containerId);
-    const max = Math.max(...data.map(d => d.value)) * 1.15;
-    container.innerHTML = data.map(d => `
-      <div class="col">
-        <div class="bar-value">${d.value}€</div>
-        <div class="bar" style="height:${(d.value / max * 100).toFixed(1)}%; background:${d.color};"></div>
-        <div class="bar-label">${escapeHtml(d.label)}</div>
-      </div>
-    `).join('');
-  }
 
   function renderHBarChart(containerId, data, unit) {
     const container = document.getElementById(containerId);
@@ -998,7 +1013,7 @@
     }).join('');
   }
 
-  renderColumnChart('priceChart', PRICE_DATA);
+  renderHBarChart('priceChart', PRICE_DATA, '€');
   renderHBarChart('equipoChart', EQUIPO_DATA, '%');
   renderMarginChart();
 
@@ -1121,7 +1136,7 @@
     },
     {
       keywords: ['precio', 'tarifa', 'coste', 'cuota', 'cuanto cuesta', 'cuánto cuesta'],
-      response: 'Las cuotas mensuales orientativas van desde ~25-32€ (Tyco) hasta ~50-55€ (Verisure), según equipo y verificación incluida. Consulta las pestañas Comparador e Inteligencia para ver el detalle y las gráficas comparativas.'
+      response: 'Las cuotas mensuales orientativas van desde ~25-32€ (Segurma, Seguridad 3D) hasta ~44-55€ (Verisure), según equipo y verificación incluida. Consulta las pestañas Comparador e Inteligencia para ver el detalle y las gráficas comparativas.'
     },
     {
       keywords: ['retencion', 'retención', 'negociar', 'como evitar', 'cómo evitar', 'descuento retencion', 'quiero dar de baja'],
