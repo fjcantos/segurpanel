@@ -615,7 +615,7 @@
         </tbody>
       </table>
     </div>
-    <p class="footnote">* Precios y condiciones orientativos, sujetos a promociones vigentes, tipo de vivienda y ciudad. Verifica siempre las tarifas actualizadas directamente con cada proveedor antes de contratar.</p>
+    <p class="footnote">* Precios y condiciones orientativos, sujetos a promociones vigentes, tipo de vivienda y ciudad. Verifica siempre las tarifas actualizadas directamente con cada proveedor antes de contratar. <span id="pricesUpdated"></span></p>
   </section>
 
   <!-- ===== OFERTAS ===== -->
@@ -901,6 +901,7 @@
   const todayStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   document.getElementById('statToday').textContent = todayStr;
   document.getElementById('offersUpdated').textContent = 'Actualizado: ' + todayStr;
+  document.getElementById('pricesUpdated').textContent = 'Datos revisados: ' + todayStr + '.';
 
   /* ---------- Analisis: drag & drop ---------- */
   const dropzone = document.getElementById('dropzone');
