@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SegurPanel</title>
+<style>
+  :root {
+    --navy: #0b2545;
+    --navy-dark: #081a33;
+    --navy-light: #123a6b;
+    --green: #1f9d55;
+    --green-dark: #167a42;
+    --white: #ffffff;
+    --bg: #f2f5f9;
+    --card: #ffffff;
+    --border: #dde3ea;
+    --text: #1e2a3a;
+    --muted: #5b6b7c;
+    --warn: #b8860b;
+    --danger: #c0392b;
+    --info: #1f6fb8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    background: var(--navy);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .brand svg { flex-shrink: 0; }
+  .brand .accent { color: var(--green); }
+  .topbar-sub {
+    font-size: 0.8rem;
+    color: #b9c6d8;
+    font-weight: 400;
+  }
+
+  /* ---------- Tabs nav ---------- */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--navy-dark);
+    overflow-x: auto;
+    padding: 0 12px;
+  }
+  .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: #c7d2e0;
+    padding: 14px 18px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .tab-btn svg { opacity: 0.85; }
+  .tab-btn:hover {
+    color: var(--white);
+    background: rgba(255,255,255,0.06);
+  }
+  .tab-btn.active {
+    color: var(--white);
+    border-bottom-color: var(--green);
+    background: rgba(31,157,85,0.12);
+  }
+
+  /* ---------- Content ---------- */
+  .content {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+  }
+  .tab-content { display: none; animation: fadeIn 0.2s ease; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  h2.section-title {
+    margin: 0 0 4px;
+    font-size: 1.4rem;
+    color: var(--navy);
+  }
+  p.section-sub {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(11,37,69,0.06);
+  }
+
+  /* ---------- Inicio ---------- */
+  .status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 22px;
+    border-left: 5px solid var(--green);
+  }
+  .status-left { display: flex; align-items: center; gap: 12px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(31,157,85,0.15); }
+  .status-title { font-weight: 700; font-size: 1.05rem; }
+  .status-time { color: var(--muted); font-size: 0.85rem; }
+  .status-actions { display: flex; gap: 10px; }
+  button.pill {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+  }
+  button.pill:active { transform: scale(0.96); }
+  .btn-arm { background: var(--danger); color: white; }
+  .btn-disarm { background: var(--green); color: white; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .stat-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.4px; }
+  .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--navy); margin-top: 4px; }
+
+  .quicklinks { display: flex; flex-wrap: wrap; gap: 10px; }
+  .quicklink {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--navy);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .quicklink:hover { border-color: var(--green); color: var(--green-dark); }
+
+  /* ---------- Comparador ---------- */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  table.compare {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    font-size: 0.9rem;
+  }
+  table.compare th {
+    background: var(--navy);
+    color: white;
+    text-align: left;
+    padding: 12px 14px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  table.compare td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.compare tr:last-child td { border-bottom: none; }
+  table.compare tr:hover td { background: #f7faf8; }
+  .company-name { font-weight: 700; color: var(--navy); }
+  .rating { color: var(--green-dark); font-weight: 700; }
+  .footnote { color: var(--muted); font-size: 0.8rem; margin-top: 10px; }
+
+  /* ---------- Ofertas ---------- */
+  .offer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .offer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--green);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .offer-company { font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .offer-badge {
+    display: inline-block;
+    background: rgba(31,157,85,0.12);
+    color: var(--green-dark);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .offer-desc { font-size: 0.88rem; color: var(--text); line-height: 1.4; }
+  .offer-meta { margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+
+  /* ---------- Equipos ---------- */
+  .brand-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 26px 0 14px;
+    color: var(--navy);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .brand-heading:first-of-type { margin-top: 0; }
+  .brand-heading .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--green); }
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+  }
+  .device-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .device-name { font-weight: 700; margin-bottom: 8px; color: var(--navy); }
+  .spec-list { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; color: var(--text); }
+  .spec-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+  .spec-list li:last-child { border-bottom: none; }
+  .spec-list span.k { color: var(--muted); }
+
+  /* ---------- Analisis ---------- */
+  .dropzone {
+    border: 2px dashed #b7c4d6;
+    border-radius: 14px;
+    background: var(--card);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.dragover { border-color: var(--green); background: rgba(31,157,85,0.06); }
+  .dropzone svg { margin-bottom: 10px; color: var(--navy-light); }
+  .dropzone-title { font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+  .dropzone-sub { color: var(--muted); font-size: 0.85rem; }
+  #fileInput { display: none; }
+
+  .analysis-results { margin-top: 22px; }
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #eef2f7;
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+  .clause-item {
+    display: flex;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--info);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .clause-item.level-warn { border-left-color: var(--warn); }
+  .clause-item.level-danger { border-left-color: var(--danger); }
+  .clause-label { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+  .clause-item.level-warn .clause-label { color: var(--warn); }
+  .clause-item.level-danger .clause-label { color: var(--danger); }
+  .clause-item.level-info .clause-label { color: var(--info); }
+  .clause-snippet { font-size: 0.82rem; color: var(--muted); font-style: italic; }
+  .empty-note { color: var(--muted); font-size: 0.88rem; padding: 14px 0; }
+
+  /* ---------- Normativa ---------- */
+  .norm-group { margin-bottom: 22px; }
+  .norm-group h3 { color: var(--navy); font-size: 1rem; margin: 0 0 10px; }
+  .norm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .norm-list li {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .norm-code { color: var(--green-dark); font-weight: 700; font-size: 0.78rem; }
+
+  @media (max-width: 640px) {
+    .status-card { flex-direction: column; align-items: flex-start; }
+    .status-actions { width: 100%; }
+    button.pill { flex: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M12 3l7 3v5c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"/>
+      <path d="M9 12l2 2 4-4" stroke="#1f9d55"/>
+    </svg>
+    SegurPanel
+  </div>
+  <div class="topbar-sub">App portátil para alarmas</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab-btn active" data-tab="inicio">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l7-6 7 6"/><path d="M5 9v7h10V9"/></svg>
+    Inicio
+  </button>
+  <button class="tab-btn" data-tab="comparador">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="M3 8h14M8 4v12"/></svg>
+    Comparador
+  </button>
+  <button class="tab-btn" data-tab="ofertas">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3h5.5L17 4.5V10L9 18l-6-6L11 3z"/><circle cx="13.2" cy="6.8" r="1.1"/></svg>
+    Ofertas
+  </button>
+  <button class="tab-btn" data-tab="equipos">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M8 5V2M12 5V2M8 18v-3M12 18v-3M5 8H2M5 12H2M18 8h-3M18 12h-3"/></svg>
+    Equipos
+  </button>
+  <button class="tab-btn" data-tab="analisis">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="9" height="12" rx="1"/><circle cx="14" cy="15" r="3"/><path d="M16.2 17.2L18.5 19.5"/></svg>
+    Análisis
+  </button>
+  <button class="tab-btn" data-tab="normativa">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4S7 3 3 4v12c4-1 7 0 7 0s3-1 7 0V4c-4-1-7 0-7 0z"/><path d="M10 4v12"/></svg>
+    Normativa
+  </button>
+</nav>
+
+<main class="content">
+
+  <!-- ===== INICIO ===== -->
+  <section id="inicio" class="tab-content active">
+    <h2 class="section-title">Resumen del estado</h2>
+    <p class="section-sub">Vista general de tu instalación y actividad reciente.</p>
+
+    <div class="card status-card">
+      <div class="status-left">
+        <span class="dot" id="statusDot"></span>
+        <div>
+          <div class="status-title" id="statusText">Sistema desarmado</div>
+          <div class="status-time" id="statusTime">—</div>
+        </div>
+      </div>
+      <div class="status-actions">
+        <button class="pill btn-arm" onclick="setStatus(true)">Armar</button>
+        <button class="pill btn-disarm" onclick="setStatus(false)">Desarmar</button>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Empresa contratada</div>
+        <div class="stat-value" style="font-size:1.1rem;">Sin definir</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Documentos analizados</div>
+        <div class="stat-value" id="statDocsAnalyzed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Ofertas activas</div>
+        <div class="stat-value">4</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Última revisión</div>
+        <div class="stat-value" style="font-size:1.1rem;" id="statToday">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700; color:var(--navy); margin-bottom:10px;">Accesos rápidos</div>
+      <div class="quicklinks">
+        <button class="quicklink" data-goto="comparador">Comparar empresas</button>
+        <button class="quicklink" data-goto="ofertas">Ver ofertas</button>
+        <button class="quicklink" data-goto="equipos">Ficha de equipos</button>
+        <button class="quicklink" data-goto="analisis">Analizar contrato</button>
+        <button class="quicklink" data-goto="normativa">Consultar normativa</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== COMPARADOR ===== -->
+  <section id="comparador" class="tab-content">
+    <h2 class="section-title">Comparador de empresas</h2>
+    <p class="section-sub">Comparativa orientativa de las principales compañías de alarmas.</p>
+
+    <div class="table-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>Instalación</th>
+            <th>Cuota mensual</th>
+            <th>Permanencia</th>
+            <th>Equipos incluidos</th>
+            <th>Valoración</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="company-name">Verisure</td>
+            <td>Desde 0€ (promo)</td>
+            <td>~44 – 55 €/mes</td>
+            <td>24 – 60 meses</td>
+            <td>Central, sensores movimiento/apertura, cámaras, sirena</td>
+            <td class="rating">4.2 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Securitas Direct</td>
+            <td>Desde 0€ (promo)</td>
+            <td>~40 – 50 €/mes</td>
+            <td>24 – 60 meses</td>
+            <td>Central Alfa, verificación por vídeo, sensores</td>
+            <td class="rating">4.0 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Tyco</td>
+            <td>Variable según instalador</td>
+            <td>~25 – 40 €/mes</td>
+            <td>12 – 36 meses</td>
+            <td>Central, detectores, CCTV opcional</td>
+            <td class="rating">3.7 / 5</td>
+          </tr>
+          <tr>
+            <td class="company-name">Grupo Control</td>
+            <td>Desde 0€ (promo)</td>
+            <td>~30 – 42 €/mes</td>
+            <td>Sin permanencia / 12 meses</td>
+            <td>Central, sensores, app propia</td>
+            <td class="rating">3.9 / 5</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">* Precios y condiciones orientativos, sujetos a promociones vigentes, tipo de vivienda y ciudad. Verifica siempre las tarifas actualizadas directamente con cada proveedor antes de contratar.</p>
+  </section>
+
+  <!-- ===== OFERTAS ===== -->
+  <section id="ofertas" class="tab-content">
+    <h2 class="section-title">Últimas ofertas</h2>
+    <p class="section-sub">Promociones de referencia. <span id="offersUpdated"></span></p>
+
+    <div class="offer-grid">
+      <div class="offer-card">
+        <div class="offer-company">Verisure</div>
+        <span class="offer-badge">Instalación gratis</span>
+        <div class="offer-desc">Instalación bonificada y 2 meses de cuota gratis al contratar online.</div>
+        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
+      </div>
+      <div class="offer-card">
+        <div class="offer-company">Securitas Direct</div>
+        <span class="offer-badge">-50% 3 meses</span>
+        <div class="offer-desc">50% de descuento en la cuota durante los primeros 3 meses de contrato.</div>
+        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
+      </div>
+      <div class="offer-card">
+        <div class="offer-company">Tyco</div>
+        <span class="offer-badge">Kit incluido</span>
+        <div class="offer-desc">Kit de sensores adicional sin coste al firmar contrato de 24 meses.</div>
+        <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
+      </div>
+      <div class="offer-card">
+        <div class="offer-company">Grupo Control</div>
+        <span class="offer-badge">Sin permanencia</span>
+        <div class="offer-desc">Primer año sin permanencia y cancelación gratuita en cualquier momento.</div>
+        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== EQUIPOS ===== -->
+  <section id="equipos" class="tab-content">
+    <h2 class="section-title">Ficha de equipos</h2>
+    <p class="section-sub">Resumen técnico orientativo. Consulta siempre la ficha técnica oficial del fabricante para datos certificados.</p>
+
+    <div class="brand-heading"><span class="swatch"></span>Ajax</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">Hub 2</div>
+        <ul class="spec-list">
+          <li><span class="k">Conectividad</span><span>Ethernet + WiFi + 2×SIM</span></li>
+          <li><span class="k">Batería respaldo</span><span>Hasta 16 h</span></li>
+          <li><span class="k">Dispositivos</span><span>Hasta 100</span></li>
+          <li><span class="k">Certificación</span><span>Grado 2 (EN 50131)</span></li>
+        </ul>
+      </div>
+      <div class="device-card">
+        <div class="device-name">MotionCam</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>PIR + foto verificación</span></li>
+          <li><span class="k">Alcance</span><span>~12 m</span></li>
+          <li><span class="k">Batería</span><span>~5 años</span></li>
+          <li><span class="k">Protección</span><span>IP65</span></li>
+        </ul>
+      </div>
+      <div class="device-card">
+        <div class="device-name">DoorProtect</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>Contacto magnético</span></li>
+          <li><span class="k">Batería</span><span>~7 años</span></li>
+          <li><span class="k">Sensor extra</span><span>Inclinación / temperatura</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brand-heading"><span class="swatch"></span>Jablotron</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">JA-107K Central</div>
+        <ul class="spec-list">
+          <li><span class="k">Conectividad</span><span>Ethernet + WiFi + GSM</span></li>
+          <li><span class="k">Batería respaldo</span><span>Hasta 30 h</span></li>
+          <li><span class="k">Dispositivos</span><span>Hasta 50</span></li>
+          <li><span class="k">Certificación</span><span>Grado 2 (EN 50131)</span></li>
+        </ul>
+      </div>
+      <div class="device-card">
+        <div class="device-name">JA-150P Detector PIR</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>PIR inalámbrico</span></li>
+          <li><span class="k">Alcance</span><span>~12 m</span></li>
+          <li><span class="k">Batería</span><span>~3 años</span></li>
+        </ul>
+      </div>
+      <div class="device-card">
+        <div class="device-name">JA-151J Contacto magnético</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>Apertura puerta/ventana</span></li>
+          <li><span class="k">Batería</span><span>~5 años</span></li>
+          <li><span class="k">Protección</span><span>IP30 (interior)</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ANALISIS ===== -->
+  <section id="analisis" class="tab-content">
+    <h2 class="section-title">Análisis de contratos</h2>
+    <p class="section-sub">Arrastra un contrato (.txt) para detectar automáticamente cláusulas relevantes. El análisis se hace en tu navegador, el archivo no se envía a ningún servidor.</p>
+
+    <div class="dropzone" id="dropzone">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      <div class="dropzone-title">Suelta el archivo aquí o haz clic para seleccionarlo</div>
+      <div class="dropzone-sub">Admite .txt para análisis automático de texto</div>
+      <input type="file" id="fileInput" accept=".txt,.pdf,.doc,.docx">
+    </div>
+
+    <div class="analysis-results" id="analysisResults"></div>
+  </section>
+
+  <!-- ===== NORMATIVA ===== -->
+  <section id="normativa" class="tab-content">
+    <h2 class="section-title">Normativa de seguridad</h2>
+    <p class="section-sub">Referencias legales y técnicas aplicables a la seguridad privada y sistemas de alarma en España. Consulta siempre el texto oficial vigente en BOE, AENOR o el organismo correspondiente.</p>
+
+    <div class="norm-group">
+      <h3>Legislación</h3>
+      <ul class="norm-list">
+        <li><span>Ley 5/2014, de Seguridad Privada</span><span class="norm-code">Ley 5/2014</span></li>
+        <li><span>Reglamento de Seguridad Privada</span><span class="norm-code">RD 195/2023</span></li>
+        <li><span>Régimen sancionador en materia de seguridad privada</span><span class="norm-code">Ley 5/2014, Título V</span></li>
+      </ul>
+    </div>
+
+    <div class="norm-group">
+      <h3>Normas técnicas</h3>
+      <ul class="norm-list">
+        <li><span>Sistemas de alarma contra intrusión y atraco</span><span class="norm-code">UNE-EN 50131</span></li>
+        <li><span>Sistemas de transmisión de alarmas y avisos</span><span class="norm-code">UNE-EN 50136</span></li>
+        <li><span>Sistemas de control de accesos</span><span class="norm-code">UNE-EN 60839</span></li>
+        <li><span>Videovigilancia (CCTV) para aplicaciones de seguridad</span><span class="norm-code">UNE-EN 62676</span></li>
+      </ul>
+    </div>
+
+    <div class="norm-group">
+      <h3>Organismos y protección de datos</h3>
+      <ul class="norm-list">
+        <li><span>Reglamento General de Protección de Datos</span><span class="norm-code">RGPD (UE) 2016/679</span></li>
+        <li><span>Ley Orgánica de Protección de Datos</span><span class="norm-code">LOPDGDD 3/2018</span></li>
+        <li><span>Registro Nacional de Seguridad Privada</span><span class="norm-code">Cuerpo Nacional de Policía</span></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  /* ---------- Tabs ---------- */
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  function activateTab(name) {
+    tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    tabContents.forEach(s => s.classList.toggle('active', s.id === name));
+  }
+
+  tabButtons.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+  document.querySelectorAll('.quicklink').forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.goto));
+  });
+
+  /* ---------- Estado (Inicio) ---------- */
+  function setStatus(armed) {
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    const time = document.getElementById('statusTime');
+    dot.style.background = armed ? '#c0392b' : '#1f9d55';
+    dot.style.boxShadow = armed ? '0 0 0 4px rgba(192,57,43,0.15)' : '0 0 0 4px rgba(31,157,85,0.15)';
+    text.textContent = armed ? 'Sistema armado' : 'Sistema desarmado';
+    time.textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const todayStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  document.getElementById('statToday').textContent = todayStr;
+  document.getElementById('offersUpdated').textContent = 'Actualizado: ' + todayStr;
+
+  /* ---------- Analisis: drag & drop ---------- */
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const resultsEl = document.getElementById('analysisResults');
+  let docsAnalyzed = 0;
+
+  const CLAUSE_RULES = [
+    { re: /permanencia|per[ií]odo m[ií]nimo/i, label: 'Cláusula de permanencia', level: 'warn' },
+    { re: /penalizaci[oó]n|indemnizaci[oó]n por baja/i, label: 'Penalización por baja anticipada', level: 'danger' },
+    { re: /renovaci[oó]n autom[aá]tica|pr[oó]rroga t[aá]cita/i, label: 'Renovación automática', level: 'warn' },
+    { re: /subida de precio|revisi[oó]n de tarifa|actualizaci[oó]n anual/i, label: 'Revisión / subida de precio', level: 'info' },
+    { re: /propiedad del equipo|cesi[oó]n de uso|comodato/i, label: 'Titularidad del equipo', level: 'info' },
+    { re: /preaviso/i, label: 'Plazo de preaviso para cancelar', level: 'info' }
+  ];
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+  ['dragenter', 'dragover'].forEach(evt =>
+    dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+  );
+  dropzone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  function handleFile(file) {
+    docsAnalyzed++;
+    document.getElementById('statDocsAnalyzed').textContent = docsAnalyzed;
+
+    const sizeKb = (file.size / 1024).toFixed(1);
+    resultsEl.innerHTML = `<div class="file-chip">📄 ${escapeHtml(file.name)} · ${sizeKb} KB</div>`;
+
+    if (/\.txt$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = () => renderClauses(reader.result);
+      reader.readAsText(file);
+    } else {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      note.textContent = 'La vista previa automática solo está disponible para archivos .txt. Convierte el contrato a texto plano o revísalo manualmente.';
+      resultsEl.appendChild(note);
+    }
+  }
+
+  function renderClauses(text) {
+    const found = [];
+    CLAUSE_RULES.forEach(rule => {
+      const match = text.match(rule.re);
+      if (match) {
+        const idx = match.index;
+        const start = Math.max(0, idx - 50);
+        const end = Math.min(text.length, idx + match[0].length + 50);
+        const snippet = (start > 0 ? '…' : '') + text.slice(start, end).replace(/\s+/g, ' ').trim() + (end < text.length ? '…' : '');
+        found.push({ ...rule, snippet });
+      }
+    });
+
+    if (found.length === 0) {
+      const note = document.createElement('div');
+      note.className = 'empty-note';
+      note.textContent = 'No se han detectado cláusulas relevantes automáticamente. Revisa el documento manualmente.';
+      resultsEl.appendChild(note);
+      return;
+    }
+
+    found.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'clause-item level-' + item.level;
+      div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)}</div><div class="clause-snippet">"${escapeHtml(item.snippet)}"</div></div>`;
+      resultsEl.appendChild(div);
+    });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+</script>
+</body>
+</html>
