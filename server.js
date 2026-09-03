@@ -352,7 +352,13 @@ async function apiAdminApproveRequest(req, res, id) {
     return enviarJSON(res, 400, { error: "Rol inválido. Usa super_admin, admin o retencion." });
   }
 
-  if (db.buscarUsuarioPorEmail(solicitud.email)) {
+  // Un usuario que fue desactivado (p.ej. bajó del equipo y vuelve a pedir
+  // acceso) sigue teniendo su fila en `users` con ese correo. Antes esto
+  // bloqueaba la aprobación con un 409 y la solicitud se quedaba "pending"
+  // para siempre sin forma de resolverla desde aquí: solo se rechaza si de
+  // verdad hay una cuenta activa o pendiente con ese correo.
+  const usuarioExistente = db.buscarUsuarioPorEmail(solicitud.email);
+  if (usuarioExistente && usuarioExistente.status !== "disabled") {
     return enviarJSON(res, 409, { error: "Ya existe un usuario con ese correo." });
   }
 
@@ -363,15 +369,23 @@ async function apiAdminApproveRequest(req, res, id) {
   const errorPolitica = auth.validarPolitica(tempPassword);
   if (errorPolitica) return enviarJSON(res, 400, { error: errorPolitica });
 
-  const usuario = db.crearUsuario({
-    email: solicitud.email,
-    name: solicitud.name,
-    passwordHash: auth.hashearPassword(tempPassword),
-    role,
-    status: "active",
-    mustChangePassword: true,
-    approvedBy: sesion.usuario.id,
-  });
+  let usuario;
+  if (usuarioExistente) {
+    db.actualizarRol(usuarioExistente.id, role);
+    db.actualizarPassword(usuarioExistente.id, auth.hashearPassword(tempPassword), { mustChangePassword: true });
+    db.actualizarEstado(usuarioExistente.id, "active");
+    usuario = db.buscarUsuarioPorId(usuarioExistente.id);
+  } else {
+    usuario = db.crearUsuario({
+      email: solicitud.email,
+      name: solicitud.name,
+      passwordHash: auth.hashearPassword(tempPassword),
+      role,
+      status: "active",
+      mustChangePassword: true,
+      approvedBy: sesion.usuario.id,
+    });
+  }
   db.resolverSolicitud(id, "approved", sesion.usuario.id);
 
   enviarJSON(res, 200, { usuario: usuarioPublico(usuario), tempPassword });
@@ -636,40 +650,47 @@ const idEstadoUsuario = RUTA_CON_ID("/api/admin/users", "/status");
 const idResetPasswordUsuario = RUTA_CON_ID("/api/admin/users", "/reset-password");
 
 async function manejarPeticion(req, res) {
-  const url = new URL(req.url, "http://localhost");
-  const ruta = decodeURIComponent(url.pathname);
-  const esLectura = req.method === "GET" || req.method === "HEAD";
-
+  // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
+  // mal formada puede hacer que decodeURIComponent lance) y cada `await` a
+  // un handler: como estos handlers son async, un `return handler(...)` sin
+  // await deja el catch de abajo sin posibilidad de capturar un rechazo que
+  // llegue mas tarde (la promesa se devuelve tal cual, fuera del alcance del
+  // try/catch) y la peticion se queda colgada -o, peor, tumba el proceso
+  // entero por una unhandledRejection- en vez de responder con un 500.
   try {
-    if (esLectura && (ruta === "/" || ruta === "/index.html")) return servirApp(req, res);
-    if (esLectura && ruta === "/admin") return servirAdmin(req, res);
-    if (esLectura && ruta === "/login.html") return servirLogin(res);
+    const url = new URL(req.url, "http://localhost");
+    const ruta = decodeURIComponent(url.pathname);
+    const esLectura = req.method === "GET" || req.method === "HEAD";
 
-    if (req.method === "POST" && ruta === "/api/auth/request-access") return apiRequestAccess(req, res);
-    if (req.method === "POST" && ruta === "/api/auth/login") return apiLogin(req, res);
-    if (req.method === "POST" && ruta === "/api/auth/logout") return apiLogout(req, res);
-    if (req.method === "POST" && ruta === "/api/auth/change-password") return apiChangePassword(req, res);
-    if (req.method === "GET" && ruta === "/api/auth/me") return apiMe(req, res);
+    if (esLectura && (ruta === "/" || ruta === "/index.html")) return await servirApp(req, res);
+    if (esLectura && ruta === "/admin") return await servirAdmin(req, res);
+    if (esLectura && ruta === "/login.html") return await servirLogin(res);
 
-    if (req.method === "GET" && ruta === "/api/admin/users") return apiAdminUsers(req, res);
-    if (req.method === "GET" && ruta === "/api/admin/requests") return apiAdminRequests(req, res, url.searchParams);
+    if (req.method === "POST" && ruta === "/api/auth/request-access") return await apiRequestAccess(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/login") return await apiLogin(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/logout") return await apiLogout(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/change-password") return await apiChangePassword(req, res);
+    if (req.method === "GET" && ruta === "/api/auth/me") return await apiMe(req, res);
+
+    if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
+    if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
 
     if (req.method === "POST") {
       let id = idAprobarSolicitud(ruta);
-      if (id !== null) return apiAdminApproveRequest(req, res, id);
+      if (id !== null) return await apiAdminApproveRequest(req, res, id);
       id = idRechazarSolicitud(ruta);
-      if (id !== null) return apiAdminRejectRequest(req, res, id);
+      if (id !== null) return await apiAdminRejectRequest(req, res, id);
       id = idRolUsuario(ruta);
-      if (id !== null) return apiAdminSetRole(req, res, id);
+      if (id !== null) return await apiAdminSetRole(req, res, id);
       id = idEstadoUsuario(ruta);
-      if (id !== null) return apiAdminSetStatus(req, res, id);
+      if (id !== null) return await apiAdminSetStatus(req, res, id);
       id = idResetPasswordUsuario(ruta);
-      if (id !== null) return apiAdminResetPassword(req, res, id);
+      if (id !== null) return await apiAdminResetPassword(req, res, id);
     }
 
-    if (req.method === "POST" && ruta === "/api/chat") return manejarChat(req, res);
+    if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
 
-    if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return servirEstatico(ruta, res);
+    if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("No encontrado");
