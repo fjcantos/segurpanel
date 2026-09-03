@@ -6,5 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "icons": "node tools/generate-icons.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3"
   }
 }

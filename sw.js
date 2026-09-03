@@ -11,17 +11,20 @@
 // Al cambiar cualquier archivo cacheado hay que subir VERSION: eso crea una
 // cache nueva y borra la anterior en el evento activate.
 
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = `segurpanel-${VERSION}`;
 
 const SHELL = [
   "./",
   "./index.html",
+  "./login.html",
   "./manifest.json",
   "./icons/icon-32.png",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-192-maskable.png",
+  "./icons/icon-512-maskable.png",
 ];
 
 self.addEventListener("install", (event) => {

@@ -1,0 +1,10 @@
+# Dependencias (se reinstalan con "npm install")
+node_modules/
+
+# Datos locales: base de datos SQLite, secreto JWT y aviso con la clave
+# temporal del Super Admin inicial. Nunca deben subirse al repositorio.
+data/
+
+# Logs
+*.log
+npm-debug.log*

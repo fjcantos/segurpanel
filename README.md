@@ -35,6 +35,92 @@ directamente con doble clic: el chat necesita hablar con `server.js`).
 Si `ANTHROPIC_API_KEY` no está configurada, la app sigue funcionando pero el
 chat mostrará un aviso pidiendo que la configures.
 
+## Autenticación y gestión de usuarios
+
+SegurPanel exige iniciar sesión antes de ver nada de la app. Solo se admiten
+correos **@verisure.es**.
+
+Archivos que lo implementan:
+
+| Archivo | Función |
+| --- | --- |
+| `db.js` | Acceso a SQLite (`node:sqlite`, incorporado en Node — no requiere instalar ni compilar nada aparte). Tablas `users`, `access_requests`, `sessions`. |
+| `auth.js` | Contraseñas (`bcryptjs`), sesiones JWT (`jsonwebtoken`), cookies, reglas de dominio/rol, bloqueo por intentos fallidos. |
+| `login.html` | Pantalla de login + solicitud de acceso + cambio de contraseña obligatorio. |
+| `admin.html` | Panel de gestión de usuarios (solo Super Admin). |
+| `data/` | Base de datos y secretos locales. **No se sube a git** (ver `.gitignore`). |
+
+### Primer arranque: Super Admin inicial
+
+Al arrancar el servidor por primera vez (`data/segurpanel.db` no existe
+todavía) se crea automáticamente la cuenta **Super Admin**
+(`fjose.cantos@verisure.es`) con una **clave temporal aleatoria**, que se
+imprime una sola vez por consola y se guarda en
+`data/SUPER_ADMIN_INICIAL.txt`:
+
+```
+============================================================
+ Super Admin inicial creado
+ Correo:         fjose.cantos@verisure.es
+ Clave temporal: xxxxxxxxxxxx
+ ...
+============================================================
+```
+
+Inicia sesión con esa clave temporal; la app te obligará a cambiarla antes de
+dejarte entrar. Borra `data/SUPER_ADMIN_INICIAL.txt` después de usarla.
+
+### Solicitud de acceso y aprobación
+
+1. Cualquiera con un correo @verisure.es puede pedir acceso desde la pantalla
+   de login (**"¿No tienes acceso? Solicítalo aquí"**).
+2. El Super Admin ve la solicitud en `/admin`, elige un **rol** y aprueba: la
+   app genera una **clave temporal** (o puedes escribir una a mano) que debes
+   compartir con la persona por un canal seguro.
+3. Esa persona inicia sesión con la clave temporal y la app le obliga a
+   cambiarla en el primer acceso (mínimo 10 caracteres, con letra y número).
+
+### Roles
+
+| Rol | Acceso |
+| --- | --- |
+| **Super Admin** | Todo + gestión de usuarios (`/admin`): aprobar/rechazar solicitudes, cambiar roles, dar de alta/baja, asignar claves temporales. |
+| **Admin** | Todo lo mismo que Super Admin **excepto** `/admin` (gestión de usuarios). |
+| **Retención** | Todas las pestañas en **solo lectura**: no puede Armar/Desarmar ni analizar contratos (los controles aparecen bloqueados con un aviso). Sí puede usar el IA Assistant. |
+
+`/admin` solo es accesible para Super Admin; cualquier otra sesión que
+intente entrar es redirigida a `/`.
+
+### Sesiones y seguridad
+
+- **Sesiones JWT** firmadas (HS256) guardadas en una cookie `httpOnly`,
+  `SameSite=Lax` (y `Secure` automáticamente si la conexión es HTTPS). Cada
+  sesión también se registra en la tabla `sessions` de SQLite para poder
+  **revocarla** (logout, desactivar usuario, resetear contraseña) aunque el
+  JWT en sí siga sin caducar.
+- **Contraseñas con bcrypt** (`bcryptjs`, implementación en JS puro — sin
+  compilar nada nativo).
+- **Bloqueo por fuerza bruta**: 5 intentos fallidos bloquean la cuenta 15
+  minutos.
+- El secreto JWT se toma de la variable de entorno `JWT_SECRET`; si no está
+  definida, se genera uno aleatorio la primera vez y se guarda en
+  `data/.jwt-secret` para que las sesiones sobrevivan a reinicios del
+  servidor. **En producción, define `JWT_SECRET` explícitamente.**
+
+### HTTPS en producción
+
+En local, `http://localhost` es válido (los navegadores tratan `localhost`
+como contexto seguro). En producción **debes** servir SegurPanel por HTTPS:
+
+- Opción A — certificados propios: define `HTTPS_CERT_FILE` y
+  `HTTPS_KEY_FILE` (rutas a los ficheros `.pem`) y `server.js` levantará un
+  servidor HTTPS directamente.
+- Opción B (recomendada) — un proxy inverso (Nginx, Caddy, Cloudflare
+  Tunnel...) que termine TLS delante de `node server.js`.
+
+Si arrancas con `NODE_ENV=production` sin ninguna de las dos opciones
+configuradas, el servidor lo avisa por consola al arrancar.
+
 ## App instalable (PWA) para móvil y tablet
 
 SegurPanel es una **Progressive Web App**: se instala en la pantalla de inicio
@@ -46,8 +132,9 @@ Archivos que lo hacen posible:
 | --- | --- |
 | `manifest.json` | Nombre, descripción, colores UIC (azul oscuro `#0b2545`), iconos y accesos directos. |
 | `sw.js` | Service worker: cachea la app para el modo sin conexión. |
-| `icons/` | Iconos PNG (32, 180, 192 y 512 px), incluidos los *maskable* de Android. |
-| `tools/generate-icons.js` | Regenera los iconos (`npm run icons`). No necesita dependencias. |
+| `assets/LOGO_UIC_limpio.png` | Logo original (sello UIC). Fuente de todos los iconos. |
+| `icons/` | Iconos PNG generados a partir del logo (32, 180, 192, 512 px, más las variantes *maskable* de Android en 192 y 512 con fondo navy). |
+| `tools/generate-icons.js` | Regenera los iconos a partir del logo (`npm run icons`). Decodifica/recodifica PNG a mano — no necesita dependencias. |
 
 ### Cómo instalarla
 

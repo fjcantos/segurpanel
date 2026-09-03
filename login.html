@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SegurPanel — Acceso</title>
+<meta name="theme-color" content="#0b2545">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<style>
+  :root {
+    --navy: #0b2545;
+    --navy-dark: #081a33;
+    --green: #1f9d55;
+    --green-dark: #167a42;
+    --bg: #f2f5f9;
+    --card: #ffffff;
+    --border: #dde3ea;
+    --text: #1e2a3a;
+    --muted: #5b6b7c;
+    --danger: #c0392b;
+    --danger-bg: #fdecea;
+    --ok-bg: #eaf7ef;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: linear-gradient(160deg, var(--navy) 0%, var(--navy-dark) 55%, #061527 100%);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  .wrap {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px calc(20px + env(safe-area-inset-right)) 24px calc(20px + env(safe-area-inset-left));
+  }
+  .panel {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    padding: 32px 28px 28px;
+  }
+  .brand {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    margin-bottom: 22px; text-align: center;
+  }
+  .brand img { width: 64px; height: 64px; }
+  .brand .name { font-size: 1.3rem; font-weight: 800; color: var(--navy); letter-spacing: 0.2px; }
+  .brand .sub { font-size: 0.82rem; color: var(--muted); }
+
+  h1.title { font-size: 1.05rem; margin: 0 0 4px; color: var(--navy); }
+  p.subtitle { margin: 0 0 20px; font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
+
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text); margin: 14px 0 6px; }
+  input[type="email"], input[type="password"], input[type="text"], textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 13px; font-size: 0.95rem; font-family: inherit; outline: none;
+    background: #fbfcfe; color: var(--text);
+  }
+  input:focus, textarea:focus { border-color: var(--green); background: #fff; }
+  textarea { resize: vertical; min-height: 64px; }
+
+  .pw-row { position: relative; }
+  .pw-toggle {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--muted); font-size: 0.76rem;
+    font-weight: 700; cursor: pointer; padding: 6px 8px;
+  }
+
+  button.primary {
+    width: 100%; margin-top: 20px; background: var(--green); color: #fff;
+    border: none; border-radius: 10px; padding: 13px; font-size: 0.95rem;
+    font-weight: 700; cursor: pointer; transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  button.primary:hover { background: var(--green-dark); }
+  button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  button.link {
+    width: 100%; margin-top: 14px; background: none; border: none;
+    color: var(--navy); font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    text-decoration: underline; padding: 4px;
+  }
+
+  .msg { border-radius: 10px; padding: 11px 13px; font-size: 0.83rem; margin-top: 16px; line-height: 1.4; display: none; }
+  .msg.show { display: block; }
+  .msg.error { background: var(--danger-bg); color: var(--danger); }
+  .msg.ok { background: var(--ok-bg); color: var(--green-dark); }
+
+  .hint { font-size: 0.76rem; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .domain-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eef2f7; border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 11px; font-size: 0.74rem; color: var(--muted); font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  footer.foot { text-align: center; color: #b9c6d8; font-size: 0.72rem; margin-top: 18px; }
+
+  @media (max-width: 420px) {
+    .panel { padding: 26px 20px 22px; border-radius: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="brand">
+      <img src="icons/icon-192.png" alt="SegurPanel">
+      <div class="name">SegurPanel</div>
+      <div class="sub">App portátil para alarmas</div>
+    </div>
+
+    <!-- ===== LOGIN ===== -->
+    <section class="view active" id="viewLogin">
+      <span class="domain-badge">Solo correos @verisure.es</span>
+      <h1 class="title">Iniciar sesión</h1>
+      <p class="subtitle">Accede con tu correo corporativo y contraseña.</p>
+
+      <form id="formLogin" autocomplete="on">
+        <label for="loginEmail">Correo</label>
+        <input type="email" id="loginEmail" name="email" placeholder="nombre.apellido@verisure.es" autocomplete="username" required>
+
+        <label for="loginPassword">Contraseña</label>
+        <div class="pw-row">
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" data-target="loginPassword">MOSTRAR</button>
+        </div>
+
+        <button type="submit" class="primary" id="btnLogin">Entrar</button>
+      </form>
+
+      <button type="button" class="link" id="irSolicitar">¿No tienes acceso? Solicítalo aquí</button>
+      <div class="msg" id="msgLogin"></div>
+    </section>
+
+    <!-- ===== SOLICITAR ACCESO ===== -->
+    <section class="view" id="viewSolicitar">
+      <span class="domain-badge">Solo correos @verisure.es</span>
+      <h1 class="title">Solicitar acceso</h1>
+      <p class="subtitle">Un Super Admin revisará tu solicitud y te asignará una clave temporal.</p>
+
+      <form id="formSolicitar">
+        <label for="reqEmail">Correo</label>
+        <input type="email" id="reqEmail" name="email" placeholder="nombre.apellido@verisure.es" required>
+
+        <label for="reqName">Nombre</label>
+        <input type="text" id="reqName" name="name" placeholder="Nombre y apellidos">
+
+        <label for="reqMessage">Motivo (opcional)</label>
+        <textarea id="reqMessage" name="message" placeholder="Equipo, motivo del acceso..."></textarea>
+
+        <button type="submit" class="primary" id="btnSolicitar">Enviar solicitud</button>
+      </form>
+
+      <button type="button" class="link" id="irLogin">Volver a iniciar sesión</button>
+      <div class="msg" id="msgSolicitar"></div>
+    </section>
+
+    <!-- ===== CAMBIO DE CONTRASENA OBLIGATORIO ===== -->
+    <section class="view" id="viewCambiar">
+      <h1 class="title">Cambia tu contraseña</h1>
+      <p class="subtitle" id="cambiarSubtitle">Es tu primer acceso: debes establecer una contraseña nueva antes de continuar.</p>
+
+      <form id="formCambiar">
+        <label for="curPassword">Contraseña temporal actual</label>
+        <div class="pw-row">
+          <input type="password" id="curPassword" name="currentPassword" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" data-target="curPassword">MOSTRAR</button>
+        </div>
+
+        <label for="newPassword">Contraseña nueva</label>
+        <div class="pw-row">
+          <input type="password" id="newPassword" name="newPassword" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="newPassword">MOSTRAR</button>
+        </div>
+        <div class="hint">Mínimo 10 caracteres, con al menos una letra y un número.</div>
+
+        <label for="newPassword2">Repite la contraseña nueva</label>
+        <div class="pw-row">
+          <input type="password" id="newPassword2" name="newPassword2" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="newPassword2">MOSTRAR</button>
+        </div>
+
+        <button type="submit" class="primary" id="btnCambiar">Guardar y entrar</button>
+      </form>
+
+      <button type="button" class="link" id="btnCerrarSesionCambio">Cerrar sesión</button>
+      <div class="msg" id="msgCambiar"></div>
+    </section>
+  </div>
+</div>
+
+<footer class="foot">© SegurPanel · Uso interno</footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const vistas = { login: $('viewLogin'), solicitar: $('viewSolicitar'), cambiar: $('viewCambiar') };
+
+  function mostrarVista(nombre) {
+    Object.values(vistas).forEach(v => v.classList.remove('active'));
+    vistas[nombre].classList.add('active');
+  }
+
+  function mostrarMensaje(elId, texto, tipo) {
+    const el = $(elId);
+    el.textContent = texto;
+    el.className = 'msg show ' + tipo;
+  }
+  function ocultarMensaje(elId) {
+    $(elId).className = 'msg';
+  }
+
+  document.querySelectorAll('.pw-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = $(btn.dataset.target);
+      const mostrando = input.type === 'text';
+      input.type = mostrando ? 'password' : 'text';
+      btn.textContent = mostrando ? 'MOSTRAR' : 'OCULTAR';
+    });
+  });
+
+  $('irSolicitar').addEventListener('click', () => { ocultarMensaje('msgLogin'); mostrarVista('solicitar'); });
+  $('irLogin').addEventListener('click', () => { ocultarMensaje('msgSolicitar'); mostrarVista('login'); });
+
+  async function llamar(url, opciones) {
+    const respuesta = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      ...opciones,
+    });
+    let datos = {};
+    try { datos = await respuesta.json(); } catch (e) { /* respuesta vacia */ }
+    return { ok: respuesta.ok, status: respuesta.status, datos };
+  }
+
+  /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ---------- */
+  (async () => {
+    const { ok, datos } = await llamar('/api/auth/me');
+    if (ok && datos.usuario) {
+      if (datos.usuario.mustChangePassword) {
+        mostrarVista('cambiar');
+      } else {
+        window.location.href = '/';
+      }
+    }
+  })();
+
+  /* ---------- Login ---------- */
+  $('formLogin').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgLogin');
+    $('btnLogin').disabled = true;
+    try {
+      const { ok, datos } = await llamar('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgLogin', datos.error || 'No se pudo iniciar sesión.', 'error');
+        return;
+      }
+      if (datos.usuario.mustChangePassword) {
+        mostrarVista('cambiar');
+      } else {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      mostrarMensaje('msgLogin', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+    } finally {
+      $('btnLogin').disabled = false;
+    }
+  });
+
+  /* ---------- Solicitar acceso ---------- */
+  $('formSolicitar').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgSolicitar');
+    $('btnSolicitar').disabled = true;
+    try {
+      const { ok, datos } = await llamar('/api/auth/request-access', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: $('reqEmail').value,
+          name: $('reqName').value,
+          message: $('reqMessage').value,
+        }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgSolicitar', datos.error || 'No se pudo enviar la solicitud.', 'error');
+        return;
+      }
+      mostrarMensaje('msgSolicitar', datos.mensaje || 'Solicitud enviada.', 'ok');
+      $('formSolicitar').reset();
+    } catch (err) {
+      mostrarMensaje('msgSolicitar', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+    } finally {
+      $('btnSolicitar').disabled = false;
+    }
+  });
+
+  /* ---------- Cambio de contrasena obligatorio ---------- */
+  $('formCambiar').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgCambiar');
+
+    if ($('newPassword').value !== $('newPassword2').value) {
+      mostrarMensaje('msgCambiar', 'Las dos contraseñas nuevas no coinciden.', 'error');
+      return;
+    }
+
+    $('btnCambiar').disabled = true;
+    try {
+      const { ok, datos } = await llamar('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: $('curPassword').value,
+          newPassword: $('newPassword').value,
+        }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgCambiar', datos.error || 'No se pudo cambiar la contraseña.', 'error');
+        return;
+      }
+      window.location.href = '/';
+    } catch (err) {
+      mostrarMensaje('msgCambiar', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+    } finally {
+      $('btnCambiar').disabled = false;
+    }
+  });
+
+  $('btnCerrarSesionCambio').addEventListener('click', async () => {
+    await llamar('/api/auth/logout', { method: 'POST' });
+    window.location.reload();
+  });
+</script>
+</body>
+</html>

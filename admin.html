@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SegurPanel — Admin</title>
+<meta name="theme-color" content="#0b2545">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<style>
+  :root {
+    --navy: #0b2545; --navy-dark: #081a33; --navy-light: #123a6b;
+    --green: #1f9d55; --green-dark: #167a42;
+    --bg: #f2f5f9; --card: #ffffff; --border: #dde3ea;
+    --text: #1e2a3a; --muted: #5b6b7c;
+    --warn: #b8860b; --danger: #c0392b; --danger-bg: #fdecea; --ok-bg: #eaf7ef;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  .topbar {
+    background: var(--navy); color: #fff; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: calc(14px + env(safe-area-inset-top)) 24px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; font-weight: 700; }
+  .brand img { width: 26px; height: 26px; border-radius: 5px; }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .topbar-actions a, .topbar-actions button {
+    background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px; padding: 8px 16px; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; text-decoration: none; font-family: inherit;
+  }
+  .topbar-actions a:hover, .topbar-actions button:hover { background: rgba(255,255,255,0.18); }
+  .whoami { font-size: 0.78rem; color: #b9c6d8; }
+
+  .content { max-width: 1080px; margin: 0 auto; padding: 26px 22px 60px; }
+  h1.page-title { font-size: 1.35rem; color: var(--navy); margin: 0 0 4px; }
+  p.page-sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 22px; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(11,37,69,0.06);
+  }
+  .card h2 {
+    font-size: 1.02rem; color: var(--navy); margin: 0 0 4px; display: flex;
+    align-items: center; gap: 8px;
+  }
+  .card .card-sub { font-size: 0.8rem; color: var(--muted); margin: 0 0 14px; }
+
+  .badge-count {
+    background: var(--green); color: #fff; font-size: 0.7rem; font-weight: 700;
+    border-radius: 999px; padding: 2px 8px;
+  }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem;
+       text-transform: uppercase; letter-spacing: 0.3px; padding: 8px 10px; border-bottom: 2px solid var(--border); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.wrap-cell { white-space: normal; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+  .pill-role-super_admin { background: #f0e6fb; color: #6a2fa8; }
+  .pill-role-admin { background: #e3ecfb; color: #1f5fb8; }
+  .pill-role-retencion { background: #fdf1e0; color: var(--warn); }
+  .pill-status-active { background: var(--ok-bg); color: var(--green-dark); }
+  .pill-status-pending { background: #fdf1e0; color: var(--warn); }
+  .pill-status-disabled { background: var(--danger-bg); color: var(--danger); }
+
+  select.role-select {
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
+    font-size: 0.82rem; font-family: inherit; background: #fff; color: var(--text);
+  }
+
+  button.btn {
+    border: none; border-radius: 8px; padding: 7px 12px; font-size: 0.78rem;
+    font-weight: 700; cursor: pointer; margin-right: 6px; margin-bottom: 4px;
+    font-family: inherit;
+  }
+  button.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-ok { background: var(--green); color: #fff; }
+  .btn-ok:hover:not(:disabled) { background: var(--green-dark); }
+  .btn-danger { background: var(--danger-bg); color: var(--danger); }
+  .btn-danger:hover:not(:disabled) { background: #f8d7d3; }
+  .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--navy); }
+  .btn-outline:hover:not(:disabled) { border-color: var(--green); color: var(--green-dark); }
+
+  .empty-note { color: var(--muted); font-size: 0.86rem; padding: 10px 0; }
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: var(--navy); color: #fff; padding: 12px 20px; border-radius: 999px;
+    font-size: 0.85rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 50;
+    max-width: 90vw; text-align: center;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: var(--danger); }
+
+  /* ---------- Modal clave temporal ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(8,20,38,0.55);
+    display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 24px; max-width: 380px; width: 100%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+  .modal h3 { margin: 0 0 8px; color: var(--navy); font-size: 1.05rem; }
+  .modal p { margin: 0 0 14px; font-size: 0.85rem; color: var(--muted); line-height: 1.4; }
+  .modal .temp-pass {
+    font-family: "Consolas", "SFMono-Regular", monospace; font-size: 1.05rem; font-weight: 700;
+    background: #eef2f7; border: 1px dashed var(--border); border-radius: 8px;
+    padding: 12px; text-align: center; letter-spacing: 1px; color: var(--navy); margin-bottom: 14px;
+    user-select: all;
+  }
+  .modal label { display: block; font-size: 0.78rem; font-weight: 600; margin: 10px 0 5px; }
+  .modal input {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px;
+    font-size: 0.88rem; font-family: inherit;
+  }
+  .modal .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .modal .modal-actions button { flex: 1; }
+
+  @media (max-width: 700px) {
+    .content { padding: 18px 14px 60px; }
+    table { min-width: 640px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><img src="icons/icon-32.png" alt=""> SegurPanel · Admin</div>
+  <div class="topbar-actions">
+    <span class="whoami" id="whoami"></span>
+    <a href="/">Volver a la app</a>
+    <button type="button" id="btnLogout">Cerrar sesión</button>
+  </div>
+</header>
+
+<main class="content">
+  <h1 class="page-title">Gestión de usuarios</h1>
+  <p class="page-sub">Solicitudes de acceso, roles y estado de las cuentas de SegurPanel.</p>
+
+  <div class="card">
+    <h2>Solicitudes pendientes <span class="badge-count" id="countPendientes">0</span></h2>
+    <p class="card-sub">Aprueba con un rol y una clave temporal, o recházalas.</p>
+    <div class="table-wrap">
+      <table id="tablaSolicitudes">
+        <thead>
+          <tr><th>Correo</th><th>Nombre</th><th>Motivo</th><th>Fecha</th><th>Acciones</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-note" id="notaSolicitudesVacia" style="display:none;">No hay solicitudes pendientes.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Usuarios <span class="badge-count" id="countUsuarios">0</span></h2>
+    <p class="card-sub">Cambia el rol, activa/desactiva o asigna una clave temporal nueva.</p>
+    <div class="table-wrap">
+      <table id="tablaUsuarios">
+        <thead>
+          <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="modalClave">
+  <div class="modal">
+    <h3 id="modalClaveTitulo">Clave temporal asignada</h3>
+    <p>Compártela con el usuario por un canal seguro. Se le pedirá cambiarla en su primer inicio de sesión.</p>
+    <div class="temp-pass" id="modalClaveValor"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="modalClaveCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalAprobar">
+  <div class="modal">
+    <h3>Aprobar solicitud</h3>
+    <p id="modalAprobarEmail"></p>
+    <label for="modalAprobarRol">Rol</label>
+    <select id="modalAprobarRol">
+      <option value="retencion">Retención (solo visualización)</option>
+      <option value="admin">Admin (acceso total, sin gestión de usuarios)</option>
+      <option value="super_admin">Super Admin (acceso total + gestión de usuarios)</option>
+    </select>
+    <label for="modalAprobarClave">Clave temporal (opcional: se genera si se deja en blanco)</label>
+    <input type="text" id="modalAprobarClave" placeholder="Se generará automáticamente">
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="modalAprobarCancelar">Cancelar</button>
+      <button class="btn btn-ok" type="button" id="modalAprobarConfirmar">Aprobar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  async function llamar(url, opciones) {
+    const respuesta = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      ...opciones,
+    });
+    let datos = {};
+    try { datos = await respuesta.json(); } catch (e) { /* respuesta vacia */ }
+    return { ok: respuesta.ok, status: respuesta.status, datos };
+  }
+
+  let toastTimer = null;
+  function toast(texto, esError) {
+    const el = $('toast');
+    el.textContent = texto;
+    el.className = 'toast show' + (esError ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  }
+
+  const ETIQUETAS_ROL = { super_admin: 'Super Admin', admin: 'Admin', retencion: 'Retención' };
+  const ETIQUETAS_ESTADO = { active: 'Activo', pending: 'Pendiente', disabled: 'Desactivado' };
+
+  function formatearFecha(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  let usuarioActual = null;
+
+  /* ---------- Carga inicial: comprobar sesion y rol ---------- */
+  async function comprobarSesion() {
+    const { ok, datos } = await llamar('/api/auth/me');
+    if (!ok || !datos.usuario) {
+      window.location.href = '/';
+      return false;
+    }
+    if (datos.usuario.mustChangePassword || datos.usuario.role !== 'super_admin') {
+      window.location.href = '/';
+      return false;
+    }
+    usuarioActual = datos.usuario;
+    $('whoami').textContent = `${datos.usuario.name || datos.usuario.email} · Super Admin`;
+    return true;
+  }
+
+  /* ---------- Solicitudes ---------- */
+  async function cargarSolicitudes() {
+    const { ok, datos } = await llamar('/api/admin/requests?status=pending');
+    if (!ok) { toast(datos.error || 'No se pudieron cargar las solicitudes.', true); return; }
+
+    const tbody = document.querySelector('#tablaSolicitudes tbody');
+    tbody.innerHTML = '';
+    $('countPendientes').textContent = datos.solicitudes.length;
+    $('notaSolicitudesVacia').style.display = datos.solicitudes.length ? 'none' : 'block';
+
+    for (const s of datos.solicitudes) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(s.email)}</td>
+        <td>${escapeHtml(s.name) || '—'}</td>
+        <td class="wrap-cell">${escapeHtml(s.message) || '—'}</td>
+        <td>${formatearFecha(s.created_at)}</td>
+        <td>
+          <button class="btn btn-ok" data-aprobar="${s.id}" data-email="${escapeHtml(s.email)}">Aprobar</button>
+          <button class="btn btn-danger" data-rechazar="${s.id}">Rechazar</button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    tbody.querySelectorAll('[data-aprobar]').forEach(btn => {
+      btn.addEventListener('click', () => abrirModalAprobar(btn.dataset.aprobar, btn.dataset.email));
+    });
+    tbody.querySelectorAll('[data-rechazar]').forEach(btn => {
+      btn.addEventListener('click', () => rechazarSolicitud(btn.dataset.rechazar));
+    });
+  }
+
+  let solicitudEnCurso = null;
+  function abrirModalAprobar(id, email) {
+    solicitudEnCurso = id;
+    $('modalAprobarEmail').textContent = email;
+    $('modalAprobarRol').value = 'retencion';
+    $('modalAprobarClave').value = '';
+    $('modalAprobar').classList.add('show');
+  }
+  $('modalAprobarCancelar').addEventListener('click', () => $('modalAprobar').classList.remove('show'));
+
+  $('modalAprobarConfirmar').addEventListener('click', async () => {
+    const rol = $('modalAprobarRol').value;
+    const clave = $('modalAprobarClave').value.trim();
+    $('modalAprobarConfirmar').disabled = true;
+    try {
+      const { ok, datos } = await llamar(`/api/admin/requests/${solicitudEnCurso}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ role: rol, tempPassword: clave || undefined }),
+      });
+      if (!ok) { toast(datos.error || 'No se pudo aprobar la solicitud.', true); return; }
+      $('modalAprobar').classList.remove('show');
+      mostrarClaveTemporal('Usuario aprobado', datos.tempPassword);
+      await Promise.all([cargarSolicitudes(), cargarUsuarios()]);
+    } finally {
+      $('modalAprobarConfirmar').disabled = false;
+    }
+  });
+
+  async function rechazarSolicitud(id) {
+    if (!confirm('¿Rechazar esta solicitud de acceso?')) return;
+    const { ok, datos } = await llamar(`/api/admin/requests/${id}/reject`, { method: 'POST' });
+    if (!ok) { toast(datos.error || 'No se pudo rechazar la solicitud.', true); return; }
+    toast('Solicitud rechazada.');
+    cargarSolicitudes();
+  }
+
+  function mostrarClaveTemporal(titulo, clave) {
+    $('modalClaveTitulo').textContent = titulo;
+    $('modalClaveValor').textContent = clave;
+    $('modalClave').classList.add('show');
+  }
+  $('modalClaveCerrar').addEventListener('click', () => $('modalClave').classList.remove('show'));
+
+  /* ---------- Usuarios ---------- */
+  async function cargarUsuarios() {
+    const { ok, datos } = await llamar('/api/admin/users');
+    if (!ok) { toast(datos.error || 'No se pudieron cargar los usuarios.', true); return; }
+
+    const tbody = document.querySelector('#tablaUsuarios tbody');
+    tbody.innerHTML = '';
+    $('countUsuarios').textContent = datos.usuarios.length;
+
+    for (const u of datos.usuarios) {
+      const esYo = usuarioActual && u.id === usuarioActual.id;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(u.email)}</td>
+        <td>${escapeHtml(u.name) || '—'}</td>
+        <td>
+          <select class="role-select" data-rol-de="${u.id}" ${esYo ? 'disabled title="No puedes cambiar tu propio rol"' : ''}>
+            <option value="retencion" ${u.role === 'retencion' ? 'selected' : ''}>Retención</option>
+            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+            <option value="super_admin" ${u.role === 'super_admin' ? 'selected' : ''}>Super Admin</option>
+          </select>
+        </td>
+        <td><span class="pill pill-status-${u.status}">${ETIQUETAS_ESTADO[u.status] || u.status}</span></td>
+        <td>${formatearFecha(u.createdAt)}</td>
+        <td>
+          ${u.status === 'active'
+            ? `<button class="btn btn-danger" data-desactivar="${u.id}" ${esYo ? 'disabled title="No puedes desactivar tu propia cuenta"' : ''}>Desactivar</button>`
+            : u.status === 'disabled'
+              ? `<button class="btn btn-ok" data-activar="${u.id}">Activar</button>`
+              : ''}
+          <button class="btn btn-outline" data-reset="${u.id}">Clave temporal</button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    tbody.querySelectorAll('[data-rol-de]').forEach(sel => {
+      sel.addEventListener('change', () => cambiarRol(sel.dataset.rolDe, sel.value, sel));
+    });
+    tbody.querySelectorAll('[data-desactivar]').forEach(btn => {
+      btn.addEventListener('click', () => cambiarEstado(btn.dataset.desactivar, 'disabled'));
+    });
+    tbody.querySelectorAll('[data-activar]').forEach(btn => {
+      btn.addEventListener('click', () => cambiarEstado(btn.dataset.activar, 'active'));
+    });
+    tbody.querySelectorAll('[data-reset]').forEach(btn => {
+      btn.addEventListener('click', () => resetPassword(btn.dataset.reset));
+    });
+  }
+
+  async function cambiarRol(id, rol, selectEl) {
+    const { ok, datos } = await llamar(`/api/admin/users/${id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: rol }),
+    });
+    if (!ok) {
+      toast(datos.error || 'No se pudo cambiar el rol.', true);
+      cargarUsuarios();
+      return;
+    }
+    toast('Rol actualizado.');
+  }
+
+  async function cambiarEstado(id, status) {
+    const accion = status === 'disabled' ? 'desactivar' : 'activar';
+    if (!confirm(`¿Seguro que quieres ${accion} esta cuenta?`)) return;
+    const { ok, datos } = await llamar(`/api/admin/users/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+    if (!ok) { toast(datos.error || 'No se pudo actualizar el estado.', true); return; }
+    toast(status === 'disabled' ? 'Cuenta desactivada.' : 'Cuenta activada.');
+    cargarUsuarios();
+  }
+
+  async function resetPassword(id) {
+    if (!confirm('¿Asignar una nueva clave temporal a este usuario? Se cerrarán sus sesiones activas.')) return;
+    const { ok, datos } = await llamar(`/api/admin/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    if (!ok) { toast(datos.error || 'No se pudo asignar la clave temporal.', true); return; }
+    mostrarClaveTemporal('Clave temporal asignada', datos.tempPassword);
+  }
+
+  $('btnLogout').addEventListener('click', async () => {
+    await llamar('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/';
+  });
+
+  (async () => {
+    if (!(await comprobarSesion())) return;
+    await Promise.all([cargarSolicitudes(), cargarUsuarios()]);
+  })();
+</script>
+</body>
+</html>
