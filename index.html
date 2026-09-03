@@ -690,7 +690,7 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M8 5V2M12 5V2M8 18v-3M12 18v-3M5 8H2M5 12H2M18 8h-3M18 12h-3"/></svg>
     Equipos
   </button>
-  <button class="tab-btn" data-tab="analisis">
+  <button class="tab-btn" data-tab="analisis" data-restricted="retencion">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="9" height="12" rx="1"/><circle cx="14" cy="15" r="3"/><path d="M16.2 17.2L18.5 19.5"/></svg>
     Análisis
   </button>
@@ -702,7 +702,7 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17V9M8 17V4M13 17v-6M18 17V7"/></svg>
     Inteligencia
   </button>
-  <button class="tab-btn" data-tab="analisisAvanzado">
+  <button class="tab-btn" data-tab="analisisAvanzado" data-restricted="retencion">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
     Análisis Avanzado
   </button>
@@ -758,7 +758,7 @@
         <button class="quicklink" data-goto="comparador">Comparar empresas</button>
         <button class="quicklink" data-goto="ofertas">Ver ofertas</button>
         <button class="quicklink" data-goto="equipos">Ficha de equipos</button>
-        <button class="quicklink" data-goto="analisis">Analizar contrato</button>
+        <button class="quicklink" data-goto="analisis" data-restricted="retencion">Analizar contrato</button>
         <button class="quicklink" data-goto="normativa">Consultar normativa</button>
       </div>
     </div>
@@ -990,7 +990,7 @@
   </section>
 
   <!-- ===== ANALISIS ===== -->
-  <section id="analisis" class="tab-content">
+  <section id="analisis" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis de contratos</h2>
     <p class="section-sub">Arrastra un contrato (.txt) para detectar automáticamente cláusulas relevantes. El análisis se hace en tu navegador, el archivo no se envía a ningún servidor.</p>
 
@@ -1065,7 +1065,7 @@
   </section>
 
   <!-- ===== ANALISIS AVANZADO ===== -->
-  <section id="analisisAvanzado" class="tab-content">
+  <section id="analisisAvanzado" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis avanzado de contratos</h2>
     <p class="section-sub">Detección ampliada de cláusulas de riesgo con puntuación 1-10. Procesado localmente en tu navegador, sin envío a servidores.</p>
 
@@ -1137,6 +1137,16 @@
      ================================================================ */
 
   const ETIQUETAS_ROL = { super_admin: 'Super Admin', admin: 'Admin', retencion: 'Retención' };
+  let rolActual = null;
+
+  // Pestañas ocultas para el rol Retención (analisis financiero/tecnico
+  // de contratos, fuera de su ambito). Se eliminan del DOM por completo
+  // -no solo se ocultan- para que tampoco sean accesibles reactivando la
+  // pestana via ?tab= en la URL o manipulando la consola.
+  function aplicarRestriccionesTabs(role) {
+    if (role !== 'retencion') return;
+    document.querySelectorAll('[data-restricted="retencion"]').forEach(el => el.remove());
+  }
 
   async function llamarAPI(url, opciones) {
     const respuesta = await fetch(url, {
@@ -1184,6 +1194,8 @@
     }
 
     const usuario = datos.usuario;
+    rolActual = usuario.role;
+    aplicarRestriccionesTabs(rolActual);
     document.getElementById('userMenu').hidden = false;
     document.getElementById('userBadge').innerHTML =
       `${usuario.name ? usuario.name + ' · ' : ''}<span class="role-tag">${ETIQUETAS_ROL[usuario.role] || usuario.role}</span>`;
@@ -1203,7 +1215,7 @@
     }
   }
 
-  iniciarSesionUI();
+  const sesionListaPromesa = iniciarSesionUI();
 
   /* ---------- Tabs ---------- */
   const tabButtons = document.querySelectorAll('.tab-btn');
@@ -1663,11 +1675,16 @@
     try { localStorage.setItem(CLAVE_AVISO_IOS, '1'); } catch (e) { /* modo privado */ }
   });
 
-  /* ---------- Acceso directo por URL: /?tab=comparador ---------- */
-  const tabSolicitada = new URLSearchParams(window.location.search).get('tab');
-  if (tabSolicitada && document.getElementById(tabSolicitada)) {
-    activateTab(tabSolicitada);
-  }
+  /* ---------- Acceso directo por URL: /?tab=comparador ----------
+     Se espera a que termine iniciarSesionUI() para que, si el rol es
+     retencion, las pestanas restringidas ya se hayan eliminado del DOM
+     antes de intentar activarlas (evita que ?tab=analisis las muestre). */
+  Promise.resolve(sesionListaPromesa).finally(() => {
+    const tabSolicitada = new URLSearchParams(window.location.search).get('tab');
+    if (tabSolicitada && document.getElementById(tabSolicitada)) {
+      activateTab(tabSolicitada);
+    }
+  });
 </script>
 </body>
 </html>
