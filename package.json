@@ -1,0 +1,10 @@
+{
+  "name": "segurpanel",
+  "version": "1.0.0",
+  "description": "SegurPanel - PWA de comparativa de alarmas, instalable en movil/tablet y con IA Assistant conectado a la API de Anthropic",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "icons": "node tools/generate-icons.js"
+  }
+}

@@ -2,8 +2,27 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SegurPanel</title>
+<meta name="description" content="App portátil para alarmas">
+
+<!-- ===== PWA ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b2545">
+<meta name="color-scheme" content="light">
+
+<!-- Movil / instalacion en pantalla de inicio -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SegurPanel">
+<meta name="application-name" content="SegurPanel">
+<meta name="format-detection" content="telephone=no">
+
+<!-- Iconos -->
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <style>
   :root {
     --navy: #0b2545;
@@ -410,11 +429,203 @@
     cursor: pointer;
   }
   .chat-send:hover { background: var(--green-dark); }
+  .chat-send:disabled { opacity: 0.6; cursor: not-allowed; }
+  .msg.chat-typing { font-style: italic; opacity: 0.65; }
 
+  /* ---------- Boton "Instalar app" ---------- */
+  .install-fab {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: none;
+    align-items: center;
+    gap: 9px;
+    background: var(--green);
+    color: var(--white);
+    border: none;
+    border-radius: 999px;
+    padding: 13px 22px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(11,37,69,0.28);
+    animation: fabIn 0.25s ease;
+  }
+  .install-fab.show { display: inline-flex; }
+  .install-fab:active { transform: translateX(-50%) scale(0.97); }
+  @keyframes fabIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+  /* Aviso para iOS/Safari, que no permite el dialogo nativo de instalacion */
+  .ios-hint {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: none;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--navy);
+    color: var(--white);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    box-shadow: 0 6px 20px rgba(11,37,69,0.32);
+  }
+  .ios-hint.show { display: flex; }
+  .ios-hint strong { color: #7fe0a8; }
+  .ios-hint .ios-close {
+    background: transparent;
+    border: none;
+    color: #b9c6d8;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* Ya instalada: no tiene sentido ofrecer la instalacion */
+  @media (display-mode: standalone) {
+    .install-fab, .ios-hint { display: none !important; }
+  }
+
+  /* ================================================================
+     Adaptacion a movil y tablet
+     ================================================================ */
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { overscroll-behavior-y: contain; }
+
+  /* Con apple-mobile-web-app-status-bar-style la app ocupa tambien la barra
+     de estado: se reserva ese hueco (env() vale 0 donde no hay notch). */
+  .topbar {
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-left: calc(24px + env(safe-area-inset-left));
+    padding-right: calc(24px + env(safe-area-inset-right));
+  }
+
+  .mobile-hint { display: none; }
+
+  /* ---------- Tablet ---------- */
+  @media (max-width: 1024px) {
+    .content { padding: 22px 18px 70px; }
+    /* Las pestanas quedan siempre a mano aunque se baje por la pagina */
+    .tabs { position: sticky; top: 0; z-index: 40; }
+    .table-wrap { -webkit-overflow-scrolling: touch; }
+  }
+
+  /* ---------- Movil ---------- */
   @media (max-width: 640px) {
-    .status-card { flex-direction: column; align-items: flex-start; }
+    .topbar {
+      padding-bottom: 12px;
+      padding-left: calc(16px + env(safe-area-inset-left));
+      padding-right: calc(16px + env(safe-area-inset-right));
+      padding-top: calc(12px + env(safe-area-inset-top));
+      gap: 10px;
+    }
+    .brand { font-size: 1.05rem; gap: 8px; }
+    .brand svg { width: 22px; height: 22px; }
+    .topbar-sub { font-size: 0.68rem; text-align: right; max-width: 45%; line-height: 1.3; }
+
+    .tabs {
+      padding: 0 6px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      padding: 12px 12px;
+      font-size: 0.82rem;
+      gap: 6px;
+      scroll-snap-align: start;
+    }
+    .tab-btn svg { width: 15px; height: 15px; }
+
+    .content {
+      padding-left: calc(14px + env(safe-area-inset-left));
+      padding-right: calc(14px + env(safe-area-inset-right));
+      padding-top: 18px;
+      /* hueco para el boton flotante de instalacion */
+      padding-bottom: calc(90px + env(safe-area-inset-bottom));
+    }
+
+    h2.section-title { font-size: 1.2rem; }
+    p.section-sub { font-size: 0.86rem; margin-bottom: 16px; }
+    .card { padding: 16px; border-radius: 10px; }
+
+    /* Objetivos tactiles de 44px minimo */
+    button.pill, .quicklink, .chat-send, .chat-chip, .tab-btn { min-height: 44px; }
+
+    .status-card { flex-direction: column; align-items: stretch; }
     .status-actions { width: 100%; }
     button.pill { flex: 1; }
+
+    .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .stat-card { padding: 14px; }
+    .stat-label { font-size: 0.68rem; }
+    .stat-value { font-size: 1.3rem; }
+    .stat-card .stat-value[style] { font-size: 0.98rem !important; }
+
+    .quicklinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .quicklink { text-align: center; padding: 10px 8px; font-size: 0.82rem; }
+
+    /* La tabla comparativa no se comprime: se desplaza en horizontal */
+    .mobile-hint {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin: 0 0 8px;
+    }
+    table.compare { min-width: 680px; font-size: 0.84rem; }
+    table.compare th, table.compare td { padding: 10px 12px; }
+
+    .offer-grid, .device-grid { grid-template-columns: 1fr; gap: 12px; }
+    .brand-heading { font-size: 1rem; margin: 20px 0 12px; }
+
+    .dropzone { padding: 28px 14px; }
+    .clause-item { padding: 12px 13px; }
+
+    .norm-list li { flex-direction: column; gap: 4px; }
+
+    .risk-score { font-size: 1.8rem; }
+    .risk-top { gap: 8px; }
+
+    .chat-wrap {
+      height: 68vh;
+      height: 68dvh;
+      min-height: 340px;
+      max-height: 520px;
+    }
+    .chat-messages { padding: 14px; }
+    .msg { max-width: 88%; }
+    .chat-suggestions { padding: 0 14px 12px; }
+    .chat-input-row { padding: 12px 14px; gap: 8px; }
+    /* 16px evita que iOS haga zoom al enfocar el campo */
+    .chat-input-row input { font-size: 16px; padding: 11px 16px; }
+    .chat-send { padding: 11px 18px; }
+  }
+
+  /* ---------- Movil estrecho ---------- */
+  @media (max-width: 380px) {
+    .topbar-sub { display: none; }
+    .stat-grid, .quicklinks { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Movil apaisado: se gana altura ---------- */
+  @media (max-height: 480px) and (orientation: landscape) {
+    .chat-wrap { height: 78vh; height: 78dvh; min-height: 240px; }
+    .tabs { position: static; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
   }
 </style>
 </head>
@@ -527,6 +738,7 @@
     <h2 class="section-title">Comparador de empresas</h2>
     <p class="section-sub">Comparativa orientativa de las principales compañías de alarmas.</p>
 
+    <p class="mobile-hint">Desliza la tabla en horizontal para ver todas las columnas.</p>
     <div class="table-wrap">
       <table class="compare">
         <thead>
@@ -851,7 +1063,7 @@
   <!-- ===== IA ASSISTANT ===== -->
   <section id="iaAssistant" class="tab-content">
     <h2 class="section-title">IA Assistant</h2>
-    <p class="section-sub">Chat con respuestas predefinidas sobre normativas, equipos y argumentos para negociar tu baja o permanencia.</p>
+    <p class="section-sub">Chat con IA (Claude) sobre normativas, equipos Ajax/Jablotron, comparativa de competencia y argumentos para negociar tu baja o permanencia.</p>
 
     <div class="chat-wrap">
       <div class="chat-messages" id="chatMessages">
@@ -871,6 +1083,22 @@
   </section>
 
 </main>
+
+<!-- ===== Instalar como app ===== -->
+<button class="install-fab" id="installBtn" type="button">
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 3v9"/><path d="M6.5 8.5L10 12l3.5-3.5"/><path d="M4 15h12"/>
+  </svg>
+  Instalar app
+</button>
+
+<div class="ios-hint" id="iosHint">
+  <div>
+    Para instalar SegurPanel en tu iPhone o iPad: pulsa <strong>Compartir</strong>
+    y luego <strong>Añadir a pantalla de inicio</strong>.
+  </div>
+  <button class="ios-close" id="iosHintClose" type="button" aria-label="Cerrar aviso">&times;</button>
+</div>
 
 <script>
   /* ---------- Tabs ---------- */
@@ -1151,34 +1379,19 @@
     });
   }
 
-  /* ---------- IA Assistant: chat ---------- */
-  const CHAT_RULES = [
-    {
-      keywords: ['normativa', 'ley', 'legal', 'une', 'reglamento', 'proteccion de datos', 'protección de datos', 'rgpd'],
-      response: 'La seguridad privada en España se regula principalmente por la Ley 5/2014 y el Reglamento (RD 195/2023). Los sistemas de alarma deben cumplir la norma técnica UNE-EN 50131 (intrusión) y UNE-EN 50136 (transmisión). Si el sistema trata datos personales (vídeo, biometría) aplica también el RGPD y la LOPDGDD. Consulta la pestaña Normativa para más detalle.'
-    },
-    {
-      keywords: ['permanencia', 'penalizacion', 'penalización', 'cancelar', 'baja', 'anular', 'cancelación', 'cancelacion'],
-      response: 'Para darte de baja sin penalización revisa la fecha de fin de permanencia en tu contrato original y envía un burofax o email fehaciente con al menos el preaviso indicado (normalmente 30 días). Si la permanencia ya venció, la empresa no puede cobrarte penalización. Si sigue vigente, puedes negociar una compensación menor. Usa la pestaña Análisis Avanzado para detectar estas cláusulas en tu contrato.'
-    },
-    {
-      keywords: ['ajax', 'jablotron', 'equipo', 'sensor', 'comparar equipos', 'diferencia'],
-      response: 'Ajax destaca por su ecosistema propio con el Hub 2 (WiFi + Ethernet + doble SIM) y sensores con hasta 7 años de batería. Jablotron JA-107K ofrece prestaciones similares con buena integración en instalaciones profesionales. Ambos cumplen el Grado 2 de la norma EN 50131. Consulta la pestaña Equipos para fichas detalladas.'
-    },
-    {
-      keywords: ['precio', 'tarifa', 'coste', 'cuota', 'cuanto cuesta', 'cuánto cuesta'],
-      response: 'Las cuotas mensuales orientativas van desde ~25-32€ (Segurma, Seguridad 3D) hasta ~44-55€ (Verisure), según equipo y verificación incluida. Consulta las pestañas Comparador e Inteligencia para ver el detalle y las gráficas comparativas.'
-    },
-    {
-      keywords: ['retencion', 'retención', 'negociar', 'como evitar', 'cómo evitar', 'descuento retencion', 'quiero dar de baja'],
-      response: 'Al llamar para dar de baja es habitual que te ofrezcan descuentos de retención. Argumentos útiles: menciona que has recibido una oferta mejor de otra compañía (revisa la pestaña Ofertas), indica que no estás satisfecho con el servicio, y pide siempre por escrito cualquier condición que te ofrezcan antes de aceptar.'
-    }
-  ];
-  const CHAT_FALLBACK = 'No tengo una respuesta predefinida para eso. Prueba a preguntar sobre normativas, equipos, precios o cómo negociar la baja.';
+  /* ---------- IA Assistant: chat (API real de Anthropic vía backend local) ---------- */
+  const CHAT_API_URL = '/api/chat';
+  const CHAT_FALLBACK_ERROR = 'No he podido conectar con el asistente. Comprueba que el servidor local (node server.js) está en marcha y que ANTHROPIC_API_KEY está configurada.';
 
   const chatMessages = document.getElementById('chatMessages');
   const chatInput = document.getElementById('chatInput');
   const chatSend = document.getElementById('chatSend');
+
+  // Historial de la conversación en el formato que espera la API de
+  // Anthropic ({role: 'user'|'assistant', content: '...'}), para que el
+  // asistente mantenga contexto entre turnos.
+  let chatHistorial = [];
+  let chatEsperandoRespuesta = false;
 
   function addMessage(text, who) {
     const div = document.createElement('div');
@@ -1186,19 +1399,65 @@
     div.textContent = text;
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    return div;
   }
 
-  function botReply(userText) {
-    const normalized = userText.toLowerCase();
-    const rule = CHAT_RULES.find(r => r.keywords.some(k => normalized.includes(k)));
-    setTimeout(() => addMessage(rule ? rule.response : CHAT_FALLBACK, 'bot'), 300);
+  function mostrarEscribiendo() {
+    const div = document.createElement('div');
+    div.className = 'msg bot chat-typing';
+    div.textContent = 'Escribiendo…';
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return div;
+  }
+
+  async function botReply(userText) {
+    if (!navigator.onLine) {
+      addMessage('Estás sin conexión. El resto de la app funciona offline, pero el IA Assistant necesita internet para responder.', 'bot');
+      chatEsperandoRespuesta = false;
+      chatSend.disabled = false;
+      return;
+    }
+
+    chatHistorial.push({ role: 'user', content: userText });
+    const indicador = mostrarEscribiendo();
+
+    try {
+      const respuesta = await fetch(CHAT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: chatHistorial }),
+      });
+
+      const datos = await respuesta.json();
+      indicador.remove();
+
+      if (!respuesta.ok) {
+        addMessage(datos.error || CHAT_FALLBACK_ERROR, 'bot');
+        chatHistorial.pop(); // no contaminar el historial con un turno fallido
+        return;
+      }
+
+      addMessage(datos.reply, 'bot');
+      chatHistorial.push({ role: 'assistant', content: datos.reply });
+    } catch (e) {
+      indicador.remove();
+      addMessage(CHAT_FALLBACK_ERROR, 'bot');
+      chatHistorial.pop();
+    } finally {
+      chatEsperandoRespuesta = false;
+      chatSend.disabled = false;
+    }
   }
 
   function sendChat() {
+    if (chatEsperandoRespuesta) return;
     const text = chatInput.value.trim();
     if (!text) return;
     addMessage(text, 'user');
     chatInput.value = '';
+    chatEsperandoRespuesta = true;
+    chatSend.disabled = true;
     botReply(text);
   }
 
@@ -1210,6 +1469,95 @@
       sendChat();
     });
   });
+
+  /* ================================================================
+     PWA: service worker, instalacion y accesos directos
+     ================================================================ */
+
+  /* ---------- Registro del service worker ---------- */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { scope: './' })
+        .then(reg => {
+          // Si hay una version nueva esperando, se activa sin esperar a que
+          // se cierren todas las pestanas.
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          reg.addEventListener('updatefound', () => {
+            const nuevo = reg.installing;
+            if (!nuevo) return;
+            nuevo.addEventListener('statechange', () => {
+              if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
+                nuevo.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+        })
+        .catch(err => console.warn('No se pudo registrar el service worker:', err));
+
+      // Solo se recarga al cambiar de version, no en la primera visita
+      // (ahi clients.claim() tambien dispara controllerchange).
+      const habiaControlador = !!navigator.serviceWorker.controller;
+      let recargando = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!habiaControlador || recargando) return;
+        recargando = true;
+        window.location.reload();
+      });
+    });
+  }
+
+  /* ---------- Boton "Instalar app" ---------- */
+  const installBtn = document.getElementById('installBtn');
+  const iosHint = document.getElementById('iosHint');
+  let promptInstalacion = null;
+
+  const yaInstalada = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  // Chrome/Edge/Android: se captura el evento y se ofrece el dialogo nativo.
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    promptInstalacion = e;
+    if (!yaInstalada()) installBtn.classList.add('show');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!promptInstalacion) return;
+    installBtn.classList.remove('show');
+    promptInstalacion.prompt();
+    const { outcome } = await promptInstalacion.userChoice;
+    promptInstalacion = null;
+    // Si la descarta, el boton vuelve por si cambia de idea.
+    if (outcome !== 'accepted') installBtn.classList.add('show');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    promptInstalacion = null;
+    installBtn.classList.remove('show');
+    iosHint.classList.remove('show');
+  });
+
+  // iOS/Safari no dispara beforeinstallprompt: se explican los pasos manuales.
+  const CLAVE_AVISO_IOS = 'segurpanel:avisoInstalacionIOS';
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const esSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
+
+  if (esIOS && esSafari && !yaInstalada() && !localStorage.getItem(CLAVE_AVISO_IOS)) {
+    setTimeout(() => iosHint.classList.add('show'), 2500);
+  }
+
+  document.getElementById('iosHintClose').addEventListener('click', () => {
+    iosHint.classList.remove('show');
+    try { localStorage.setItem(CLAVE_AVISO_IOS, '1'); } catch (e) { /* modo privado */ }
+  });
+
+  /* ---------- Acceso directo por URL: /?tab=comparador ---------- */
+  const tabSolicitada = new URLSearchParams(window.location.search).get('tab');
+  if (tabSolicitada && document.getElementById(tabSolicitada)) {
+    activateTab(tabSolicitada);
+  }
 </script>
 </body>
 </html>
