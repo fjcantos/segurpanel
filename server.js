@@ -663,6 +663,9 @@ async function apiAnalisis(req, res) {
   } catch (e) {
     console.error("Error al analizar el contrato:", e);
     if (!res.headersSent) {
+      if (e.ocrNoDisponible) {
+        return enviarJSON(res, 503, { error: e.message });
+      }
       enviarJSON(res, 500, { error: "No se pudo analizar el archivo: " + e.message });
     } else {
       res.end();

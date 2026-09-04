@@ -18,7 +18,8 @@ const fs = require("fs");
 const path = require("path");
 const { PDFParse } = require("pdf-parse");
 const mammoth = require("mammoth");
-const { createWorker } = require("tesseract.js");
+const sharp = require("sharp");
+const tesseractOcr = require("node-tesseract-ocr");
 const PDFDocument = require("pdfkit");
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
@@ -38,18 +39,57 @@ const MIME_PDF = "application/pdf";
 const MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MIMES_IMAGEN = new Set(["image/jpeg", "image/png"]);
 
-// El worker de OCR tarda varios segundos en inicializarse (descarga/carga el
-// modelo). Se crea una unica vez y se reutiliza entre peticiones en lugar de
-// crearlo y destruirlo por cada imagen.
-let ocrWorkerPromesa = null;
-function obtenerOcrWorker() {
-  if (!ocrWorkerPromesa) {
-    ocrWorkerPromesa = createWorker("spa").catch((err) => {
-      ocrWorkerPromesa = null; // permite reintentar en la siguiente peticion
-      throw err;
-    });
+// node-tesseract-ocr invoca el binario "tesseract" del sistema operativo en
+// lugar de cargar el WASM de tesseract.js en memoria (que hacia fallar el
+// deploy en Render por consumo excesivo de RAM). Si ese binario no esta
+// instalado en el servidor (p.ej. en el plan gratuito de Render, que no
+// permite instalar paquetes del sistema), se lanza OcrNoDisponibleError con
+// un mensaje claro para el usuario.
+class OcrNoDisponibleError extends Error {
+  constructor(mensaje) {
+    super(mensaje);
+    this.name = "OcrNoDisponibleError";
+    this.ocrNoDisponible = true;
   }
-  return ocrWorkerPromesa;
+}
+
+const OCR_CONFIG = { lang: "spa", oem: 1, psm: 3 };
+
+function esErrorBinarioTesseractAusente(err) {
+  const mensaje = String((err && err.message) || "");
+  return (
+    err &&
+    (err.code === 127 ||
+      err.code === "ENOENT" ||
+      /not found|no se reconoce|no encontrado|command not found/i.test(mensaje))
+  );
+}
+
+async function extraerTextoImagen(buffer) {
+  // Preprocesado ligero con sharp (escala de grises, normalizado de
+  // contraste y nitidez, limite de resolucion) para mejorar la precision del
+  // OCR y mantener bajo el consumo de memoria/CPU en el servidor.
+  const imagenProcesada = await sharp(buffer)
+    .rotate()
+    .resize({ width: 2000, withoutEnlargement: true })
+    .grayscale()
+    .normalize()
+    .sharpen()
+    .png()
+    .toBuffer();
+
+  try {
+    const texto = await tesseractOcr.recognize(imagenProcesada, OCR_CONFIG);
+    return texto || "";
+  } catch (err) {
+    if (esErrorBinarioTesseractAusente(err)) {
+      throw new OcrNoDisponibleError(
+        "El reconocimiento de texto en imágenes (OCR) no está disponible en este servidor. " +
+          "Sube el contrato en PDF o Word (.docx): esos formatos sí funcionan correctamente en la nube."
+      );
+    }
+    throw err;
+  }
 }
 
 async function extraerTexto(buffer, mimetype, nombreArchivo) {
@@ -71,9 +111,7 @@ async function extraerTexto(buffer, mimetype, nombreArchivo) {
   }
 
   if (MIMES_IMAGEN.has(mimetype) || ext === ".jpg" || ext === ".jpeg" || ext === ".png") {
-    const worker = await obtenerOcrWorker();
-    const resultado = await worker.recognize(buffer);
-    return resultado.data.text || "";
+    return await extraerTextoImagen(buffer);
   }
 
   throw new Error("Formato de archivo no soportado. Sube un PDF, un Word (.docx), o una imagen JPG/PNG.");
@@ -470,6 +508,7 @@ module.exports = {
   anonimizarTexto,
   detectarClausulas,
   generarInformePDF,
+  OcrNoDisponibleError,
   MIME_PDF,
   MIME_DOCX,
   MIMES_IMAGEN,
