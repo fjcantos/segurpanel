@@ -1191,6 +1191,8 @@
     <h2 class="section-title">Inteligencia de mercado</h2>
     <p class="section-sub">Panel de referencia con datos ilustrativos a partir del comparador. Actualiza los valores con datos reales cuando los tengas.</p>
 
+    <div class="compare-legend" id="intelLegend" hidden></div>
+
     <div class="intel-grid">
       <div class="card">
         <div class="chart-title">Cuota mensual media</div>
@@ -1337,7 +1339,7 @@
   // de color, tanto en las tablas/tarjetas como en cualquier otra parte de
   // la pantalla.
   function mostrarLeyendasSuperAdmin() {
-    ['compareLegend', 'offersLegend', 'alianzasLegend'].forEach(id => {
+    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.innerHTML = construirLeyendaHTML();
@@ -1693,12 +1695,12 @@
     { label: 'MPA/Prosegur', value: 35 }
   ];
 
-  function renderHBarChart(containerId, data, unit) {
+  function renderHBarChart(containerId, data, unit, useCompanySwatch) {
     const container = document.getElementById(containerId);
     const max = Math.max(...data.map(d => d.value));
     container.innerHTML = data.map(d => `
       <div class="hbar-row">
-        <div class="hbar-top"><span class="hbar-name">${escapeHtml(d.label)}</span><span class="hbar-val">${d.value}${unit}</span></div>
+        <div class="hbar-top"><span class="hbar-name">${useCompanySwatch ? swatchHtml(d.label) : escapeHtml(d.label)}</span><span class="hbar-val">${d.value}${unit}</span></div>
         <div class="hbar-track"><div class="hbar-fill" style="width:${(d.value / max * 100).toFixed(1)}%; background:${d.color};"></div></div>
       </div>
     `).join('');
@@ -1715,14 +1717,14 @@
       const color = diff <= 0 ? '#1f9d55' : '#c0392b';
       return `
         <div class="hbar-row">
-          <div class="hbar-top"><span class="hbar-name">${escapeHtml(d.label)}</span><span class="hbar-val">${diff >= 0 ? '+' : ''}${pct}% vs media</span></div>
+          <div class="hbar-top"><span class="hbar-name">${swatchHtml(d.label)}</span><span class="hbar-val">${diff >= 0 ? '+' : ''}${pct}% vs media</span></div>
           <div class="hbar-track"><div class="hbar-fill" style="width:${width}%; background:${color};"></div></div>
         </div>
       `;
     }).join('');
   }
 
-  renderHBarChart('priceChart', PRICE_DATA, '€');
+  renderHBarChart('priceChart', PRICE_DATA, '€', true);
   renderHBarChart('equipoChart', EQUIPO_DATA, '%');
   renderMarginChart();
 
