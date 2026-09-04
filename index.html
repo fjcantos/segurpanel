@@ -539,17 +539,45 @@
   .chat-wrap {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 14px;
     display: flex;
     flex-direction: column;
-    height: 480px;
+    height: 640px;
     overflow: hidden;
+    box-shadow: 0 4px 18px rgba(11,37,69,0.08);
   }
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+    color: white;
+    flex-shrink: 0;
+  }
+  .chat-header-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.14);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .chat-header-icon svg { width: 24px; height: 24px; }
+  .chat-header-info { flex: 1; min-width: 0; }
+  .chat-header-title { font-weight: 700; font-size: 0.98rem; }
+  .chat-header-sub { font-size: 0.74rem; opacity: 0.82; margin-top: 2px; }
+  .chat-header-status { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; opacity: 0.9; flex-shrink: 0; white-space: nowrap; }
+  .chat-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,0.25); }
   .chat-messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 0.88rem; line-height: 1.45; }
-  .msg.bot { align-self: flex-start; background: #eef2f7; color: var(--text); border-bottom-left-radius: 3px; }
-  .msg.user { align-self: flex-end; background: var(--navy); color: white; border-bottom-right-radius: 3px; }
-  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 14px; }
+  .msg { padding: 10px 14px; border-radius: 12px; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; }
+  .msg.bot { align-self: flex-start; max-width: 92%; background: #eef2f7; color: var(--text); border-bottom-left-radius: 3px; }
+  .msg.user { align-self: flex-end; max-width: 75%; background: var(--navy); color: white; border-bottom-right-radius: 3px; }
+  .chat-reasons { padding: 12px 18px; border-top: 1px solid var(--border); background: #f7faf8; flex-shrink: 0; }
+  .chat-reasons-title { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; max-height: 108px; overflow-y: auto; }
   .chat-chip {
     border: 1px solid var(--border);
     background: var(--white);
@@ -560,7 +588,8 @@
     cursor: pointer;
   }
   .chat-chip:hover { border-color: var(--green); color: var(--green-dark); }
-  .chat-input-row { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); }
+  .chat-chip:disabled { opacity: 0.55; cursor: not-allowed; }
+  .chat-input-row { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
   .chat-input-row input {
     flex: 1;
     border: 1px solid var(--border);
@@ -1328,21 +1357,50 @@
 
   <!-- ===== IA ASSISTANT ===== -->
   <section id="iaAssistant" class="tab-content">
-    <h2 class="section-title">IA Assistant</h2>
-    <p class="section-sub">Chat con IA (Claude) sobre normativas, equipos Ajax/Jablotron, comparativa de competencia y argumentos para negociar tu baja o permanencia.</p>
+    <h2 class="section-title">IA Assistant · Experto en Retención</h2>
+    <p class="section-sub">Simula 15 años de experiencia en retención de clientes del sector de alarmas: rebate objeciones de baja con argumentos profesionales y empáticos, apoyados en psicología del cliente, técnicas de negociación y la legislación española de consumidores. Pulsa el motivo de baja que te ha dado el cliente o escríbelo tú mismo.</p>
 
     <div class="chat-wrap">
+      <div class="chat-header">
+        <div class="chat-header-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 13v-1a8 8 0 0116 0v1"/>
+            <rect x="3" y="13" width="4" height="6" rx="1.5"/>
+            <rect x="17" y="13" width="4" height="6" rx="1.5"/>
+            <path d="M20 19v1a3 3 0 01-3 3h-3"/>
+          </svg>
+        </div>
+        <div class="chat-header-info">
+          <div class="chat-header-title">Experto en Retención de Clientes</div>
+          <div class="chat-header-sub">15 años de experiencia · Objeciones de baja · Negociación y consumo</div>
+        </div>
+        <div class="chat-header-status"><span class="chat-status-dot"></span>En línea</div>
+      </div>
+
       <div class="chat-messages" id="chatMessages">
-        <div class="msg bot">Hola, soy el asistente de SegurPanel. Puedo ayudarte con normativas, comparativas de equipos, precios o cómo negociar tu baja. ¿Qué necesitas?</div>
+        <div class="msg bot">Hola, soy tu asistente experto en retención de clientes de alarmas. Selecciona abajo el motivo de baja que te ha dado el cliente y te doy 5 argumentos de valor listos para usar en la llamada. También puedes escribirme el motivo con tus propias palabras, o preguntarme sobre normativa, equipos o comparativa de competencia.</div>
       </div>
-      <div class="chat-suggestions">
-        <button class="chat-chip" data-q="¿Qué normativa regula las alarmas?">Normativa aplicable</button>
-        <button class="chat-chip" data-q="¿Cómo cancelo sin penalización?">Cancelar sin penalización</button>
-        <button class="chat-chip" data-q="Diferencias entre Ajax y Jablotron">Ajax vs Jablotron</button>
-        <button class="chat-chip" data-q="¿Cómo negociar la retención?">Negociar retención</button>
+
+      <div class="chat-reasons">
+        <div class="chat-reasons-title">Motivos de baja habituales</div>
+        <div class="chat-suggestions">
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Me voy a vivir a otro lado". Dame 5 argumentos de valor para retenerlo.'>Me voy a vivir a otro lado</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Me han robado y la alarma no funcionó". Dame 5 argumentos de valor para retenerlo.'>Me han robado y la alarma no funcionó</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Es muy caro". Dame 5 argumentos de valor para retenerlo.'>Es muy caro</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "No la uso nunca". Dame 5 argumentos de valor para retenerlo.'>No la uso nunca</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Me voy al extranjero". Dame 5 argumentos de valor para retenerlo.'>Me voy al extranjero</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Me han ofrecido algo mejor". Dame 5 argumentos de valor para retenerlo.'>Me han ofrecido algo mejor</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Problemas económicos". Dame 5 argumentos de valor para retenerlo.'>Problemas económicos</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "No estoy satisfecho con el servicio". Dame 5 argumentos de valor para retenerlo.'>No estoy satisfecho con el servicio</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Me separo/divorcio". Dame 5 argumentos de valor para retenerlo, con la sensibilidad que requiere la situación.'>Me separo/divorcio</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Fallecimiento del titular". Dame 5 argumentos/opciones de valor apropiados para esta situación, priorizando la empatía y el trato correcto a la familia por encima de la insistencia comercial.'>Fallecimiento del titular</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "Vendo la casa/piso". Dame 5 argumentos de valor para retenerlo.'>Vendo la casa/piso</button>
+          <button class="chat-chip" data-q='Motivo de baja del cliente: "La competencia es más barata". Dame 5 argumentos de valor para retenerlo.'>La competencia es más barata</button>
+        </div>
       </div>
+
       <div class="chat-input-row">
-        <input type="text" id="chatInput" placeholder="Escribe tu pregunta...">
+        <input type="text" id="chatInput" placeholder="Escribe el motivo de baja o tu pregunta...">
         <button class="chat-send" id="chatSend">Enviar</button>
       </div>
     </div>
@@ -2106,11 +2164,16 @@
     return div;
   }
 
+  function setChatBusy(busy) {
+    chatEsperandoRespuesta = busy;
+    chatSend.disabled = busy;
+    document.querySelectorAll('.chat-chip').forEach(chip => { chip.disabled = busy; });
+  }
+
   async function botReply(userText) {
     if (!navigator.onLine) {
       addMessage('Estás sin conexión. El resto de la app funciona offline, pero el IA Assistant necesita internet para responder.', 'bot');
-      chatEsperandoRespuesta = false;
-      chatSend.disabled = false;
+      setChatBusy(false);
       return;
     }
 
@@ -2146,28 +2209,32 @@
       addMessage(CHAT_FALLBACK_ERROR, 'bot');
       chatHistorial.pop();
     } finally {
-      chatEsperandoRespuesta = false;
-      chatSend.disabled = false;
+      setChatBusy(false);
     }
   }
 
-  function sendChat() {
+  // textoVisible es lo que ve el usuario en su burbuja de chat; textoParaIA
+  // es lo que realmente se envia a la API (para los botones de motivo de
+  // baja, un prompt mas detallado que la etiqueta corta del boton).
+  function enviarMensaje(textoVisible, textoParaIA) {
     if (chatEsperandoRespuesta) return;
+    addMessage(textoVisible, 'user');
+    setChatBusy(true);
+    botReply(textoParaIA);
+  }
+
+  function sendChat() {
     const text = chatInput.value.trim();
     if (!text) return;
-    addMessage(text, 'user');
     chatInput.value = '';
-    chatEsperandoRespuesta = true;
-    chatSend.disabled = true;
-    botReply(text);
+    enviarMensaje(text, text);
   }
 
   chatSend.addEventListener('click', sendChat);
   chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
   document.querySelectorAll('.chat-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      chatInput.value = chip.dataset.q;
-      sendChat();
+      enviarMensaje(chip.textContent.trim(), chip.dataset.q);
     });
   });
 
