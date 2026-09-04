@@ -22,6 +22,7 @@
 
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
@@ -1207,6 +1208,121 @@ async function apiAlianzasSync(req, res) {
   enviarJSON(res, 200, { insertadas, recibidas: lista.length, validas: validas.length });
 }
 
+// ---------------------------------------------------------------
+// POST /api/alianzas/nueva: variante de ingesta pensada para el scraper de
+// la Raspberry Pi tal y como esta escrito hoy (un POST por cada alianza
+// nueva que detecta, con los 6 campos que el propio scraper produce:
+// empresa_alarma, socio_comercial, tipo_acuerdo, fecha, fuente y resumen).
+// Se autentica con "Authorization: Bearer <ALIANZAS_TOKEN>" en vez del
+// header a medida x-scraper-token que usa /sync, y escribe en la misma
+// tabla `alianzas` como 'pending' -> el punto rojo de la pestaña Alianzas
+// (ver actualizarNotifDot en index.html) se activa solo, porque ya lee su
+// recuento de pendientes desde GET /api/alianzas en cada carga de sesion.
+
+const SECTOR_POR_SOCIO = new Map([
+  ["movistar", "Móviles"],
+  ["vodafone", "Móviles"],
+  ["orange", "Móviles"],
+  ["masmovil", "Móviles"],
+  ["másmóvil", "Móviles"],
+  ["carrefour", "Grandes superficies"],
+  ["leroy merlin", "Grandes superficies"],
+  ["el corte inglés", "Grandes superficies"],
+  ["el corte ingles", "Grandes superficies"],
+  ["mediamarkt", "Grandes superficies"],
+  ["mapfre", "Seguros"],
+  ["axa", "Seguros"],
+  ["allianz", "Seguros"],
+  ["generali", "Seguros"],
+  ["idealista", "Inmobiliarias"],
+  ["fotocasa", "Inmobiliarias"],
+  ["pisos.com", "Inmobiliarias"],
+  ["endesa", "Suministros (luz, gas, agua)"],
+  ["iberdrola", "Suministros (luz, gas, agua)"],
+  ["naturgy", "Suministros (luz, gas, agua)"],
+  ["repsol", "Suministros (luz, gas, agua)"],
+]);
+
+function inferirSectorPorSocio(socio) {
+  return SECTOR_POR_SOCIO.get(String(socio || "").trim().toLowerCase()) || null;
+}
+
+function extraerTokenBearer(req) {
+  const cabecera = req.headers["authorization"] || "";
+  const m = /^Bearer\s+(.+)$/i.exec(cabecera.trim());
+  return m ? m[1].trim() : null;
+}
+
+function extraerDominio(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function generarExternalIdAlianza({ empresaAlarma, socio, fuente }) {
+  return crypto
+    .createHash("sha256")
+    .update(`${empresaAlarma}|${socio}|${fuente}`.toLowerCase())
+    .digest("hex")
+    .slice(0, 32);
+}
+
+async function apiAlianzasNueva(req, res) {
+  const tokenEsperado = process.env.ALIANZAS_TOKEN;
+  if (!tokenEsperado) {
+    return enviarJSON(res, 503, {
+      error: "El servidor no tiene configurada la variable de entorno ALIANZAS_TOKEN.",
+    });
+  }
+  const tokenRecibido = extraerTokenBearer(req);
+  if (!tokenRecibido || tokenRecibido !== tokenEsperado) {
+    return enviarJSON(res, 401, { error: "Token de autenticación inválido." });
+  }
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const empresaAlarma = typeof cuerpo.empresa_alarma === "string" ? cuerpo.empresa_alarma.trim() : "";
+  const socio = typeof cuerpo.socio_comercial === "string" ? cuerpo.socio_comercial.trim() : "";
+  const fuente = typeof cuerpo.fuente === "string" ? cuerpo.fuente.trim() : "";
+
+  if (!empresaAlarma || !socio || !fuente) {
+    return enviarJSON(res, 400, {
+      error: "Faltan campos obligatorios: empresa_alarma, socio_comercial y fuente.",
+    });
+  }
+
+  const sector = inferirSectorPorSocio(socio);
+  if (!sector) {
+    return enviarJSON(res, 400, { error: `No se reconoce el sector del socio comercial "${socio}".` });
+  }
+
+  const alianza = {
+    externalId: generarExternalIdAlianza({ empresaAlarma, socio, fuente }),
+    empresaAlarma,
+    sector,
+    socio,
+    tipoAcuerdo: typeof cuerpo.tipo_acuerdo === "string" ? cuerpo.tipo_acuerdo.trim() : null,
+    titular: typeof cuerpo.resumen === "string" ? cuerpo.resumen.trim().slice(0, 500) : null,
+    fuente: extraerDominio(fuente) || fuente,
+    url: fuente,
+    fechaPublicacion: typeof cuerpo.fecha === "string" ? cuerpo.fecha.trim() : null,
+  };
+
+  const insertadas = db.insertarAlianzasPendientes([alianza]);
+  enviarJSON(res, 200, {
+    ok: true,
+    insertada: insertadas > 0,
+    mensaje: insertadas > 0 ? "Alianza registrada como pendiente de revisión." : "Alianza ya existía (ignorada).",
+  });
+}
+
 /* ================================================================
    Estaticos de la PWA
    ================================================================ */
@@ -1345,6 +1461,7 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
     if (req.method === "POST" && ruta === "/api/alianzas/sync") return await apiAlianzasSync(req, res);
+    if (req.method === "POST" && ruta === "/api/alianzas/nueva") return await apiAlianzasNueva(req, res);
     if (req.method === "POST") {
       let id = idPublicarAlianza(ruta);
       if (id !== null) return await apiAlianzasResolver(req, res, id, "published");
@@ -1398,6 +1515,12 @@ servidor.listen(PORT, () => {
   if (!process.env.SCRAPER_TOKEN) {
     console.warn(
       "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync (usado por scraper_alianzas.py en la Raspberry Pi) rechazará todas las peticiones hasta que la definas."
+    );
+  }
+
+  if (!process.env.ALIANZAS_TOKEN) {
+    console.warn(
+      "AVISO: ALIANZAS_TOKEN no está configurada. POST /api/alianzas/nueva (usado por scraper_alianzas.py) rechazará todas las peticiones hasta que la definas."
     );
   }
 
