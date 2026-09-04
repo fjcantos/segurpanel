@@ -84,9 +84,28 @@ db.exec(`
     reviewed_by        INTEGER REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS contract_stats (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    provincia       TEXT,
+    empresa         TEXT,
+    puntuacion      INTEGER,
+    clausulas_json  TEXT,
+    user_id         INTEGER REFERENCES users(id),
+    created_at      TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS tab_visits (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    tab         TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
+  CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
+  CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
 `);
 
 const ahoraISO = () => new Date().toISOString();
@@ -308,6 +327,84 @@ function fechaUltimaAlianza() {
   return (fila && fila.ultima) || null;
 }
 
+/* ---------- Estadisticas internas (pestana Estadisticas) ---------- */
+//
+// contract_stats guarda, por cada contrato pasado por /api/analisis,
+// unicamente provincia + empresa detectadas (antes de anonimizar) y la
+// puntuacion/clausulas de riesgo ya calculadas: nunca texto del contrato ni
+// ningun dato personal. tab_visits registra que un usuario ha abierto una
+// pestana de la app, para poder mostrar "pestañas mas usadas" en la
+// actividad del equipo.
+
+function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas, userId }) {
+  db.prepare(
+    `INSERT INTO contract_stats (provincia, empresa, puntuacion, clausulas_json, user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    provincia || null,
+    empresa || null,
+    Number.isFinite(puntuacion) ? puntuacion : null,
+    JSON.stringify(clausulas || []),
+    userId || null,
+    ahoraISO()
+  );
+}
+
+function contarContratosAnalizados() {
+  return db.prepare("SELECT COUNT(*) AS n FROM contract_stats").get().n;
+}
+
+function riesgoPromedioContratos() {
+  const fila = db.prepare("SELECT AVG(puntuacion) AS media FROM contract_stats WHERE puntuacion IS NOT NULL").get();
+  return fila && fila.media !== null ? fila.media : null;
+}
+
+function listarClausulasContratos() {
+  return db.prepare("SELECT clausulas_json FROM contract_stats WHERE clausulas_json IS NOT NULL").all();
+}
+
+function estadisticasPorProvincia() {
+  return db
+    .prepare(
+      `SELECT provincia, empresa, COUNT(*) AS n
+       FROM contract_stats
+       WHERE provincia IS NOT NULL AND empresa IS NOT NULL
+       GROUP BY provincia, empresa
+       ORDER BY provincia ASC, n DESC`
+    )
+    .all();
+}
+
+function contarUsuariosActivos() {
+  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE status = 'active'").get().n;
+}
+
+function registrarVisitaTab({ userId, tab }) {
+  db.prepare("INSERT INTO tab_visits (user_id, tab, created_at) VALUES (?, ?, ?)").run(userId, tab, ahoraISO());
+}
+
+function actividadUsuariosActivos() {
+  return db
+    .prepare(
+      `SELECT u.id, u.email, u.name, u.role,
+              (SELECT MAX(created_at) FROM sessions WHERE user_id = u.id) AS ultima_conexion
+       FROM users u
+       WHERE u.status = 'active'
+       ORDER BY ultima_conexion DESC`
+    )
+    .all();
+}
+
+function conteoVisitasPorUsuarioYTab() {
+  return db
+    .prepare(
+      `SELECT user_id, tab, COUNT(*) AS n
+       FROM tab_visits
+       GROUP BY user_id, tab`
+    )
+    .all();
+}
+
 module.exports = {
   db,
   DIR_DATOS,
@@ -335,4 +432,13 @@ module.exports = {
   buscarAlianzaPorId,
   resolverAlianza,
   fechaUltimaAlianza,
+  registrarContratoAnalizado,
+  contarContratosAnalizados,
+  riesgoPromedioContratos,
+  listarClausulasContratos,
+  estadisticasPorProvincia,
+  contarUsuariosActivos,
+  registrarVisitaTab,
+  actividadUsuariosActivos,
+  conteoVisitasPorUsuarioYTab,
 };

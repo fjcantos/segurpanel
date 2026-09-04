@@ -646,8 +646,22 @@ async function apiAnalisis(req, res) {
       });
     }
 
+    // Provincia y empresa se extraen del texto ORIGINAL (antes de anonimizar,
+    // que sustituye justamente el CP y el nombre de la empresa) y son lo
+    // unico que se guarda para la pestana Estadisticas: nunca el texto del
+    // contrato ni ningun dato personal.
+    const { provincia, empresa } = analisis.extraerProvinciaYEmpresa(textoOriginal);
+
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
     const { clausulas, puntuacionGlobal, nivel } = analisis.detectarClausulas(textoAnonimizado);
+
+    db.registrarContratoAnalizado({
+      provincia,
+      empresa,
+      puntuacion: puntuacionGlobal,
+      clausulas: clausulas.map((c) => ({ id: c.id, label: c.label })),
+      userId: sesion.usuario.id,
+    });
 
     const resumen = {
       puntuacionGlobal,
@@ -763,6 +777,99 @@ async function apiAnalisisAvanzado(req, res) {
       res.end();
     }
   }
+}
+
+/* ================================================================
+   API: estadisticas internas (solo super_admin y admin)
+   ================================================================ */
+//
+// Agrega datos que ya existen en la base de datos sin exponer nunca texto de
+// contratos ni datos personales: contract_stats solo guarda provincia +
+// empresa + puntuacion + clausulas detectadas (ver apiAnalisis), y
+// tab_visits solo guarda que un usuario abrio una pestana. El rol retencion
+// no tiene acceso a este endpoint (ademas de no ver la pestana en la UI).
+
+const ROLES_ESTADISTICAS = [auth.ROLES.SUPER_ADMIN, auth.ROLES.ADMIN];
+
+function calcularClausulasMasFrecuentes() {
+  const conteo = {};
+  db.listarClausulasContratos().forEach((fila) => {
+    let lista;
+    try {
+      lista = JSON.parse(fila.clausulas_json);
+    } catch (e) {
+      return;
+    }
+    if (!Array.isArray(lista)) return;
+    lista.forEach((c) => {
+      if (!c || !c.id) return;
+      if (!conteo[c.id]) conteo[c.id] = { id: c.id, label: c.label || c.id, count: 0 };
+      conteo[c.id].count++;
+    });
+  });
+  return Object.values(conteo).sort((a, b) => b.count - a.count);
+}
+
+async function apiEstadisticas(req, res) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const clausulas = calcularClausulasMasFrecuentes();
+  const riesgoPromedio = db.riesgoPromedioContratos();
+
+  const provincias = db.estadisticasPorProvincia().map((f) => ({
+    provincia: f.provincia,
+    empresaDominante: f.empresa,
+    total: f.n,
+  }));
+
+  const visitasPorUsuario = {};
+  db.conteoVisitasPorUsuarioYTab().forEach((v) => {
+    if (!visitasPorUsuario[v.user_id]) visitasPorUsuario[v.user_id] = [];
+    visitasPorUsuario[v.user_id].push({ tab: v.tab, count: v.n });
+  });
+
+  const actividad = db.actividadUsuariosActivos().map((u) => ({
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    ultimaConexion: u.ultima_conexion,
+    pestanasTop: (visitasPorUsuario[u.id] || []).sort((a, b) => b.count - a.count).slice(0, 3),
+  }));
+
+  enviarJSON(res, 200, {
+    resumen: {
+      totalContratos: db.contarContratosAnalizados(),
+      riesgoPromedio,
+      clausulaMasFrecuente: clausulas[0] || null,
+      usuariosActivos: db.contarUsuariosActivos(),
+    },
+    provincias,
+    clausulas,
+    actividad,
+  });
+}
+
+// Se llama desde el frontend cada vez que se activa una pestana (cualquier
+// rol autenticado, no solo super_admin/admin: la idea es medir el uso real
+// del equipo completo, aunque solo super_admin/admin puedan luego consultar
+// el agregado en /api/estadisticas).
+async function apiActividadTab(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const tab = typeof cuerpo.tab === "string" ? cuerpo.tab.trim().slice(0, 60) : "";
+  if (!tab) return enviarJSON(res, 400, { error: "Falta la pestaña visitada." });
+
+  db.registrarVisitaTab({ userId: sesion.usuario.id, tab });
+  enviarJSON(res, 200, { ok: true });
 }
 
 /* ================================================================
@@ -984,6 +1091,9 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
+
+    if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
+    if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);
 
     if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
     if (req.method === "POST" && ruta === "/api/alianzas/sync") return await apiAlianzasSync(req, res);

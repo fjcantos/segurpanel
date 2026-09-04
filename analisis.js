@@ -250,6 +250,89 @@ function anonimizarTexto(texto) {
 }
 
 /* ================================================================
+   2b. Extraccion de provincia y empresa (para estadisticas internas)
+   ================================================================ */
+//
+// Se ejecuta sobre el texto ORIGINAL, antes de anonimizar, porque el codigo
+// postal y el nombre de la empresa son precisamente los patrones que
+// anonimizarTexto() sustituye por [CÓDIGO POSTAL]/[EMPRESA]. El resultado
+// (solo provincia + empresa, sin ningun dato personal) es lo unico que se
+// guarda en la base de datos para la pestana Estadisticas.
+
+// Prefijo de codigo postal (dos primeros digitos) -> provincia. Los nombres
+// coinciden exactamente con los `data-provincia` del SVG de España (mismo
+// dataset amCharts) para poder cruzar ambos sin tabla de conversion aparte.
+const CP_PROVINCIA = {
+  "01": "Araba/Álava", "02": "Albacete", "03": "Alicante", "04": "Almería",
+  "05": "Ávila", "06": "Badajoz", "07": "Baleares", "08": "Barcelona",
+  "09": "Burgos", "10": "Cáceres", "11": "Cádiz", "12": "Castellón",
+  "13": "Ciudad Real", "14": "Córdoba", "15": "A Coruña", "16": "Cuenca",
+  "17": "Girona", "18": "Granada", "19": "Guadalajara", "20": "Gipuzkoa",
+  "21": "Huelva", "22": "Huesca", "23": "Jaén", "24": "León",
+  "25": "Lleida", "26": "La Rioja", "27": "Lugo", "28": "Madrid",
+  "29": "Málaga", "30": "Murcia", "31": "Navarra", "32": "Ourense",
+  "33": "Asturias", "34": "Palencia", "35": "Las Palmas", "36": "Pontevedra",
+  "37": "Salamanca", "38": "Santa Cruz de Tenerife", "39": "Cantabria",
+  "40": "Segovia", "41": "Sevilla", "42": "Soria", "43": "Tarragona",
+  "44": "Teruel", "45": "Toledo", "46": "Valencia", "47": "Valladolid",
+  "48": "Bizkaia", "49": "Zamora", "50": "Zaragoza", "51": "Ceuta", "52": "Melilla",
+};
+
+// Claves de empresa tal como se usan en el resto de la app (COLORES_EMPRESA
+// en index.html): MPA y Prosegur son la misma compañía a efectos de color,
+// asi que ambas se normalizan a "MPA/Prosegur".
+function normalizarEmpresaDetectada(nombre) {
+  if (nombre === "MPA" || nombre === "Prosegur") return "MPA/Prosegur";
+  return nombre;
+}
+
+function extraerProvincia(textoOriginal) {
+  const conteo = {};
+  const re = /\b(\d{5})\b/g;
+  let m;
+  while ((m = re.exec(textoOriginal))) {
+    const provincia = CP_PROVINCIA[m[1].slice(0, 2)];
+    if (provincia) conteo[provincia] = (conteo[provincia] || 0) + 1;
+  }
+  let mejor = null;
+  let max = 0;
+  for (const [provincia, n] of Object.entries(conteo)) {
+    if (n > max) {
+      max = n;
+      mejor = provincia;
+    }
+  }
+  return mejor;
+}
+
+function extraerEmpresaDominante(textoOriginal) {
+  const conteo = {};
+  EMPRESAS_CONOCIDAS.forEach((nombre) => {
+    const re = new RegExp("\\b" + nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
+    const coincidencias = textoOriginal.match(re);
+    if (coincidencias) conteo[nombre] = (conteo[nombre] || 0) + coincidencias.length;
+  });
+  let mejor = null;
+  let max = 0;
+  for (const [nombre, n] of Object.entries(conteo)) {
+    if (n > max) {
+      max = n;
+      mejor = nombre;
+    }
+  }
+  return normalizarEmpresaDetectada(mejor);
+}
+
+// Punto de entrada unico usado por server.js: se llama con el texto
+// original justo despues de extraerTexto() y antes de anonimizarTexto().
+function extraerProvinciaYEmpresa(textoOriginal) {
+  return {
+    provincia: extraerProvincia(textoOriginal),
+    empresa: extraerEmpresaDominante(textoOriginal),
+  };
+}
+
+/* ================================================================
    3. Deteccion y puntuacion de clausulas de riesgo
    ================================================================ */
 
@@ -859,6 +942,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
 module.exports = {
   extraerTexto,
   anonimizarTexto,
+  extraerProvinciaYEmpresa,
   detectarClausulas,
   analizarConIA,
   generarInformePDF,
