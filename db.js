@@ -5,15 +5,21 @@
 // sin flag experimental en Node 24), asi que no hace falta compilar nada
 // nativo ni instalar un motor de base de datos aparte.
 //
-// El fichero de datos vive en data/segurpanel.db (creado si no existe) y
-// esta excluido del repositorio via .gitignore: contiene contrasenas
-// hasheadas y no debe subirse a git ni compartirse.
+// El fichero de datos vive en DATA_DIR/segurpanel.db (o ./data/segurpanel.db
+// si DATA_DIR no esta definida) y esta excluido del repositorio via
+// .gitignore: contiene contrasenas hasheadas y no debe subirse a git ni
+// compartirse.
+//
+// En Render (y otros PaaS con filesystem efimero) el directorio del proyecto
+// se recrea en cada despliegue, así que hay que montar un disco persistente
+// y apuntar DATA_DIR a su punto de montaje (p.ej. DATA_DIR=/data) para que
+// los usuarios, sesiones y solicitudes sobrevivan a los despliegues.
 
 const path = require("path");
 const fs = require("fs");
 const { DatabaseSync } = require("node:sqlite");
 
-const DIR_DATOS = path.join(__dirname, "data");
+const DIR_DATOS = process.env.DATA_DIR || path.join(__dirname, "data");
 const RUTA_DB = path.join(DIR_DATOS, "segurpanel.db");
 
 fs.mkdirSync(DIR_DATOS, { recursive: true });
@@ -211,6 +217,7 @@ function limpiarSesionesCaducadas() {
 
 module.exports = {
   db,
+  DIR_DATOS,
   buscarUsuarioPorEmail,
   buscarUsuarioPorId,
   listarUsuarios,

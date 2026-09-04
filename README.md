@@ -54,15 +54,33 @@ Archivos que lo implementan:
 | `auth.js` | Contraseñas (`bcryptjs`), sesiones JWT (`jsonwebtoken`), cookies, reglas de dominio/rol, bloqueo por intentos fallidos. |
 | `login.html` | Pantalla de login + solicitud de acceso + cambio de contraseña obligatorio. |
 | `admin.html` | Panel de gestión de usuarios (solo Super Admin). |
-| `data/` | Base de datos y secretos locales. **No se sube a git** (ver `.gitignore`). |
+| `data/` (o `DATA_DIR`) | Base de datos y secretos locales. **No se sube a git** (ver `.gitignore`). |
+
+### Persistencia de datos en Render (o cualquier PaaS de filesystem efímero)
+
+Por defecto, la base de datos SQLite, el secreto JWT y el aviso del Super
+Admin inicial se guardan en `./data`, dentro del propio directorio del
+proyecto. En Render (y plataformas similares) ese directorio **se recrea en
+cada despliegue**, así que sin más configuración perderías usuarios, sesiones
+y solicitudes cada vez que despliegues.
+
+Para evitarlo:
+
+1. Monta un **disco persistente** en Render con punto de montaje `/data`.
+2. Define la variable de entorno `DATA_DIR=/data`.
+
+Con `DATA_DIR` definida, `db.js` y `auth.js` guardan ahí `segurpanel.db`,
+`.jwt-secret` y `SUPER_ADMIN_INICIAL.txt`, y esos datos sobreviven a
+despliegues y reinicios. Sin `DATA_DIR`, todo sigue funcionando igual que
+antes usando `./data` local (uso en desarrollo).
 
 ### Primer arranque: Super Admin inicial
 
-Al arrancar el servidor por primera vez (`data/segurpanel.db` no existe
-todavía) se crea automáticamente la cuenta **Super Admin**
-(`fjose.cantos@verisure.es`) con una **clave temporal aleatoria**, que se
-imprime una sola vez por consola y se guarda en
-`data/SUPER_ADMIN_INICIAL.txt`:
+Al arrancar el servidor por primera vez (no existe todavía
+`segurpanel.db` en `data/` o en `DATA_DIR`) se crea automáticamente la cuenta
+**Super Admin** (`fjose.cantos@verisure.es`) con una **clave temporal
+aleatoria**, que se imprime una sola vez por consola y se guarda en
+`SUPER_ADMIN_INICIAL.txt` (dentro de `data/` o de `DATA_DIR`):
 
 ```
 ============================================================
@@ -74,7 +92,7 @@ imprime una sola vez por consola y se guarda en
 ```
 
 Inicia sesión con esa clave temporal; la app te obligará a cambiarla antes de
-dejarte entrar. Borra `data/SUPER_ADMIN_INICIAL.txt` después de usarla.
+dejarte entrar. Borra `SUPER_ADMIN_INICIAL.txt` después de usarla.
 
 ### Solicitud de acceso y aprobación
 

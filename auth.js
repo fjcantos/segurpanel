@@ -32,13 +32,14 @@ const ROLES = Object.freeze({
 // todas las instancias del servidor comparten el mismo secreto y las
 // sesiones sobreviven a un despliegue). Si no esta definida (uso local),
 // se genera un secreto aleatorio la primera vez y se guarda en
-// data/.jwt-secret (excluido de git) para que sobreviva a reinicios del
-// servidor sin invalidar las sesiones activas.
+// DIR_DATOS/.jwt-secret (mismo directorio persistente que la base de datos;
+// excluido de git) para que sobreviva a reinicios del servidor sin invalidar
+// las sesiones activas.
 
 function obtenerSecretoJWT() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
 
-  const rutaSecreto = path.join(__dirname, "data", ".jwt-secret");
+  const rutaSecreto = path.join(db.DIR_DATOS, ".jwt-secret");
   try {
     return fs.readFileSync(rutaSecreto, "utf8").trim();
   } catch (e) {
@@ -206,7 +207,7 @@ function cerrarSesion(jti) {
 // primera solicitud de acceso porque no existiria ningun Super Admin. Al
 // arrancar el servidor por primera vez se crea la cuenta con una clave
 // temporal aleatoria (se obliga a cambiarla en el primer login) y se
-// imprime una unica vez por consola / data/SUPER_ADMIN_INICIAL.txt.
+// imprime una unica vez por consola / DIR_DATOS/SUPER_ADMIN_INICIAL.txt.
 function asegurarSuperAdmin() {
   const existente = db.buscarUsuarioPorEmail(SUPER_ADMIN_EMAIL);
   if (existente) return null;
@@ -222,7 +223,7 @@ function asegurarSuperAdmin() {
     approvedBy: null,
   });
 
-  const rutaAviso = path.join(__dirname, "data", "SUPER_ADMIN_INICIAL.txt");
+  const rutaAviso = path.join(db.DIR_DATOS, "SUPER_ADMIN_INICIAL.txt");
   const contenido =
     `SegurPanel - credenciales iniciales del Super Admin\n` +
     `Generadas: ${new Date().toISOString()}\n\n` +
