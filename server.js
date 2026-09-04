@@ -25,6 +25,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const JSZip = require("jszip");
 const db = require("./db");
 const auth = require("./auth");
 const analisis = require("./analisis");
@@ -706,6 +707,75 @@ async function apiAnalisis(req, res) {
 }
 
 /* ================================================================
+   API: empaquetar en ZIP los informes de un lote (protegido por sesion)
+   ================================================================ */
+//
+// El frontend sube uno a uno hasta 20 archivos a /api/analisis (para poder
+// mostrar una barra de progreso por archivo) y guarda los PDF resultantes en
+// memoria del navegador; al terminar el lote envia aqui esos PDF ya
+// generados (no los documentos originales) para que el servidor los
+// comprima en un unico ZIP con JSZip, que ya es dependencia del proyecto
+// para leer .odt.
+
+const uploadInformesZip = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 20 },
+}).array("files", 20);
+
+function ejecutarMulterZip(req, res) {
+  return new Promise((resolve, reject) => {
+    uploadInformesZip(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+async function apiAnalisisZip(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  try {
+    await ejecutarMulterZip(req, res);
+  } catch (e) {
+    const mensaje =
+      e.code === "LIMIT_FILE_SIZE"
+        ? "Uno de los informes supera el tamaño máximo permitido."
+        : e.message || "No se pudo generar el ZIP.";
+    return enviarJSON(res, 400, { error: mensaje });
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return enviarJSON(res, 400, { error: "No se ha recibido ningún informe para comprimir." });
+  }
+
+  try {
+    const zip = new JSZip();
+    const nombresUsados = new Set();
+    req.files.forEach((f, i) => {
+      let nombre = path.basename(f.originalname || `informe-${i + 1}.pdf`).replace(/[/\\]/g, "_");
+      if (!/\.pdf$/i.test(nombre)) nombre += ".pdf";
+      let candidato = nombre;
+      let sufijo = 1;
+      while (nombresUsados.has(candidato.toLowerCase())) {
+        sufijo++;
+        candidato = nombre.replace(/\.pdf$/i, `-${sufijo}.pdf`);
+      }
+      nombresUsados.add(candidato.toLowerCase());
+      zip.file(candidato, f.buffer);
+    });
+
+    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+    res.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="informes-analisis-uic.zip"',
+      "Cache-Control": "no-store",
+    });
+    res.end(zipBuffer);
+  } catch (e) {
+    console.error("Error generando el ZIP de informes:", e);
+    if (!res.headersSent) enviarJSON(res, 500, { error: "No se pudo generar el ZIP de informes." });
+  }
+}
+
+/* ================================================================
    API: analisis legal avanzado con IA (protegido por sesion)
    ================================================================ */
 
@@ -1090,6 +1160,7 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
+    if (req.method === "POST" && ruta === "/api/analisis/zip") return await apiAnalisisZip(req, res);
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);

@@ -455,6 +455,38 @@
   .clause-snippet { font-size: 0.82rem; color: var(--muted); font-style: italic; }
   .empty-note { color: var(--muted); font-size: 0.88rem; padding: 14px 0; }
 
+  .batch-queue {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-top: 18px;
+  }
+  .batch-queue-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .batch-queue-title { font-weight: 700; color: var(--navy); }
+  .batch-queue-count { font-size: 0.82rem; color: var(--muted); }
+  .batch-queue-list { display: flex; flex-direction: column; gap: 12px; max-height: 360px; overflow-y: auto; }
+  .batch-row-top { display: flex; justify-content: space-between; gap: 10px; font-size: 0.85rem; margin-bottom: 5px; }
+  .batch-row-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch-row-status { flex-shrink: 0; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 2px 9px; border-radius: 999px; }
+  .batch-row-status.pendiente { background: #eef2f7; color: var(--muted); }
+  .batch-row-status.procesando { background: #e6f0fb; color: var(--navy-light); }
+  .batch-row-status.completado { background: #e4f5ea; color: var(--green-dark); }
+  .batch-row-status.error { background: #fbe7e7; color: var(--danger); }
+  .batch-progress-track { background: #eef2f7; border-radius: 999px; height: 8px; overflow: hidden; }
+  .batch-progress-fill { height: 100%; border-radius: 999px; width: 0%; background: var(--navy-light); transition: width 0.3s ease, background 0.3s ease; }
+  .batch-progress-fill.completado { width: 100%; background: var(--green); }
+  .batch-progress-fill.error { width: 100%; background: var(--danger); }
+  .batch-progress-fill.procesando {
+    width: 100%;
+    background: repeating-linear-gradient(135deg, var(--navy-light) 0 10px, #7fa8d6 10px 20px);
+    background-size: 200% 100%;
+    animation: batchStripes 1s linear infinite;
+  }
+  @keyframes batchStripes { from { background-position: 0 0; } to { background-position: 28px 0; } }
+  .batch-row-error { font-size: 0.76rem; color: var(--danger); margin-top: 3px; }
+  .batch-queue-summary { margin-top: 14px; font-size: 0.85rem; color: var(--text); border-top: 1px dashed var(--border); padding-top: 12px; }
+
   /* ---------- Normativa ---------- */
   .norm-group { margin-bottom: 22px; }
   .norm-group h3 { color: var(--navy); font-size: 1rem; margin: 0 0 10px; }
@@ -1277,13 +1309,22 @@
   <!-- ===== ANALISIS ===== -->
   <section id="analisis" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis de contratos</h2>
-    <p class="section-sub">Sube un contrato (PDF, Word, OpenDocument, texto plano o una foto/escaneo en JPG o PNG). El archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe. Al terminar se descarga un PDF con la plantilla UIC y, en paralelo, se genera automáticamente un análisis legal avanzado en la pestaña «Análisis Avanzado».</p>
+    <p class="section-sub">Sube uno o varios contratos a la vez (PDF, Word, OpenDocument, texto plano o fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno). Cada archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe. Con un solo archivo se descarga su PDF y, en paralelo, se genera además un análisis legal avanzado en la pestaña «Análisis Avanzado». Con varios archivos se procesan uno por uno y al terminar se descarga un ZIP con todos los informes.</p>
 
     <div class="dropzone" id="dropzone">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-      <div class="dropzone-title">Suelta el archivo aquí o haz clic para seleccionarlo</div>
-      <div class="dropzone-sub">Admite PDF, Word (.doc/.docx), OpenDocument (.odt), texto (.txt) y fotos/escaneos JPG o PNG · máx. 20 MB</div>
-      <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.odt,.txt,.jpg,.jpeg,.png">
+      <div class="dropzone-title">Suelta uno o varios archivos aquí o haz clic para seleccionarlos</div>
+      <div class="dropzone-sub">Admite PDF, Word (.doc/.docx), OpenDocument (.odt), texto (.txt) y fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno</div>
+      <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.odt,.txt,.jpg,.jpeg,.png" multiple>
+    </div>
+
+    <div class="batch-queue" id="batchQueue" hidden>
+      <div class="batch-queue-header">
+        <div class="batch-queue-title">Procesando lote</div>
+        <div class="batch-queue-count" id="batchQueueCount"></div>
+      </div>
+      <div class="batch-queue-list" id="batchQueueList"></div>
+      <div class="batch-queue-summary" id="batchQueueSummary"></div>
     </div>
 
     <div class="risk-summary" id="analisisRiskSummary">
@@ -1893,11 +1934,21 @@
   const fileInput = document.getElementById('fileInput');
   const resultsEl = document.getElementById('analysisResults');
   const analisisRiskSummary = document.getElementById('analisisRiskSummary');
+  const batchQueue = document.getElementById('batchQueue');
+  const batchQueueList = document.getElementById('batchQueueList');
+  const batchQueueCount = document.getElementById('batchQueueCount');
+  const batchQueueSummary = document.getElementById('batchQueueSummary');
   const EXTENSIONES_ANALISIS_ADMITIDAS = /\.(pdf|docx?|odt|txt|jpe?g|png)$/i;
+  const MAX_ARCHIVOS_LOTE = 20;
+  const MAX_TAMANO_ARCHIVO = 20 * 1024 * 1024;
   let docsAnalyzed = 0;
 
   dropzone.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+  fileInput.addEventListener('change', () => {
+    const files = Array.from(fileInput.files);
+    fileInput.value = '';
+    if (files.length) handleFiles(files);
+  });
 
   ['dragenter', 'dragover'].forEach(evt =>
     dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
@@ -1906,9 +1957,157 @@
     dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
   );
   dropzone.addEventListener('drop', e => {
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) handleFiles(files);
   });
+
+  // Punto de entrada comun para clic-en-dropzone y arrastrar-y-soltar. Con
+  // un solo archivo se conserva el flujo de siempre (analisis basico +
+  // analisis avanzado con IA en paralelo). Con varios se procesan en cola,
+  // uno detras de otro, y al final se descarga un ZIP con todos los PDF.
+  function handleFiles(files) {
+    if (files.length > MAX_ARCHIVOS_LOTE) {
+      batchQueue.hidden = true;
+      analisisRiskSummary.classList.remove('show');
+      resultsEl.innerHTML = `<div class="empty-note">Solo puedes analizar hasta ${MAX_ARCHIVOS_LOTE} archivos a la vez. Has seleccionado ${files.length}: quita alguno e inténtalo de nuevo.</div>`;
+      return;
+    }
+    if (files.length === 1) {
+      batchQueue.hidden = true;
+      handleFile(files[0]);
+      return;
+    }
+    resultsEl.innerHTML = '';
+    analisisRiskSummary.classList.remove('show');
+    procesarLote(files);
+  }
+
+  function formatoTamano(bytes) {
+    return (bytes / 1024).toFixed(1) + ' KB';
+  }
+
+  function renderColaLote(cola) {
+    batchQueueCount.textContent = `${cola.filter(f => f.estado === 'completado' || f.estado === 'error').length} de ${cola.length}`;
+    batchQueueList.innerHTML = cola.map((item, i) => `
+      <div class="batch-row">
+        <div class="batch-row-top">
+          <span class="batch-row-name" title="${escapeHtml(item.file.name)}">${escapeHtml(item.file.name)} · ${formatoTamano(item.file.size)}</span>
+          <span class="batch-row-status ${item.estado}">${ETIQUETAS_ESTADO_LOTE[item.estado]}</span>
+        </div>
+        <div class="batch-progress-track"><div class="batch-progress-fill ${item.estado}"></div></div>
+        ${item.error ? `<div class="batch-row-error">${escapeHtml(item.error)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  const ETIQUETAS_ESTADO_LOTE = {
+    pendiente: 'En cola',
+    procesando: 'Procesando',
+    completado: 'Completado',
+    error: 'Error',
+  };
+
+  async function procesarLote(files) {
+    const cola = files.map(file => {
+      let error = null;
+      if (!EXTENSIONES_ANALISIS_ADMITIDAS.test(file.name)) {
+        error = 'Formato no admitido.';
+      } else if (file.size > MAX_TAMANO_ARCHIVO) {
+        error = 'Supera el tamaño máximo de 20 MB.';
+      }
+      return { file, estado: error ? 'error' : 'pendiente', error };
+    });
+
+    batchQueue.hidden = false;
+    batchQueueSummary.textContent = '';
+    renderColaLote(cola);
+
+    const pdfsGenerados = [];
+
+    for (let i = 0; i < cola.length; i++) {
+      const item = cola[i];
+      if (item.estado === 'error') continue;
+
+      item.estado = 'procesando';
+      renderColaLote(cola);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', item.file);
+        const respuesta = await fetch('/api/analisis', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData,
+        });
+
+        if (respuesta.status === 401) {
+          window.location.href = '/';
+          return;
+        }
+
+        if (!respuesta.ok) {
+          let mensaje = 'No se ha podido analizar el archivo.';
+          try {
+            const datos = await respuesta.json();
+            if (datos && datos.error) mensaje = datos.error;
+          } catch (e) { /* respuesta no era JSON */ }
+          item.estado = 'error';
+          item.error = mensaje;
+        } else {
+          const blob = await respuesta.blob();
+          const nombrePdf = `${String(i + 1).padStart(2, '0')}-${item.file.name.replace(/\.[^.]+$/, '')}.pdf`;
+          pdfsGenerados.push({ nombre: nombrePdf, blob });
+          item.estado = 'completado';
+          docsAnalyzed++;
+          document.getElementById('statDocsAnalyzed').textContent = docsAnalyzed;
+        }
+      } catch (e) {
+        item.estado = 'error';
+        item.error = 'No se ha podido conectar con el servidor.';
+      }
+
+      renderColaLote(cola);
+    }
+
+    const completados = cola.filter(f => f.estado === 'completado').length;
+    const errores = cola.filter(f => f.estado === 'error').length;
+
+    if (pdfsGenerados.length === 0) {
+      batchQueueSummary.textContent = `No se ha podido generar ningún informe (${errores} de ${cola.length} con error).`;
+      return;
+    }
+
+    batchQueueSummary.textContent = `Generando ZIP con ${completados} informe(s)${errores ? ` · ${errores} archivo(s) con error` : ''}…`;
+
+    try {
+      const zipFormData = new FormData();
+      pdfsGenerados.forEach(p => zipFormData.append('files', p.blob, p.nombre));
+      const respuestaZip = await fetch('/api/analisis/zip', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: zipFormData,
+      });
+
+      if (!respuestaZip.ok) {
+        batchQueueSummary.textContent = `${completados} informe(s) generado(s), pero no se ha podido crear el ZIP.`;
+        return;
+      }
+
+      const zipBlob = await respuestaZip.blob();
+      const url = URL.createObjectURL(zipBlob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'informes-analisis-uic.zip';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      batchQueueSummary.textContent = `ZIP descargado con ${completados} informe(s)${errores ? ` · ${errores} archivo(s) con error` : ''}.`;
+    } catch (e) {
+      batchQueueSummary.textContent = `${completados} informe(s) generado(s), pero no se ha podido conectar con el servidor para crear el ZIP.`;
+    }
+  }
 
   // Decodifica la cabecera X-Analysis-Summary (JSON en base64, codificado
   // como UTF-8 en el servidor) respetando acentos y enes.
