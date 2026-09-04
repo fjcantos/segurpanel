@@ -8,3 +8,7 @@ data/
 # Logs
 *.log
 npm-debug.log*
+
+# Cache local del scraper de alianzas (Raspberry Pi)
+alianzas_cache.json
+__pycache__/

@@ -757,6 +757,106 @@ async function apiAnalisisAvanzado(req, res) {
 }
 
 /* ================================================================
+   API: alianzas entre empresas de alarmas y otros sectores
+   ================================================================ */
+//
+// Flujo: un script externo (scraper_alianzas.py, pensado para ejecutarse a
+// diario en una Raspberry Pi) detecta acuerdos en Google News y webs
+// oficiales y los envia a POST /api/alianzas/sync protegido por un secreto
+// compartido (SCRAPER_TOKEN), no por sesion de usuario, porque quien llama
+// no es un navegador con cookie. Cada alianza nueva entra como 'pending':
+// solo el Super Admin la ve (con botones Publicar/Descartar) hasta que la
+// aprueba explicitamente; el resto de roles solo ve las que ya estan
+// 'published'. Publicar/Descartar si exige sesion de Super Admin.
+
+const SECTORES_ALIANZA = new Set([
+  "Móviles",
+  "Grandes superficies",
+  "Seguros",
+  "Inmobiliarias",
+  "Suministros (luz, gas, agua)",
+]);
+const MAX_ALIANZAS_POR_SYNC = 200;
+
+async function apiAlianzasGet(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  const respuesta = {
+    publicadas: db.listarAlianzasPorEstado("published"),
+    actualizado: db.fechaUltimaAlianza(),
+  };
+  if (sesion.usuario.role === auth.ROLES.SUPER_ADMIN) {
+    respuesta.pendientes = db.listarAlianzasPorEstado("pending");
+  }
+  enviarJSON(res, 200, respuesta);
+}
+
+async function apiAlianzasResolver(req, res, id, status) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const alianza = db.buscarAlianzaPorId(id);
+  if (!alianza) return enviarJSON(res, 404, { error: "Alianza no encontrada." });
+  if (alianza.status !== "pending") {
+    return enviarJSON(res, 409, { error: "Esta alianza ya ha sido revisada." });
+  }
+
+  db.resolverAlianza(id, status, sesion.usuario.id);
+  enviarJSON(res, 200, { ok: true });
+}
+
+function alianzaValida(a) {
+  return (
+    a &&
+    typeof a.externalId === "string" &&
+    a.externalId.trim() &&
+    typeof a.empresaAlarma === "string" &&
+    a.empresaAlarma.trim() &&
+    typeof a.sector === "string" &&
+    SECTORES_ALIANZA.has(a.sector) &&
+    typeof a.socio === "string" &&
+    a.socio.trim()
+  );
+}
+
+async function apiAlianzasSync(req, res) {
+  const tokenEsperado = process.env.SCRAPER_TOKEN;
+  if (!tokenEsperado) {
+    return enviarJSON(res, 503, {
+      error: "El servidor no tiene configurada la variable de entorno SCRAPER_TOKEN.",
+    });
+  }
+  const tokenRecibido = req.headers["x-scraper-token"];
+  if (tokenRecibido !== tokenEsperado) {
+    return enviarJSON(res, 401, { error: "Token de scraper inválido." });
+  }
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const lista = Array.isArray(cuerpo.alianzas) ? cuerpo.alianzas : [];
+  if (lista.length === 0) {
+    return enviarJSON(res, 200, { insertadas: 0, mensaje: "Sin alianzas nuevas que sincronizar." });
+  }
+  if (lista.length > MAX_ALIANZAS_POR_SYNC) {
+    return enviarJSON(res, 400, { error: `Demasiadas alianzas en una sola sincronización (máximo ${MAX_ALIANZAS_POR_SYNC}).` });
+  }
+
+  const validas = lista.filter(alianzaValida);
+  if (validas.length === 0) {
+    return enviarJSON(res, 400, { error: "Ninguna alianza del envío tiene un formato válido." });
+  }
+
+  const insertadas = db.insertarAlianzasPendientes(validas);
+  enviarJSON(res, 200, { insertadas, recibidas: lista.length, validas: validas.length });
+}
+
+/* ================================================================
    Estaticos de la PWA
    ================================================================ */
 
@@ -830,6 +930,8 @@ const idRechazarSolicitud = RUTA_CON_ID("/api/admin/requests", "/reject");
 const idRolUsuario = RUTA_CON_ID("/api/admin/users", "/role");
 const idEstadoUsuario = RUTA_CON_ID("/api/admin/users", "/status");
 const idResetPasswordUsuario = RUTA_CON_ID("/api/admin/users", "/reset-password");
+const idPublicarAlianza = RUTA_CON_ID("/api/alianzas", "/publicar");
+const idDescartarAlianza = RUTA_CON_ID("/api/alianzas", "/descartar");
 
 async function manejarPeticion(req, res) {
   // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
@@ -874,6 +976,15 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
 
+    if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
+    if (req.method === "POST" && ruta === "/api/alianzas/sync") return await apiAlianzasSync(req, res);
+    if (req.method === "POST") {
+      let id = idPublicarAlianza(ruta);
+      if (id !== null) return await apiAlianzasResolver(req, res, id, "published");
+      id = idDescartarAlianza(ruta);
+      if (id !== null) return await apiAlianzasResolver(req, res, id, "discarded");
+    }
+
     if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -914,6 +1025,12 @@ servidor.listen(PORT, () => {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn(
       "AVISO: ANTHROPIC_API_KEY no está configurada. El IA Assistant no podrá responder hasta que la definas (setx ANTHROPIC_API_KEY \"sk-ant-...\") y reinicies este servidor."
+    );
+  }
+
+  if (!process.env.SCRAPER_TOKEN) {
+    console.warn(
+      "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync (usado por scraper_alianzas.py en la Raspberry Pi) rechazará todas las peticiones hasta que la definas."
     );
   }
 

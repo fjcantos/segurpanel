@@ -197,3 +197,70 @@ y abre en el móvil la URL `https://...` que te devuelva.
 
 Al modificar `index.html` o los iconos, sube `VERSION` en `sw.js` para que los
 navegadores descarten la caché antigua.
+
+## Alianzas: detección de acuerdos entre empresas de alarmas y otros sectores
+
+La pestaña **"Alianzas"** muestra acuerdos y colaboraciones detectados entre
+las empresas de alarmas comparadas en la app y compañías de otros sectores
+(móviles, grandes superficies, seguros, inmobiliarias, suministros de luz/gas/
+agua). Igual que en el Comparador y en Ofertas, la empresa de alarmas solo se
+identifica por su **círculo de color corporativo**; el nombre solo aparece en
+la leyenda privada, visible únicamente para el rol **Super Admin**.
+
+### Flujo de moderación (pendiente → publicado)
+
+1. `scraper_alianzas.py` (ver más abajo) detecta acuerdos y los envía a
+   `POST /api/alianzas/sync`.
+2. Cada alianza nueva entra en SQLite con estado `pending`. Solo el
+   **Super Admin** la ve, en la sección "Pendientes de revisar" de la pestaña
+   Alianzas, junto con un **punto rojo** en la propia pestaña.
+3. El Super Admin decide, alianza por alianza:
+   - **Publicar**: pasa a `published` y todos los roles la ven.
+   - **Descartar**: pasa a `discarded` y desaparece definitivamente (no
+     vuelve a proponerse aunque el scraper la detecte de nuevo).
+4. El resto de roles (Admin, Retención) solo ven las alianzas ya publicadas;
+   nunca ven el contenido pendiente ni el punto de notificación.
+
+### Scraper en la Raspberry Pi (`scraper_alianzas.py`)
+
+Script en Python (solo librería estándar, sin `pip install`) pensado para
+ejecutarse a diario en una Raspberry Pi u otro equipo con cron:
+
+- Busca en **Google News** (RSS público) menciones conjuntas de cada empresa
+  de alarmas con compañías de los sectores vigilados (Movistar, Vodafone,
+  Orange, MásMóvil · Carrefour, Leroy Merlin, El Corte Inglés, MediaMarkt ·
+  Mapfre, AXA, Allianz, Generali · idealista, Fotocasa, pisos.com · Endesa,
+  Iberdrola, Naturgy, Repsol).
+- Opcionalmente también revisa **webs oficiales / salas de prensa** que
+  configures en el diccionario `SALAS_PRENSA` dentro del script (vacío por
+  defecto: añade ahí las URLs reales que quieras vigilar).
+- Guarda en un fichero de cache local (`alianzas_cache.json`, junto al
+  script) lo que ya detectó en ejecuciones anteriores, para enviar solo lo
+  que cambia de un día a otro.
+- Si hay alianzas nuevas, las envía a SegurPanel vía `POST
+  /api/alianzas/sync`, autenticado con un secreto compartido (no con sesión
+  de usuario, porque quien llama no es un navegador).
+
+**Configuración en el servidor (SegurPanel):**
+
+```
+setx SCRAPER_TOKEN "un-secreto-largo-y-aleatorio"
+```
+
+**Configuración en la Raspberry Pi** (variables de entorno para el cron, con
+el mismo valor de `SCRAPER_TOKEN`):
+
+```
+SEGURPANEL_SYNC_URL=https://tu-app.onrender.com/api/alianzas/sync
+SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
+```
+
+**Cron a las 07:00 todos los días** (`crontab -e`):
+
+```
+0 7 * * * SEGURPANEL_SYNC_URL="https://tu-app.onrender.com/api/alianzas/sync" SEGURPANEL_SCRAPER_TOKEN="un-secreto-largo-y-aleatorio" /usr/bin/python3 /home/pi/segurpanel/scraper_alianzas.py >> /home/pi/segurpanel/scraper_alianzas.log 2>&1
+```
+
+Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/alianzas/sync`
+responde `503` y rechaza cualquier envío (evita dejar el endpoint abierto por
+descuido).

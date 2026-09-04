@@ -66,8 +66,27 @@ db.exec(`
     ip          TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS alianzas (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    external_id        TEXT NOT NULL UNIQUE,
+    empresa_alarma     TEXT NOT NULL,
+    sector             TEXT NOT NULL,
+    socio              TEXT NOT NULL,
+    tipo_acuerdo       TEXT,
+    titular            TEXT,
+    fuente             TEXT,
+    url                TEXT,
+    fecha_publicacion  TEXT,
+    fecha_deteccion    TEXT NOT NULL,
+    status             TEXT NOT NULL CHECK (status IN ('pending', 'published', 'discarded')) DEFAULT 'pending',
+    created_at         TEXT NOT NULL,
+    reviewed_at        TEXT,
+    reviewed_by        INTEGER REFERENCES users(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
+  CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
 `);
 
 const ahoraISO = () => new Date().toISOString();
@@ -215,6 +234,80 @@ function limpiarSesionesCaducadas() {
   db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(ahoraISO());
 }
 
+/* ---------- Alianzas (acuerdos entre empresas de alarmas y otros sectores) ---------- */
+//
+// El scraper de la Raspberry Pi (scraper_alianzas.py) envia periodicamente
+// las alianzas que detecta a POST /api/alianzas/sync. Cada una entra como
+// 'pending': solo el Super Admin las ve hasta que las publica (visibles para
+// todos) o las descarta (ocultas para siempre). `external_id` es un hash
+// estable generado por el scraper a partir de la URL de la noticia, para no
+// duplicar la misma alianza en sucesivas ejecuciones diarias.
+
+function insertarAlianzasPendientes(lista) {
+  const ahora = ahoraISO();
+  const insertar = db.prepare(
+    `INSERT OR IGNORE INTO alianzas
+      (external_id, empresa_alarma, sector, socio, tipo_acuerdo, titular, fuente, url, fecha_publicacion, fecha_deteccion, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
+  );
+  let insertadas = 0;
+  for (const a of lista) {
+    const info = insertar.run(
+      a.externalId,
+      a.empresaAlarma,
+      a.sector,
+      a.socio,
+      a.tipoAcuerdo || null,
+      a.titular || null,
+      a.fuente || null,
+      a.url || null,
+      a.fechaPublicacion || null,
+      a.fechaDeteccion || ahora,
+      ahora
+    );
+    if (info.changes > 0) insertadas++;
+  }
+  return insertadas;
+}
+
+function alianzaPublica(a) {
+  return {
+    id: a.id,
+    empresaAlarma: a.empresa_alarma,
+    sector: a.sector,
+    socio: a.socio,
+    tipoAcuerdo: a.tipo_acuerdo,
+    titular: a.titular,
+    fuente: a.fuente,
+    url: a.url,
+    fechaPublicacion: a.fecha_publicacion,
+    fechaDeteccion: a.fecha_deteccion,
+    status: a.status,
+  };
+}
+
+function listarAlianzasPorEstado(status) {
+  return db
+    .prepare("SELECT * FROM alianzas WHERE status = ? ORDER BY fecha_deteccion DESC, id DESC")
+    .all(status)
+    .map(alianzaPublica);
+}
+
+function buscarAlianzaPorId(id) {
+  return db.prepare("SELECT * FROM alianzas WHERE id = ?").get(id);
+}
+
+function resolverAlianza(id, status, reviewedBy) {
+  db.prepare(
+    "UPDATE alianzas SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?"
+  ).run(status, ahoraISO(), reviewedBy, id);
+}
+
+function fechaUltimaAlianza() {
+  const fila = db.prepare("SELECT MAX(created_at) AS ultima FROM alianzas").get();
+  return (fila && fila.ultima) || null;
+}
+
 module.exports = {
   db,
   DIR_DATOS,
@@ -237,4 +330,9 @@ module.exports = {
   revocarSesion,
   revocarSesionesDeUsuario,
   limpiarSesionesCaducadas,
+  insertarAlianzasPendientes,
+  listarAlianzasPorEstado,
+  buscarAlianzaPorId,
+  resolverAlianza,
+  fechaUltimaAlianza,
 };

@@ -106,6 +106,7 @@
     padding: 0 12px;
   }
   .tab-btn {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -121,6 +122,16 @@
     transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
   }
   .tab-btn svg { opacity: 0.85; }
+  .notif-dot {
+    position: absolute;
+    top: 8px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #e11d2e;
+    box-shadow: 0 0 0 2px var(--navy-dark);
+  }
   .tab-btn:hover {
     color: var(--white);
     background: rgba(255,255,255,0.06);
@@ -249,27 +260,101 @@
     gap: 16px;
   }
   .offer-card {
+    position: relative;
+    overflow: hidden;
     background: var(--card);
     border: 1px solid var(--border);
-    border-top: 4px solid var(--green);
     border-radius: 12px;
-    padding: 18px;
+    padding: 22px 18px 18px;
+    box-shadow: 0 1px 3px rgba(11,37,69,0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
-  .offer-company { font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .offer-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(11,37,69,0.1); }
+  .offer-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 6px;
+    background: var(--accent-color, var(--green));
+  }
+  .offer-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .offer-swatch { width: 32px; height: 32px; flex-shrink: 0; }
   .offer-badge {
     display: inline-block;
     background: rgba(31,157,85,0.12);
     color: var(--green-dark);
     font-size: 0.72rem;
     font-weight: 700;
-    padding: 3px 9px;
+    padding: 4px 10px;
     border-radius: 999px;
-    margin-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
   .offer-desc { font-size: 0.88rem; color: var(--text); line-height: 1.4; }
   .offer-meta { margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+
+  /* ---------- Alianzas ---------- */
+  h3.section-subtitle {
+    margin: 26px 0 12px;
+    font-size: 1.02rem;
+    color: var(--navy);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h3.section-subtitle:first-of-type { margin-top: 0; }
+  .pending-count {
+    background: #e11d2e;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .alliance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .alliance-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .alliance-card.alliance-pending {
+    border: 1px dashed #c9a227;
+    background: #fffdf6;
+  }
+  .alliance-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .alliance-sector-badge {
+    background: rgba(11,37,69,0.08);
+    color: var(--navy);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .alliance-partner { font-size: 1.05rem; font-weight: 700; color: var(--navy); }
+  .alliance-type { font-size: 0.82rem; color: var(--green-dark); font-weight: 600; margin-top: 2px; }
+  .alliance-title { font-size: 0.85rem; color: var(--text); margin-top: 8px; line-height: 1.4; }
+  .alliance-meta { margin-top: 10px; font-size: 0.76rem; color: var(--muted); }
+  .alliance-meta a { color: var(--green-dark); }
+  .alliance-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .btn-publish, .btn-discard {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-publish { background: var(--green); color: #fff; }
+  .btn-publish:hover { background: var(--green-dark); }
+  .btn-discard { background: #f1f3f5; color: var(--muted); }
+  .btn-discard:hover { background: #e4e7eb; color: #333; }
 
   /* ---------- Equipos ---------- */
   .brand-heading {
@@ -705,6 +790,11 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3h5.5L17 4.5V10L9 18l-6-6L11 3z"/><circle cx="13.2" cy="6.8" r="1.1"/></svg>
     Ofertas
   </button>
+  <button class="tab-btn" data-tab="alianzas">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="3"/><circle cx="14" cy="6" r="3"/><circle cx="10" cy="15" r="3"/><path d="M8 8l1.2 4.5M12 8l-1.2 4.5"/></svg>
+    Alianzas
+    <span class="notif-dot" id="alianzasNotifDot" hidden></span>
+  </button>
   <button class="tab-btn" data-tab="equipos">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M8 5V2M12 5V2M8 18v-3M12 18v-3M5 8H2M5 12H2M18 8h-3M18 12h-3"/></svg>
     Equipos
@@ -874,61 +964,99 @@
     <h2 class="section-title">Últimas ofertas</h2>
     <p class="section-sub">Promociones de referencia. <span id="offersUpdated"></span></p>
 
+    <div class="compare-legend" id="offersLegend" hidden></div>
+
     <div class="offer-grid">
-      <div class="offer-card">
-        <div class="offer-company">Verisure</div>
-        <span class="offer-badge">Instalación gratis</span>
+      <div class="offer-card" style="--accent-color:#CC0000">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Verisure" style="background:#CC0000"></span>
+          <span class="offer-badge">Instalación gratis</span>
+        </div>
         <div class="offer-desc">Instalación bonificada y 2 meses de cuota gratis al contratar online.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Sector Alarm</div>
-        <span class="offer-badge">2 meses gratis</span>
+      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #000000 50%, #CC0000 50%)">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Sector Alarm" style="background:linear-gradient(135deg, #000000 50%, #CC0000 50%)"></span>
+          <span class="offer-badge">2 meses gratis</span>
+        </div>
         <div class="offer-desc">Cuota gratuita durante los 2 primeros meses al contratar online.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Sicor</div>
-        <span class="offer-badge">Instalación desde 0€</span>
+      <div class="offer-card" style="--accent-color:#1B5E20">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Sicor" style="background:#1B5E20"></span>
+          <span class="offer-badge">Instalación desde 0€</span>
+        </div>
         <div class="offer-desc">Instalación bonificada en contratos de 24 meses gestionados por instalador local.</div>
         <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Segurma</div>
-        <span class="offer-badge">1 mes gratis</span>
+      <div class="offer-card" style="--accent-color:#F57C00">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Segurma" style="background:#F57C00"></span>
+          <span class="offer-badge">1 mes gratis</span>
+        </div>
         <div class="offer-desc">Primera mensualidad gratuita al dar de alta el sistema con central propia.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">ADT</div>
-        <span class="offer-badge">-30% primer año</span>
+      <div class="offer-card" style="--accent-color:#0D47A1">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="ADT" style="background:#0D47A1"></span>
+          <span class="offer-badge">-30% primer año</span>
+        </div>
         <div class="offer-desc">30% de descuento en la cuota durante el primer año de contrato.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Seguridad 3D</div>
-        <span class="offer-badge">Sin permanencia</span>
+      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #FDD835 50%, #00796B 50%)">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Seguridad 3D" style="background:linear-gradient(135deg, #FDD835 50%, #00796B 50%)"></span>
+          <span class="offer-badge">Sin permanencia</span>
+        </div>
         <div class="offer-desc">Contratación sin permanencia y cancelación gratuita en cualquier momento.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Grupo Control</div>
-        <span class="offer-badge">Sin permanencia</span>
+      <div class="offer-card" style="--accent-color:#7B1C2B">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Grupo Control" style="background:#7B1C2B"></span>
+          <span class="offer-badge">Sin permanencia</span>
+        </div>
         <div class="offer-desc">Primer año sin permanencia y cancelación gratuita en cualquier momento.</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">Trablisa</div>
-        <span class="offer-badge">Kit incluido</span>
+      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #0D1B3E 50%, #F57C00 50%)">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="Trablisa" style="background:linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)"></span>
+          <span class="offer-badge">Kit incluido</span>
+        </div>
         <div class="offer-desc">Kit de sensores adicional sin coste al firmar contrato de 24 meses.</div>
         <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
       </div>
-      <div class="offer-card">
-        <div class="offer-company">MPA/Prosegur</div>
-        <span class="offer-badge">Desde 19,90€/mes</span>
+      <div class="offer-card" style="--accent-color:#FDD835">
+        <div class="offer-top">
+          <span class="company-swatch offer-swatch" data-company="MPA/Prosegur" style="background:#FDD835"></span>
+          <span class="offer-badge">Desde 19,90€/mes</span>
+        </div>
         <div class="offer-desc">Cuota bonificada desde 19,90€/mes durante los primeros 6 meses (después ~29-39€/mes según equipo).</div>
         <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
       </div>
+    </div>
+  </section>
+
+  <!-- ===== ALIANZAS ===== -->
+  <section id="alianzas" class="tab-content">
+    <h2 class="section-title">Alianzas y colaboraciones</h2>
+    <p class="section-sub">Acuerdos detectados entre empresas de alarmas y otros sectores (móviles, grandes superficies, seguros, inmobiliarias, suministros). <span id="alianzasUpdated"></span></p>
+
+    <div class="compare-legend" id="alianzasLegend" hidden></div>
+
+    <div id="alianzasPendientesWrap" hidden>
+      <h3 class="section-subtitle">Pendientes de revisar <span class="pending-count" id="alianzasPendientesCount">0</span></h3>
+      <div class="alliance-grid" id="alianzasPendientesGrid"></div>
+    </div>
+
+    <h3 class="section-subtitle">Acuerdos publicados</h3>
+    <div class="alliance-grid" id="alianzasPublicadasGrid">
+      <div class="empty-note">Cargando…</div>
     </div>
   </section>
 
@@ -1176,21 +1304,45 @@
     return { ok: respuesta.ok, status: respuesta.status, datos };
   }
 
-  // Leyenda privada del comparador: solo super_admin ve la correspondencia
-  // color -> empresa. El resto de roles solo ven el circulo de color, tanto
-  // en la tabla como en cualquier otra parte de la pantalla.
-  function pintarLeyendaComparador() {
-    const leyenda = document.getElementById('compareLegend');
-    const swatches = document.querySelectorAll('#compareTable .company-swatch');
-    if (!leyenda || !swatches.length) return;
+  // Colores corporativos por empresa de alarmas. Fuente unica usada para
+  // pintar los circulos de color (Comparador, Ofertas, Alianzas) y para
+  // construir las leyendas privadas de super_admin. El nombre de la empresa
+  // nunca se muestra en la interfaz salvo dentro de estas leyendas.
+  const COLORES_EMPRESA = {
+    'Verisure': '#CC0000',
+    'Sector Alarm': 'linear-gradient(135deg, #000000 50%, #CC0000 50%)',
+    'Sicor': '#1B5E20',
+    'Segurma': '#F57C00',
+    'ADT': '#0D47A1',
+    'Seguridad 3D': 'linear-gradient(135deg, #FDD835 50%, #00796B 50%)',
+    'Grupo Control': '#7B1C2B',
+    'Trablisa': 'linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)',
+    'MPA/Prosegur': '#FDD835',
+  };
 
-    const items = Array.from(swatches).map(swatch => {
-      const nombre = swatch.dataset.company || '';
-      return `<span class="legend-item"><span class="company-swatch" style="background:${swatch.style.background}"></span>${escapeHtml(nombre)}</span>`;
-    }).join('');
+  function swatchHtml(empresa, extraClass) {
+    const color = COLORES_EMPRESA[empresa] || '#9aa5b1';
+    return `<span class="company-swatch${extraClass ? ' ' + extraClass : ''}" style="background:${color}"></span>`;
+  }
 
-    leyenda.innerHTML = `<div class="compare-legend-title">Leyenda (solo visible para super_admin)</div><div class="compare-legend-items">${items}</div>`;
-    leyenda.hidden = false;
+  function construirLeyendaHTML() {
+    const items = Object.entries(COLORES_EMPRESA).map(([nombre, color]) =>
+      `<span class="legend-item"><span class="company-swatch" style="background:${color}"></span>${escapeHtml(nombre)}</span>`
+    ).join('');
+    return `<div class="compare-legend-title">Leyenda (solo visible para super_admin)</div><div class="compare-legend-items">${items}</div>`;
+  }
+
+  // Leyendas privadas (Comparador, Ofertas, Alianzas): solo super_admin ve la
+  // correspondencia color -> empresa. El resto de roles solo ven el circulo
+  // de color, tanto en las tablas/tarjetas como en cualquier otra parte de
+  // la pantalla.
+  function mostrarLeyendasSuperAdmin() {
+    ['compareLegend', 'offersLegend', 'alianzasLegend'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = construirLeyendaHTML();
+      el.hidden = false;
+    });
   }
 
   function aplicarModoSoloLectura() {
@@ -1230,7 +1382,7 @@
 
     if (usuario.role === 'super_admin') {
       document.getElementById('adminLink').hidden = false;
-      pintarLeyendaComparador();
+      mostrarLeyendasSuperAdmin();
     }
 
     document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -1241,6 +1393,8 @@
     if (usuario.role === 'retencion') {
       aplicarModoSoloLectura();
     }
+
+    cargarAlianzas();
   }
 
   const sesionListaPromesa = iniciarSesionUI();
@@ -1254,10 +1408,105 @@
     tabContents.forEach(s => s.classList.toggle('active', s.id === name));
   }
 
-  tabButtons.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+  tabButtons.forEach(btn => btn.addEventListener('click', () => {
+    activateTab(btn.dataset.tab);
+    if (btn.dataset.tab === 'alianzas') cargarAlianzas();
+  }));
   document.querySelectorAll('.quicklink').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.goto));
   });
+
+  /* ---------- Alianzas: carga, revision (super_admin) y notificacion ---------- */
+
+  function actualizarNotifDot(count) {
+    const dot = document.getElementById('alianzasNotifDot');
+    if (dot) dot.hidden = !(count > 0);
+  }
+
+  function tarjetaAlianza(a, pendiente) {
+    const fuenteTexto = a.fuente ? escapeHtml(a.fuente) : 'Fuente desconocida';
+    const fuenteHtml = a.url
+      ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer">${fuenteTexto}</a>`
+      : fuenteTexto;
+    const acciones = pendiente
+      ? `<div class="alliance-actions">
+          <button class="btn-publish" data-id="${a.id}" type="button">Publicar</button>
+          <button class="btn-discard" data-id="${a.id}" type="button">Descartar</button>
+        </div>`
+      : '';
+    return `
+      <div class="alliance-card${pendiente ? ' alliance-pending' : ''}">
+        <div class="alliance-header">
+          ${swatchHtml(a.empresaAlarma)}
+          <span class="alliance-sector-badge">${escapeHtml(a.sector || '')}</span>
+        </div>
+        <div class="alliance-partner">${escapeHtml(a.socio || '')}</div>
+        <div class="alliance-type">${escapeHtml(a.tipoAcuerdo || 'Acuerdo detectado')}</div>
+        ${a.titular ? `<div class="alliance-title">${escapeHtml(a.titular)}</div>` : ''}
+        <div class="alliance-meta">Detectado: ${escapeHtml(a.fechaDeteccion || '—')} · Fuente: ${fuenteHtml}</div>
+        ${acciones}
+      </div>`;
+  }
+
+  async function resolverAlianza(id, accion) {
+    const { ok, datos } = await llamarAPI(`/api/alianzas/${id}/${accion}`, { method: 'POST' });
+    if (!ok) {
+      alert((datos && datos.error) || 'No se pudo completar la acción.');
+      return;
+    }
+    cargarAlianzas();
+  }
+
+  async function cargarAlianzas() {
+    const gridPublicadas = document.getElementById('alianzasPublicadasGrid');
+    if (!gridPublicadas) return; // sesion aun no resuelta o markup no presente
+
+    let ok, datos;
+    try {
+      ({ ok, datos } = await llamarAPI('/api/alianzas'));
+    } catch (e) {
+      gridPublicadas.innerHTML = '<div class="empty-note">No se ha podido conectar con el servidor.</div>';
+      return;
+    }
+    if (!ok) {
+      gridPublicadas.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudieron cargar las alianzas.')}</div>`;
+      return;
+    }
+
+    const publicadas = datos.publicadas || [];
+    gridPublicadas.innerHTML = publicadas.length
+      ? publicadas.map(a => tarjetaAlianza(a, false)).join('')
+      : '<div class="empty-note">Todavía no hay acuerdos publicados.</div>';
+
+    const spanActualizado = document.getElementById('alianzasUpdated');
+    if (spanActualizado) {
+      spanActualizado.textContent = datos.actualizado
+        ? 'Última actualización: ' + new Date(datos.actualizado).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+    }
+
+    if (rolActual === 'super_admin') {
+      const pendWrap = document.getElementById('alianzasPendientesWrap');
+      const pendGrid = document.getElementById('alianzasPendientesGrid');
+      const pendCount = document.getElementById('alianzasPendientesCount');
+      const pendientes = datos.pendientes || [];
+
+      pendWrap.hidden = false;
+      pendCount.textContent = pendientes.length;
+      pendGrid.innerHTML = pendientes.length
+        ? pendientes.map(a => tarjetaAlianza(a, true)).join('')
+        : '<div class="empty-note">No hay contenido nuevo pendiente de revisar.</div>';
+
+      pendGrid.querySelectorAll('.btn-publish').forEach(btn =>
+        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'publicar'))
+      );
+      pendGrid.querySelectorAll('.btn-discard').forEach(btn =>
+        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'descartar'))
+      );
+
+      actualizarNotifDot(pendientes.length);
+    }
+  }
 
   const todayStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   document.getElementById('statToday').textContent = todayStr;
