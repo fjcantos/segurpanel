@@ -385,6 +385,29 @@
   .spec-list li:last-child { border-bottom: none; }
   .spec-list span.k { color: var(--muted); }
 
+  .equip-section-title { font-size: 1rem; font-weight: 700; color: var(--navy); margin: 30px 0 14px; }
+  .equip-section-title:first-of-type { margin-top: 0; }
+  .equip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .company-equip-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .company-equip-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .company-equip-marca { font-weight: 700; color: var(--navy); font-size: 0.92rem; }
+  .company-equip-confianza { font-size: 0.74rem; color: var(--muted); font-style: italic; margin-top: 2px; }
+  .equip-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .equip-list li { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+  .equip-type { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+  .equip-desc { color: var(--text); }
+  .equip-conn { font-size: 0.78rem; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; }
+
   /* ---------- Analisis ---------- */
   .dropzone {
     border: 2px dashed #b7c4d6;
@@ -1063,7 +1086,14 @@
   <!-- ===== EQUIPOS ===== -->
   <section id="equipos" class="tab-content">
     <h2 class="section-title">Ficha de equipos</h2>
-    <p class="section-sub">Resumen técnico orientativo. Consulta siempre la ficha técnica oficial del fabricante para datos certificados.</p>
+    <p class="section-sub">Resumen técnico orientativo a partir de información pública (webs de fabricantes, distribuidores e instaladores). Consulta siempre la ficha técnica oficial y tu contrato para datos certificados.</p>
+
+    <div class="compare-legend" id="equiposLegend" hidden></div>
+
+    <h3 class="equip-section-title">Equipos instalados por compañía</h3>
+    <div class="equip-grid" id="equiposEmpresaGrid"></div>
+
+    <h3 class="equip-section-title">Fichas técnicas de fabricantes</h3>
 
     <div class="brand-heading"><span class="swatch"></span>Ajax</div>
     <div class="device-grid">
@@ -1120,6 +1150,64 @@
           <li><span class="k">Tipo</span><span>Apertura puerta/ventana</span></li>
           <li><span class="k">Batería</span><span>~5 años</span></li>
           <li><span class="k">Protección</span><span>IP30 (interior)</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brand-heading"><span class="swatch"></span>Risco</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">LightSYS+ Central</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>Híbrida (cableada + inalámbrica)</span></li>
+          <li><span class="k">Zonas</span><span>Hasta 512</span></li>
+          <li><span class="k">Certificación</span><span>Grado 2 a Grado 3 (EN 50131)</span></li>
+          <li><span class="k">Conectividad</span><span>Módulo IP/WiFi integrado</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brand-heading"><span class="swatch"></span>Paradox</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">SP7000 Central</div>
+        <ul class="spec-list">
+          <li><span class="k">Zonas</span><span>Hasta 32 (16 en placa + expansión)</span></li>
+          <li><span class="k">Particiones</span><span>2</span></li>
+          <li><span class="k">Códigos usuario</span><span>32</span></li>
+          <li><span class="k">Salidas PGM</span><span>16</span></li>
+        </ul>
+      </div>
+      <div class="device-card">
+        <div class="device-name">NV5</div>
+        <ul class="spec-list">
+          <li><span class="k">Tipo</span><span>Detector de movimiento cableado</span></li>
+          <li><span class="k">Compatibilidad</span><span>Gama de centrales SP</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brand-heading"><span class="swatch"></span>DSC</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">PowerSeries Neo HS2016</div>
+        <ul class="spec-list">
+          <li><span class="k">Zonas</span><span>6 en placa, ampliable a 16</span></li>
+          <li><span class="k">Particiones</span><span>2</span></li>
+          <li><span class="k">Códigos usuario</span><span>48</span></li>
+          <li><span class="k">Teclados</span><span>Hasta 8</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brand-heading"><span class="swatch"></span>Honeywell</div>
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-name">Galaxy Flex V3</div>
+        <ul class="spec-list">
+          <li><span class="k">Zonas</span><span>12, ampliable a 20/50/100</span></li>
+          <li><span class="k">Certificación</span><span>Grado 2 o 3 seleccionable (EN 50131)</span></li>
+          <li><span class="k">Conectividad</span><span>GSM/GPRS + Ethernet + RTB</span></li>
         </ul>
       </div>
     </div>
@@ -1339,13 +1427,143 @@
   // de color, tanto en las tablas/tarjetas como en cualquier otra parte de
   // la pantalla.
   function mostrarLeyendasSuperAdmin() {
-    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend'].forEach(id => {
+    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend', 'equiposLegend'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.innerHTML = construirLeyendaHTML();
       el.hidden = false;
     });
   }
+
+  // Equipos instalados por compañía (pestaña Equipos). Datos a partir de
+  // informacion publica (webs de fabricantes/distribuidores/instaladores);
+  // cuando no hay marca de hardware confirmada se indica explicitamente en
+  // vez de inventar un modelo. El nombre de la empresa no se muestra: solo
+  // su circulo de color corporativo (COLORES_EMPRESA).
+  const TIPO_EQUIPO_COLOR = { 'Central': '#0b2545', 'Sensor': '#1f6fb8', 'Cámara': '#1f9d55', 'Sirena': '#c0392b', 'Otro': '#7b8794' };
+  const EQUIPOS_EMPRESA = [
+    {
+      empresa: 'Sector Alarm',
+      marca: 'Marca propia (no divulgada)',
+      confianza: 'Sistema cerrado, no multimarca',
+      conectividad: '4G + WiFi + Ethernet · batería Li-ion, ~24 h de autonomía',
+      equipos: [
+        { tipo: 'Central', desc: 'Unidad Central (con sirena interior integrada)' },
+        { tipo: 'Sensor', desc: 'Detector de movimiento con cámara integrada (foto-verificación)' },
+        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
+        { tipo: 'Cámara', desc: 'Cámara HD exterior (opcional)' },
+        { tipo: 'Sirena', desc: 'Sirena exterior (opcional)' },
+      ],
+    },
+    {
+      empresa: 'Sicor',
+      marca: 'Ajax Systems',
+      confianza: null,
+      conectividad: 'Doble canal 4G/5G + internet del hogar, con anti-inhibición',
+      equipos: [
+        { tipo: 'Central', desc: 'Hub 2' },
+        { tipo: 'Sensor', desc: 'MotionCam (PIR + foto-verificación)' },
+        { tipo: 'Sensor', desc: 'DoorProtect (contacto magnético)' },
+      ],
+    },
+    {
+      empresa: 'Segurma',
+      marca: 'Jablotron (+ cámaras Hikvision en catálogo)',
+      confianza: null,
+      conectividad: 'Central Jablotron 100+',
+      equipos: [
+        { tipo: 'Central', desc: 'Jablotron 100+' },
+        { tipo: 'Sensor', desc: 'Detector PIR inalámbrico' },
+        { tipo: 'Sensor', desc: 'Contacto magnético' },
+        { tipo: 'Cámara', desc: 'Cámaras CCTV Hikvision (videovigilancia adicional)' },
+      ],
+    },
+    {
+      empresa: 'ADT',
+      marca: 'Visonic (Johnson Controls / Tyco)',
+      confianza: null,
+      conectividad: 'Central PowerMaster-20 (PW20)',
+      equipos: [
+        { tipo: 'Central', desc: 'PowerMaster-20 (PW20)' },
+        { tipo: 'Sensor', desc: 'Detector PIR inalámbrico Visonic' },
+        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
+        { tipo: 'Sirena', desc: 'Sirena interior/exterior' },
+      ],
+    },
+    {
+      empresa: 'Seguridad 3D',
+      marca: 'No confirmada (multimarca)',
+      confianza: 'Información pública limitada',
+      conectividad: 'Central radio compacta, dual IP + GPRS (kit "3D Premium Protect")',
+      equipos: [
+        { tipo: 'Central', desc: 'Central compacta dual IP + GPRS' },
+        { tipo: 'Sensor', desc: 'Detector anti-mascota' },
+        { tipo: 'Sensor', desc: 'Contacto magnético' },
+        { tipo: 'Cámara', desc: '2 cámaras IP + grabador DVR de 4 canales' },
+        { tipo: 'Sirena', desc: 'Sirena interior' },
+      ],
+    },
+    {
+      empresa: 'Grupo Control',
+      marca: 'No confirmada (multimarca)',
+      confianza: 'Información pública limitada',
+      conectividad: 'Panel con comunicación anti-sabotaje',
+      equipos: [
+        { tipo: 'Central', desc: 'Panel con teclado y sirena interior integrada' },
+        { tipo: 'Sensor', desc: 'Detector de movimiento con captura de imagen' },
+        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
+        { tipo: 'Otro', desc: 'Mando a distancia / tag de proximidad' },
+      ],
+    },
+    {
+      empresa: 'Trablisa',
+      marca: 'Ajax Systems',
+      confianza: null,
+      conectividad: 'Instalación sin obra, en menos de 2 h',
+      equipos: [
+        { tipo: 'Central', desc: 'Kit Ajax (Hub)' },
+        { tipo: 'Sensor', desc: 'Detectores exteriores compatibles' },
+        { tipo: 'Sensor', desc: 'Detector de humo / calor' },
+      ],
+    },
+    {
+      empresa: 'MPA/Prosegur',
+      marca: 'Climax (actual) · anteriormente Vesta',
+      confianza: 'Confianza media — fuente de foro de usuarios',
+      conectividad: 'Ecosistema Climax',
+      equipos: [
+        { tipo: 'Central', desc: 'Panel Climax' },
+        { tipo: 'Sensor', desc: 'Sensores del ecosistema Climax (PIR, contacto magnético)' },
+      ],
+    },
+  ];
+
+  function equipoTipoChip(tipo) {
+    const color = TIPO_EQUIPO_COLOR[tipo] || TIPO_EQUIPO_COLOR.Otro;
+    return `<span class="equip-type" style="background:${color}22;color:${color}">${escapeHtml(tipo)}</span>`;
+  }
+
+  function renderEquiposEmpresas() {
+    const container = document.getElementById('equiposEmpresaGrid');
+    if (!container) return;
+    container.innerHTML = EQUIPOS_EMPRESA.map(e => `
+      <div class="company-equip-card">
+        <div class="company-equip-head">
+          ${swatchHtml(e.empresa, 'offer-swatch')}
+          <div>
+            <div class="company-equip-marca">${escapeHtml(e.marca)}</div>
+            ${e.confianza ? `<div class="company-equip-confianza">${escapeHtml(e.confianza)}</div>` : ''}
+          </div>
+        </div>
+        <ul class="equip-list">
+          ${e.equipos.map(eq => `<li>${equipoTipoChip(eq.tipo)}<span class="equip-desc">${escapeHtml(eq.desc)}</span></li>`).join('')}
+        </ul>
+        <div class="equip-conn">${escapeHtml(e.conectividad)}</div>
+      </div>
+    `).join('');
+  }
+
+  renderEquiposEmpresas();
 
   function aplicarModoSoloLectura() {
     const contenido = document.querySelector('main.content');
