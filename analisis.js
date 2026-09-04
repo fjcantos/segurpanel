@@ -396,9 +396,7 @@ const ESQUEMA_ANALISIS_LEGAL = {
     },
     puntuacionGlobal: {
       type: "integer",
-      minimum: 1,
-      maximum: 10,
-      description: "Puntuación global de riesgo para la persona consumidora, de 1 (mínimo) a 10 (máximo).",
+      description: "Puntuación global de riesgo para la persona consumidora, en una escala del 1 (mínimo) al 10 (máximo). Nunca uses un valor fuera de ese rango.",
     },
     nivelGlobal: { type: "string", enum: ["bajo", "medio", "alto", "muy_alto"] },
     clausulas: {
@@ -480,6 +478,10 @@ async function analizarConIA(textoAnonimizado) {
   }
 
   if (!Array.isArray(analisis.clausulas)) analisis.clausulas = [];
+  // El esquema JSON no admite minimum/maximum en campos "integer" (la API de
+  // Anthropic los rechaza), asi que el rango 1-10 solo queda pedido por
+  // instrucciones en el prompt/descripcion: se fuerza aqui por si acaso.
+  analisis.puntuacionGlobal = Math.min(10, Math.max(1, Math.round(Number(analisis.puntuacionGlobal) || 1)));
   return analisis;
 }
 
