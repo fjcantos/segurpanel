@@ -212,9 +212,35 @@
   }
   table.compare tr:last-child td { border-bottom: none; }
   table.compare tr:hover td { background: #f7faf8; }
-  .company-name { font-weight: 700; color: var(--navy); }
+  .company-name { text-align: center; }
   .rating { color: var(--green-dark); font-weight: 700; }
   .footnote { color: var(--muted); font-size: 0.8rem; margin-top: 10px; }
+
+  .company-swatch {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.12);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    vertical-align: middle;
+  }
+  .compare-legend {
+    background: #fff8e1;
+    border: 1px dashed #c9a227;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+  }
+  .compare-legend-title {
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+  }
+  .compare-legend-items { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text); }
+  .legend-item .company-swatch { width: 18px; height: 18px; }
 
   /* ---------- Ofertas ---------- */
   .offer-grid {
@@ -749,8 +775,11 @@
     <p class="section-sub">Comparativa orientativa de las principales compañías de alarmas.</p>
 
     <p class="mobile-hint">Desliza la tabla en horizontal para ver todas las columnas.</p>
+
+    <div class="compare-legend" id="compareLegend" hidden></div>
+
     <div class="table-wrap">
-      <table class="compare">
+      <table class="compare" id="compareTable">
         <thead>
           <tr>
             <th>Empresa</th>
@@ -763,7 +792,7 @@
         </thead>
         <tbody>
           <tr>
-            <td class="company-name">Verisure</td>
+            <td class="company-name"><span class="company-swatch" data-company="Verisure" style="background:#CC0000"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~44 – 55 €/mes</td>
             <td>24 – 60 meses</td>
@@ -771,7 +800,7 @@
             <td class="rating">4.2 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Sector Alarm</td>
+            <td class="company-name"><span class="company-swatch" data-company="Sector Alarm" style="background:linear-gradient(135deg, #000000 50%, #CC0000 50%)"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~35 – 45 €/mes</td>
             <td>24 – 36 meses</td>
@@ -779,7 +808,7 @@
             <td class="rating">4.0 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Sicor</td>
+            <td class="company-name"><span class="company-swatch" data-company="Sicor" style="background:#1B5E20"></span></td>
             <td>Variable según instalador</td>
             <td>~28 – 38 €/mes</td>
             <td>12 – 24 meses</td>
@@ -787,7 +816,7 @@
             <td class="rating">3.8 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Segurma</td>
+            <td class="company-name"><span class="company-swatch" data-company="Segurma" style="background:#F57C00"></span></td>
             <td>Variable según instalador</td>
             <td>~25 – 35 €/mes</td>
             <td>12 – 24 meses</td>
@@ -795,7 +824,7 @@
             <td class="rating">3.6 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">ADT</td>
+            <td class="company-name"><span class="company-swatch" data-company="ADT" style="background:#0D47A1"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~35 – 45 €/mes</td>
             <td>24 – 36 meses</td>
@@ -803,7 +832,7 @@
             <td class="rating">3.9 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Seguridad 3D</td>
+            <td class="company-name"><span class="company-swatch" data-company="Seguridad 3D" style="background:linear-gradient(135deg, #FDD835 50%, #00796B 50%)"></span></td>
             <td>Variable según instalador</td>
             <td>~25 – 32 €/mes</td>
             <td>Sin permanencia / 12 meses</td>
@@ -811,7 +840,7 @@
             <td class="rating">3.7 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Grupo Control</td>
+            <td class="company-name"><span class="company-swatch" data-company="Grupo Control" style="background:#7B1C2B"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~30 – 42 €/mes</td>
             <td>Sin permanencia / 12 meses</td>
@@ -819,7 +848,7 @@
             <td class="rating">3.9 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">Trablisa</td>
+            <td class="company-name"><span class="company-swatch" data-company="Trablisa" style="background:linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)"></span></td>
             <td>Variable según instalador</td>
             <td>~28 – 38 €/mes</td>
             <td>12 – 24 meses</td>
@@ -827,7 +856,7 @@
             <td class="rating">3.6 / 5</td>
           </tr>
           <tr>
-            <td class="company-name">MPA/Prosegur</td>
+            <td class="company-name"><span class="company-swatch" data-company="MPA/Prosegur" style="background:#FDD835"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~29 – 39 €/mes</td>
             <td>12 – 36 meses</td>
@@ -1147,6 +1176,23 @@
     return { ok: respuesta.ok, status: respuesta.status, datos };
   }
 
+  // Leyenda privada del comparador: solo super_admin ve la correspondencia
+  // color -> empresa. El resto de roles solo ven el circulo de color, tanto
+  // en la tabla como en cualquier otra parte de la pantalla.
+  function pintarLeyendaComparador() {
+    const leyenda = document.getElementById('compareLegend');
+    const swatches = document.querySelectorAll('#compareTable .company-swatch');
+    if (!leyenda || !swatches.length) return;
+
+    const items = Array.from(swatches).map(swatch => {
+      const nombre = swatch.dataset.company || '';
+      return `<span class="legend-item"><span class="company-swatch" style="background:${swatch.style.background}"></span>${escapeHtml(nombre)}</span>`;
+    }).join('');
+
+    leyenda.innerHTML = `<div class="compare-legend-title">Leyenda (solo visible para super_admin)</div><div class="compare-legend-items">${items}</div>`;
+    leyenda.hidden = false;
+  }
+
   function aplicarModoSoloLectura() {
     const contenido = document.querySelector('main.content');
     const aviso = document.createElement('div');
@@ -1184,6 +1230,7 @@
 
     if (usuario.role === 'super_admin') {
       document.getElementById('adminLink').hidden = false;
+      pintarLeyendaComparador();
     }
 
     document.getElementById('logoutBtn').addEventListener('click', async () => {
