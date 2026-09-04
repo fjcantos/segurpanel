@@ -11,7 +11,7 @@
 // Al cambiar cualquier archivo cacheado hay que subir VERSION: eso crea una
 // cache nueva y borra la anterior en el evento activate.
 
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = `segurpanel-${VERSION}`;
 
 const SHELL = [
