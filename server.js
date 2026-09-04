@@ -648,33 +648,39 @@ async function apiAnalisis(req, res) {
     }
 
     // Provincia y empresa se extraen del texto ORIGINAL (antes de anonimizar,
-    // que sustituye justamente el CP y el nombre de la empresa) y son lo
-    // unico que se guarda para la pestana Estadisticas: nunca el texto del
-    // contrato ni ningun dato personal.
+    // que sustituye justamente el CP y el nombre de la empresa). Junto con
+    // el texto ya anonimizado se guardan en contract_stats para alimentar
+    // tanto Estadisticas como el Repositorio (nunca el texto original ni
+    // ningun dato personal: el texto guardado es el que ya paso por
+    // anonimizarTexto).
     const { provincia, empresa } = analisis.extraerProvinciaYEmpresa(textoOriginal);
 
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
     const { clausulas, puntuacionGlobal, nivel } = analisis.detectarClausulas(textoAnonimizado);
 
-    db.registrarContratoAnalizado({
+    const clausulasCompletas = clausulas.map((c) => ({
+      id: c.id,
+      label: c.label,
+      score: c.score,
+      descripcion: c.descripcion,
+      fragmento: c.fragmento,
+    }));
+
+    const contratoId = db.registrarContratoAnalizado({
       provincia,
       empresa,
       puntuacion: puntuacionGlobal,
-      clausulas: clausulas.map((c) => ({ id: c.id, label: c.label })),
+      clausulas: clausulasCompletas,
+      textoAnonimizado,
       userId: sesion.usuario.id,
     });
 
     const resumen = {
+      contratoId,
       puntuacionGlobal,
       nivel,
       totalAnonimizado,
-      clausulas: clausulas.map((c) => ({
-        id: c.id,
-        label: c.label,
-        score: c.score,
-        descripcion: c.descripcion,
-        fragmento: c.fragmento,
-      })),
+      clausulas: clausulasCompletas,
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
@@ -943,6 +949,165 @@ async function apiActividadTab(req, res) {
 }
 
 /* ================================================================
+   API: repositorio de contratos (solo super_admin y admin)
+   ================================================================ */
+//
+// Reutiliza contract_stats (la misma tabla que alimenta Estadisticas): cada
+// fila ya tiene provincia, empresa, puntuacion, clausulas y, desde esta
+// funcionalidad, tipo (hogar/negocio, opcional) y el texto ya anonimizado.
+// La deteccion de cambios (nueva/modificada/eliminada) SIEMPRE se calcula
+// sobre el historial COMPLETO en orden cronologico, comparando cada
+// contrato con el anterior de su mismo grupo empresa+tipo, y solo despues
+// se aplican los filtros de la peticion — asi el resultado no depende de
+// que filtros esten activos en cada momento.
+
+function nivelDesdeRiesgo(puntuacion) {
+  if (puntuacion == null) return null;
+  if (puntuacion <= 3) return "bajo";
+  if (puntuacion <= 6) return "medio";
+  if (puntuacion <= 8) return "alto";
+  return "muy_alto";
+}
+
+function calcularCambiosClausulas(anteriores, actuales) {
+  const mapaAnterior = new Map(anteriores.map((c) => [c.id, c]));
+  const mapaActual = new Map(actuales.map((c) => [c.id, c]));
+
+  const nuevas = [];
+  const modificadas = [];
+  const eliminadas = [];
+
+  mapaActual.forEach((c, id) => {
+    if (!mapaAnterior.has(id)) {
+      nuevas.push(c.label);
+    } else if ((mapaAnterior.get(id).fragmento || "") !== (c.fragmento || "")) {
+      modificadas.push(c.label);
+    }
+  });
+  mapaAnterior.forEach((c, id) => {
+    if (!mapaActual.has(id)) eliminadas.push(c.label);
+  });
+
+  return { nuevas, modificadas, eliminadas, tieneCambios: nuevas.length + modificadas.length + eliminadas.length > 0 };
+}
+
+// Construye la lista completa de contratos con nivel de riesgo y cambios ya
+// calculados, en orden cronologico ascendente (imprescindible para que la
+// comparacion de cambios sea correcta).
+function construirRepositorioCompleto() {
+  const filas = db.listarRepositorioResumen();
+  const ultimoPorGrupo = new Map();
+
+  return filas.map((f) => {
+    let clausulas = [];
+    try {
+      clausulas = JSON.parse(f.clausulas_json) || [];
+    } catch (e) {
+      clausulas = [];
+    }
+
+    const contrato = {
+      id: f.id,
+      fecha: f.created_at,
+      provincia: f.provincia,
+      empresa: f.empresa,
+      tipo: f.tipo,
+      puntuacion: f.puntuacion,
+      nivel: nivelDesdeRiesgo(f.puntuacion),
+      clausulas,
+      cambios: null,
+    };
+
+    if (f.empresa && f.tipo) {
+      const clave = f.empresa + "||" + f.tipo;
+      const anterior = ultimoPorGrupo.get(clave);
+      if (anterior) {
+        contrato.cambios = calcularCambiosClausulas(anterior.clausulas, clausulas);
+      }
+      ultimoPorGrupo.set(clave, contrato);
+    }
+
+    return contrato;
+  });
+}
+
+async function apiRepositorioGet(req, res, query) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  let contratos = construirRepositorioCompleto();
+
+  const empresa = query.get("empresa");
+  const tipo = query.get("tipo");
+  const provincia = query.get("provincia");
+  const nivel = query.get("nivel");
+  const fechaDesde = query.get("fechaDesde");
+  const fechaHasta = query.get("fechaHasta");
+
+  if (empresa) contratos = contratos.filter((c) => c.empresa === empresa);
+  if (tipo) contratos = contratos.filter((c) => c.tipo === tipo);
+  if (provincia) contratos = contratos.filter((c) => c.provincia === provincia);
+  if (nivel) contratos = contratos.filter((c) => c.nivel === nivel);
+  if (fechaDesde) contratos = contratos.filter((c) => c.fecha.slice(0, 10) >= fechaDesde);
+  if (fechaHasta) contratos = contratos.filter((c) => c.fecha.slice(0, 10) <= fechaHasta);
+
+  contratos.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
+
+  enviarJSON(res, 200, { contratos });
+}
+
+async function apiRepositorioDetalle(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const fila = db.obtenerContratoDetalle(id);
+  if (!fila) return enviarJSON(res, 404, { error: "Contrato no encontrado." });
+
+  let clausulas = [];
+  try {
+    clausulas = JSON.parse(fila.clausulas_json) || [];
+  } catch (e) {
+    clausulas = [];
+  }
+
+  enviarJSON(res, 200, {
+    id: fila.id,
+    fecha: fila.created_at,
+    provincia: fila.provincia,
+    empresa: fila.empresa,
+    tipo: fila.tipo,
+    puntuacion: fila.puntuacion,
+    nivel: nivelDesdeRiesgo(fila.puntuacion),
+    clausulas,
+    textoAnonimizado: fila.texto_anonimizado,
+  });
+}
+
+const TIPOS_CONTRATO_VALIDOS = new Set(["hogar", "negocio"]);
+
+async function apiRepositorioClasificar(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const fila = db.obtenerContratoDetalle(id);
+  if (!fila) return enviarJSON(res, 404, { error: "Contrato no encontrado." });
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  if (!TIPOS_CONTRATO_VALIDOS.has(cuerpo.tipo)) {
+    return enviarJSON(res, 400, { error: "Tipo inválido. Usa 'hogar' o 'negocio'." });
+  }
+
+  const actualizado = db.clasificarContrato(id, cuerpo.tipo);
+  enviarJSON(res, 200, { ok: true, id: actualizado.id, tipo: actualizado.tipo });
+}
+
+/* ================================================================
    API: alianzas entre empresas de alarmas y otros sectores
    ================================================================ */
 //
@@ -1118,6 +1283,8 @@ const idEstadoUsuario = RUTA_CON_ID("/api/admin/users", "/status");
 const idResetPasswordUsuario = RUTA_CON_ID("/api/admin/users", "/reset-password");
 const idPublicarAlianza = RUTA_CON_ID("/api/alianzas", "/publicar");
 const idDescartarAlianza = RUTA_CON_ID("/api/alianzas", "/descartar");
+const idDetalleRepositorio = RUTA_CON_ID("/api/repositorio", "");
+const idClasificarRepositorio = RUTA_CON_ID("/api/repositorio", "/tipo");
 
 async function manejarPeticion(req, res) {
   // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
@@ -1165,6 +1332,16 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);
+
+    if (req.method === "GET" && ruta === "/api/repositorio") return await apiRepositorioGet(req, res, url.searchParams);
+    if (req.method === "POST") {
+      const idTipo = idClasificarRepositorio(ruta);
+      if (idTipo !== null) return await apiRepositorioClasificar(req, res, idTipo);
+    }
+    if (req.method === "GET") {
+      const idDetalle = idDetalleRepositorio(ruta);
+      if (idDetalle !== null) return await apiRepositorioDetalle(req, res, idDetalle);
+    }
 
     if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
     if (req.method === "POST" && ruta === "/api/alianzas/sync") return await apiAlianzasSync(req, res);

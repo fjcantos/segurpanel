@@ -85,13 +85,15 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS contract_stats (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    provincia       TEXT,
-    empresa         TEXT,
-    puntuacion      INTEGER,
-    clausulas_json  TEXT,
-    user_id         INTEGER REFERENCES users(id),
-    created_at      TEXT NOT NULL
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    provincia           TEXT,
+    empresa             TEXT,
+    tipo                TEXT,
+    puntuacion          INTEGER,
+    clausulas_json      TEXT,
+    texto_anonimizado   TEXT,
+    user_id             INTEGER REFERENCES users(id),
+    created_at          TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS tab_visits (
@@ -107,6 +109,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
 `);
+
+// Migracion defensiva: contract_stats se creo en una version anterior sin
+// `tipo` ni `texto_anonimizado` (Repositorio). CREATE TABLE IF NOT EXISTS no
+// anade columnas a una tabla que ya existe, asi que en despliegues con base
+// de datos previa hay que anadirlas a mano una sola vez, ANTES de crear
+// cualquier indice que las use.
+function columnaExiste(tabla, columna) {
+  return db
+    .prepare(`PRAGMA table_info(${tabla})`)
+    .all()
+    .some((c) => c.name === columna);
+}
+if (!columnaExiste("contract_stats", "tipo")) {
+  db.exec("ALTER TABLE contract_stats ADD COLUMN tipo TEXT");
+}
+if (!columnaExiste("contract_stats", "texto_anonimizado")) {
+  db.exec("ALTER TABLE contract_stats ADD COLUMN texto_anonimizado TEXT");
+}
+
+db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
 
 const ahoraISO = () => new Date().toISOString();
 
@@ -327,27 +349,34 @@ function fechaUltimaAlianza() {
   return (fila && fila.ultima) || null;
 }
 
-/* ---------- Estadisticas internas (pestana Estadisticas) ---------- */
+/* ---------- Estadisticas y Repositorio (contract_stats) ---------- */
 //
 // contract_stats guarda, por cada contrato pasado por /api/analisis,
-// unicamente provincia + empresa detectadas (antes de anonimizar) y la
-// puntuacion/clausulas de riesgo ya calculadas: nunca texto del contrato ni
-// ningun dato personal. tab_visits registra que un usuario ha abierto una
-// pestana de la app, para poder mostrar "pestañas mas usadas" en la
-// actividad del equipo.
+// provincia + empresa detectadas (antes de anonimizar), la puntuacion y
+// clausulas de riesgo ya calculadas, y el texto YA ANONIMIZADO completo
+// (Repositorio): nunca el texto original ni ningun dato personal, porque la
+// anonimizacion ya sustituyo nombres/DNI/IBAN/telefono/email/direccion/CP
+// antes de que este texto se genere. `tipo` (hogar/negocio) se guarda vacio
+// al analizar y se rellena despues desde la pestana Analisis o Repositorio.
+// tab_visits registra que un usuario ha abierto una pestana de la app, para
+// poder mostrar "pestañas mas usadas" en la actividad del equipo.
 
-function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas, userId }) {
-  db.prepare(
-    `INSERT INTO contract_stats (provincia, empresa, puntuacion, clausulas_json, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(
-    provincia || null,
-    empresa || null,
-    Number.isFinite(puntuacion) ? puntuacion : null,
-    JSON.stringify(clausulas || []),
-    userId || null,
-    ahoraISO()
-  );
+function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas, textoAnonimizado, userId }) {
+  const info = db
+    .prepare(
+      `INSERT INTO contract_stats (provincia, empresa, puntuacion, clausulas_json, texto_anonimizado, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      provincia || null,
+      empresa || null,
+      Number.isFinite(puntuacion) ? puntuacion : null,
+      JSON.stringify(clausulas || []),
+      textoAnonimizado || null,
+      userId || null,
+      ahoraISO()
+    );
+  return Number(info.lastInsertRowid);
 }
 
 function contarContratosAnalizados() {
@@ -361,6 +390,33 @@ function riesgoPromedioContratos() {
 
 function listarClausulasContratos() {
   return db.prepare("SELECT clausulas_json FROM contract_stats WHERE clausulas_json IS NOT NULL").all();
+}
+
+/* ---------- Repositorio de contratos ---------- */
+//
+// Vista completa (no solo agregada) de contract_stats: listado para
+// filtrar/clasificar/detectar cambios, y detalle individual con el texto
+// anonimizado completo. Se listan SIEMPRE en orden cronologico ascendente
+// para que la deteccion de cambios (server.js) compare cada contrato con el
+// inmediatamente anterior de su mismo grupo empresa+tipo.
+
+function listarRepositorioResumen() {
+  return db
+    .prepare(
+      `SELECT id, provincia, empresa, tipo, puntuacion, clausulas_json, created_at, user_id
+       FROM contract_stats
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all();
+}
+
+function obtenerContratoDetalle(id) {
+  return db.prepare("SELECT * FROM contract_stats WHERE id = ?").get(id);
+}
+
+function clasificarContrato(id, tipo) {
+  db.prepare("UPDATE contract_stats SET tipo = ? WHERE id = ?").run(tipo, id);
+  return db.prepare("SELECT id, tipo FROM contract_stats WHERE id = ?").get(id);
 }
 
 function estadisticasPorProvincia() {
@@ -436,6 +492,9 @@ module.exports = {
   contarContratosAnalizados,
   riesgoPromedioContratos,
   listarClausulasContratos,
+  listarRepositorioResumen,
+  obtenerContratoDetalle,
+  clasificarContrato,
   estadisticasPorProvincia,
   contarUsuariosActivos,
   registrarVisitaTab,

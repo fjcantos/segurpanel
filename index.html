@@ -553,6 +553,71 @@
   .linechart-legend span { display: inline-flex; align-items: center; gap: 5px; }
   .linechart-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
+  /* ---------- Repositorio ---------- */
+  .repo-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .repo-filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .repo-filter-label { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+  .repo-filter-swatches { display: flex; flex-wrap: wrap; gap: 6px; max-width: 280px; align-items: center; }
+  .repo-swatch-btn { border: 2px solid transparent; background: none; padding: 2px; border-radius: 50%; cursor: pointer; line-height: 0; }
+  .repo-swatch-btn.active { border-color: var(--navy); }
+  .repo-swatch-btn .company-swatch { width: 20px; height: 20px; }
+  .repo-swatch-btn.repo-swatch-all { border-radius: 999px; padding: 5px 12px; font-size: 0.78rem; color: var(--navy); border: 1px solid var(--border); }
+  .repo-swatch-btn.repo-swatch-all.active { background: var(--navy); color: white; border-color: var(--navy); }
+  .repo-pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .repo-pill { border: 1px solid var(--border); background: var(--white); color: var(--navy); padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; cursor: pointer; }
+  .repo-pill.active { background: var(--navy); color: white; border-color: var(--navy); }
+  .repo-filter-group select, .repo-filter-group input[type="date"] {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--white);
+  }
+
+  .repo-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; }
+  .repo-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .repo-card-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .repo-card-info { flex: 1; min-width: 140px; }
+  .repo-card-fecha { font-weight: 700; color: var(--navy); font-size: 0.88rem; }
+  .repo-card-meta { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+  .repo-risk-badge { padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+  .repo-risk-badge.nivel-bajo { background: #e4f5ea; color: var(--green-dark); }
+  .repo-risk-badge.nivel-medio { background: #fdf3da; color: var(--warn); }
+  .repo-risk-badge.nivel-alto { background: #fdead2; color: var(--orange); }
+  .repo-risk-badge.nivel-muy_alto { background: #fbe7e7; color: var(--danger); }
+  .change-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px rgba(192,57,43,0.18); flex-shrink: 0; cursor: help; }
+  .repo-expand-btn { margin-left: auto; border: 1px solid var(--border); background: var(--white); border-radius: 8px; padding: 5px 10px; font-size: 0.78rem; cursor: pointer; color: var(--navy); }
+  .repo-card-detail { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .repo-clause-chip { display: inline-block; background: #eef2f7; border-radius: 999px; padding: 3px 10px; font-size: 0.76rem; margin: 0 6px 6px 0; }
+  .repo-changes-box { background: #fff8f8; border: 1px solid #f3c9c9; border-radius: 10px; padding: 10px 14px; margin-top: 10px; font-size: 0.82rem; line-height: 1.6; }
+  .repo-changes-box .k { font-weight: 700; color: var(--danger); }
+  .repo-classify-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; font-size: 0.82rem; flex-wrap: wrap; }
+  .repo-classify-inline { background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-top: 16px !important; }
+  .repo-classify-row button { border: 1px solid var(--border); background: var(--white); padding: 5px 12px; border-radius: 999px; cursor: pointer; font-size: 0.78rem; color: var(--navy); }
+  .repo-classify-row button:hover { border-color: var(--green); color: var(--green-dark); }
+  .repo-view-text-btn { margin-top: 12px; border: 1px solid var(--border); background: var(--white); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: var(--navy); }
+  .repo-full-text { margin-top: 10px; max-height: 300px; overflow-y: auto; background: #f7faf8; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.8rem; white-space: pre-wrap; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+
+  .repo-hist-tipo { margin: 12px 0 18px; }
+  .repo-timeline { display: flex; flex-direction: column; }
+  .repo-timeline-item { display: flex; gap: 14px; }
+  .repo-timeline-dot-col { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .repo-timeline-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--navy-light); margin-top: 5px; flex-shrink: 0; }
+  .repo-timeline-dot.has-changes { background: var(--danger); box-shadow: 0 0 0 4px rgba(192,57,43,0.18); }
+  .repo-timeline-line { flex: 1; width: 2px; background: var(--border); margin-top: 4px; min-height: 24px; }
+  .repo-timeline-content { flex: 1; padding-bottom: 22px; }
+
   /* ---------- Analisis Avanzado ---------- */
   .risk-summary {
     display: none;
@@ -926,6 +991,11 @@
   <button class="tab-btn" data-tab="estadisticas" data-restricted="retencion">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="11" width="4" height="7" rx="1"/><rect x="8" y="6" width="4" height="12" rx="1"/><rect x="14" y="2" width="4" height="16" rx="1"/></svg>
     Estadísticas
+  </button>
+  <button class="tab-btn" data-tab="repositorio" data-restricted="retencion">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="15" height="4" rx="1"/><path d="M3.5 8v6.5a1.5 1.5 0 001.5 1.5h10a1.5 1.5 0 001.5-1.5V8"/><path d="M8 11h4"/></svg>
+    Repositorio
+    <span class="notif-dot" id="repoNotifDot" hidden></span>
   </button>
   <button class="tab-btn" data-tab="analisisAvanzado" data-restricted="retencion">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
@@ -1466,6 +1536,63 @@
     </div>
   </section>
 
+  <!-- ===== REPOSITORIO (solo super_admin y admin) ===== -->
+  <section id="repositorio" class="tab-content" data-restricted="retencion">
+    <h2 class="section-title">Repositorio de contratos</h2>
+    <p class="section-sub">Cada contrato analizado en la pestaña Análisis se guarda aquí ya anonimizado (sin ningún dato personal): empresa, tipo, provincia, fecha, riesgo y cláusulas detectadas. Se compara automáticamente con contratos anteriores de la misma empresa y tipo para avisar de cláusulas nuevas, modificadas o eliminadas.</p>
+
+    <div class="compare-legend" id="repoLegend" hidden></div>
+
+    <div class="repo-filters">
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Empresa</div>
+        <div class="repo-filter-swatches" id="repoFiltroEmpresa"></div>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Tipo</div>
+        <div class="repo-pill-group" id="repoFiltroTipo">
+          <button class="repo-pill active" type="button" data-tipo="">Todos</button>
+          <button class="repo-pill" type="button" data-tipo="hogar">Hogar</button>
+          <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
+          <button class="repo-pill" type="button" data-tipo="__sin_clasificar__">Sin clasificar</button>
+        </div>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Provincia</div>
+        <select id="repoFiltroProvincia"><option value="">Todas</option></select>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Riesgo</div>
+        <select id="repoFiltroNivel">
+          <option value="">Todos</option>
+          <option value="bajo">Bajo</option>
+          <option value="medio">Medio</option>
+          <option value="alto">Alto</option>
+          <option value="muy_alto">Muy alto</option>
+        </select>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Desde</div>
+        <input type="date" id="repoFiltroDesde">
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Hasta</div>
+        <input type="date" id="repoFiltroHasta">
+      </div>
+    </div>
+
+    <div class="repo-list" id="repoLista"><div class="empty-note">Cargando…</div></div>
+
+    <h3 class="equip-section-title">Evolución por compañía</h3>
+    <p class="chart-sub">Elige una compañía y un tipo de contrato para ver su línea temporal, con los cambios de cláusulas destacados.</p>
+    <div class="repo-filter-swatches" id="repoHistEmpresa"></div>
+    <div class="repo-pill-group repo-hist-tipo" id="repoHistTipo">
+      <button class="repo-pill active" type="button" data-tipo="hogar">Hogar</button>
+      <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
+    </div>
+    <div class="repo-timeline" id="repoTimeline"><div class="empty-note">Elige una compañía arriba para ver su evolución.</div></div>
+  </section>
+
   <!-- ===== ANALISIS AVANZADO ===== -->
   <section id="analisisAvanzado" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis avanzado de contratos</h2>
@@ -1620,7 +1747,7 @@
   // de color, tanto en las tablas/tarjetas como en cualquier otra parte de
   // la pantalla.
   function mostrarLeyendasSuperAdmin() {
-    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend', 'equiposLegend', 'statsLegend'].forEach(id => {
+    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend', 'equiposLegend', 'statsLegend', 'repoLegend'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.innerHTML = construirLeyendaHTML();
@@ -1826,6 +1953,7 @@
     activateTab(btn.dataset.tab);
     if (btn.dataset.tab === 'alianzas') cargarAlianzas();
     if (btn.dataset.tab === 'estadisticas') cargarEstadisticas();
+    if (btn.dataset.tab === 'repositorio') cargarRepositorio();
     registrarVisitaTab(btn.dataset.tab);
   }));
   document.querySelectorAll('.quicklink').forEach(btn => {
@@ -1996,8 +2124,57 @@
         </div>
         <div class="batch-progress-track"><div class="batch-progress-fill ${item.estado}"></div></div>
         ${item.error ? `<div class="batch-row-error">${escapeHtml(item.error)}</div>` : ''}
+        ${item.estado === 'completado' && item.contratoId ? renderFilaClasificar(item.contratoId, item.tipoAsignado) : ''}
       </div>
     `).join('');
+
+    batchQueueList.querySelectorAll('.repo-classify-row button[data-clasificar]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fila = btn.closest('.repo-classify-row');
+        const id = Number(btn.dataset.id);
+        const tipo = btn.dataset.clasificar;
+        const ok = await clasificarContrato(id, tipo, fila);
+        if (ok) {
+          const item = cola.find(it => it.contratoId === id);
+          if (item) item.tipoAsignado = tipo;
+        }
+      });
+    });
+  }
+
+  // Fila "Clasificar: Hogar/Negocio" reutilizada tanto en la cola de lote
+  // como tras un analisis de un solo archivo (requisito de Repositorio: el
+  // contrato se guarda automaticamente y aqui se ofrece clasificarlo).
+  function renderFilaClasificar(contratoId, tipoAsignado) {
+    if (tipoAsignado) {
+      return `<div class="repo-classify-row"><span style="color:var(--green-dark);">Guardado en el Repositorio como ${tipoAsignado === 'hogar' ? 'Hogar' : 'Negocio'}.</span></div>`;
+    }
+    return `<div class="repo-classify-row">
+      <span>Guardado en el Repositorio. Clasifícalo:</span>
+      <button type="button" data-id="${contratoId}" data-clasificar="hogar">Hogar</button>
+      <button type="button" data-id="${contratoId}" data-clasificar="negocio">Negocio</button>
+    </div>`;
+  }
+
+  // Llama a /api/repositorio/:id/tipo y sustituye el contenido de
+  // `contenedorFila` por el resultado (exito o error). Devuelve true/false.
+  async function clasificarContrato(id, tipo, contenedorFila) {
+    contenedorFila.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      const { ok, datos } = await llamarAPI(`/api/repositorio/${id}/tipo`, {
+        method: 'POST',
+        body: JSON.stringify({ tipo }),
+      });
+      if (!ok) {
+        contenedorFila.innerHTML = `<span style="color:var(--danger);">${escapeHtml((datos && datos.error) || 'No se pudo clasificar el contrato.')}</span>`;
+        return false;
+      }
+      contenedorFila.innerHTML = `<span style="color:var(--green-dark);">Guardado en el Repositorio como ${tipo === 'hogar' ? 'Hogar' : 'Negocio'}.</span>`;
+      return true;
+    } catch (e) {
+      contenedorFila.innerHTML = '<span style="color:var(--danger);">No se pudo conectar con el servidor.</span>';
+      return false;
+    }
   }
 
   const ETIQUETAS_ESTADO_LOTE = {
@@ -2054,10 +2231,14 @@
           item.estado = 'error';
           item.error = mensaje;
         } else {
+          const cabeceraResumen = respuesta.headers.get('X-Analysis-Summary');
           const blob = await respuesta.blob();
           const nombrePdf = `${String(i + 1).padStart(2, '0')}-${item.file.name.replace(/\.[^.]+$/, '')}.pdf`;
           pdfsGenerados.push({ nombre: nombrePdf, blob });
           item.estado = 'completado';
+          if (cabeceraResumen) {
+            try { item.contratoId = JSON.parse(decodeBase64Utf8(cabeceraResumen)).contratoId; } catch (e) { /* ignora */ }
+          }
           docsAnalyzed++;
           document.getElementById('statDocsAnalyzed').textContent = docsAnalyzed;
         }
@@ -2220,16 +2401,29 @@
       note.className = 'empty-note';
       note.textContent = 'No se han detectado cláusulas relevantes automáticamente. Revisa el documento manualmente.';
       resultsEl.appendChild(note);
-      return;
+    } else {
+      clausulas.forEach(item => {
+        const level = item.score >= 8 ? 'danger' : item.score >= 5 ? 'warn' : 'info';
+        const div = document.createElement('div');
+        div.className = 'clause-item level-' + level;
+        div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)} <span style="font-weight:400;color:var(--muted);">(${item.score}/10)</span></div><div class="clause-snippet">"${escapeHtml(item.fragmento)}"</div></div>`;
+        resultsEl.appendChild(div);
+      });
     }
 
-    clausulas.forEach(item => {
-      const level = item.score >= 8 ? 'danger' : item.score >= 5 ? 'warn' : 'info';
-      const div = document.createElement('div');
-      div.className = 'clause-item level-' + level;
-      div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)} <span style="font-weight:400;color:var(--muted);">(${item.score}/10)</span></div><div class="clause-snippet">"${escapeHtml(item.fragmento)}"</div></div>`;
-      resultsEl.appendChild(div);
-    });
+    // Repositorio: el contrato ya se ha guardado en el servidor (anonimizado,
+    // sin datos personales); aqui se ofrece clasificarlo como Hogar/Negocio.
+    if (resumen.contratoId) {
+      const prompt = document.createElement('div');
+      prompt.className = 'repo-classify-row repo-classify-inline';
+      prompt.innerHTML = `<span>Guardado en el Repositorio. Clasifícalo:</span>
+        <button type="button" data-clasificar="hogar">Hogar</button>
+        <button type="button" data-clasificar="negocio">Negocio</button>`;
+      prompt.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => clasificarContrato(resumen.contratoId, btn.dataset.clasificar, prompt));
+      });
+      resultsEl.appendChild(prompt);
+    }
   }
 
   function escapeHtml(str) {
@@ -2538,6 +2732,273 @@
       body: JSON.stringify({ tab }),
       keepalive: true,
     }).catch(() => {});
+  }
+
+  /* ---------- Repositorio de contratos (solo super_admin y admin) ----------
+     Se pide siempre el listado COMPLETO sin filtros de servidor: los
+     cambios (nueva/modificada/eliminada) los calcula el backend sobre el
+     historial entero de cada grupo empresa+tipo, y aqui se filtra en
+     memoria segun los controles de la pantalla. Asi cambiar un filtro no
+     hace ninguna peticion de red y la deteccion de cambios nunca depende de
+     que filtros esten activos. */
+  let repoDatosCompletos = [];
+  let repoFiltrosInicializados = false;
+  let repoFiltroEmpresa = '';
+  let repoFiltroTipo = '';
+  let repoHistEmpresaSel = '';
+  let repoHistTipoSel = 'hogar';
+
+  const NIVEL_RIESGO_LABEL = { bajo: 'Bajo', medio: 'Medio', alto: 'Alto', muy_alto: 'Muy alto' };
+  const TIPO_CONTRATO_LABEL = { hogar: 'Hogar', negocio: 'Negocio' };
+
+  function inicializarFiltrosRepositorio() {
+    if (repoFiltrosInicializados) return;
+    repoFiltrosInicializados = true;
+
+    const empresas = Object.keys(COLORES_EMPRESA);
+
+    const contFiltroEmpresa = document.getElementById('repoFiltroEmpresa');
+    contFiltroEmpresa.innerHTML =
+      `<button class="repo-swatch-btn repo-swatch-all active" type="button" data-empresa="">Todas</button>` +
+      empresas.map(e => `<button class="repo-swatch-btn" type="button" data-empresa="${escapeHtml(e)}">${swatchHtml(e)}</button>`).join('');
+    contFiltroEmpresa.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        contFiltroEmpresa.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoFiltroEmpresa = btn.dataset.empresa;
+        aplicarFiltrosRepositorioYRenderizar();
+      });
+    });
+
+    const contHistEmpresa = document.getElementById('repoHistEmpresa');
+    contHistEmpresa.innerHTML = empresas.map(e => `<button class="repo-swatch-btn" type="button" data-empresa="${escapeHtml(e)}">${swatchHtml(e)}</button>`).join('');
+    contHistEmpresa.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        contHistEmpresa.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoHistEmpresaSel = btn.dataset.empresa;
+        renderRepoTimeline();
+      });
+    });
+
+    document.getElementById('repoFiltroTipo').querySelectorAll('.repo-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('repoFiltroTipo').querySelectorAll('.repo-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoFiltroTipo = btn.dataset.tipo;
+        aplicarFiltrosRepositorioYRenderizar();
+      });
+    });
+
+    document.getElementById('repoHistTipo').querySelectorAll('.repo-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('repoHistTipo').querySelectorAll('.repo-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoHistTipoSel = btn.dataset.tipo;
+        renderRepoTimeline();
+      });
+    });
+
+    ['repoFiltroProvincia', 'repoFiltroNivel', 'repoFiltroDesde', 'repoFiltroHasta'].forEach(id => {
+      document.getElementById(id).addEventListener('change', aplicarFiltrosRepositorioYRenderizar);
+    });
+  }
+
+  async function cargarRepositorio() {
+    inicializarFiltrosRepositorio();
+    const lista = document.getElementById('repoLista');
+    lista.innerHTML = '<div class="empty-note">Cargando…</div>';
+    try {
+      const { ok, datos } = await llamarAPI('/api/repositorio');
+      if (!ok) {
+        lista.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudo cargar el repositorio.')}</div>`;
+        return;
+      }
+      repoDatosCompletos = datos.contratos || [];
+      poblarProvinciasRepositorio();
+      actualizarNotifDotRepo();
+      aplicarFiltrosRepositorioYRenderizar();
+      renderRepoTimeline();
+    } catch (e) {
+      lista.innerHTML = '<div class="empty-note">No se pudo conectar con el servidor.</div>';
+    }
+  }
+
+  function poblarProvinciasRepositorio() {
+    const select = document.getElementById('repoFiltroProvincia');
+    const actual = select.value;
+    const provincias = [...new Set(repoDatosCompletos.map(c => c.provincia).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas</option>' + provincias.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    if (provincias.includes(actual)) select.value = actual;
+  }
+
+  function actualizarNotifDotRepo() {
+    const dot = document.getElementById('repoNotifDot');
+    if (dot) dot.hidden = !repoDatosCompletos.some(c => c.cambios && c.cambios.tieneCambios);
+  }
+
+  function aplicarFiltrosRepositorioYRenderizar() {
+    const provincia = document.getElementById('repoFiltroProvincia').value;
+    const nivel = document.getElementById('repoFiltroNivel').value;
+    const desde = document.getElementById('repoFiltroDesde').value;
+    const hasta = document.getElementById('repoFiltroHasta').value;
+
+    let lista = repoDatosCompletos;
+    if (repoFiltroEmpresa) lista = lista.filter(c => c.empresa === repoFiltroEmpresa);
+    if (repoFiltroTipo === '__sin_clasificar__') lista = lista.filter(c => !c.tipo);
+    else if (repoFiltroTipo) lista = lista.filter(c => c.tipo === repoFiltroTipo);
+    if (provincia) lista = lista.filter(c => c.provincia === provincia);
+    if (nivel) lista = lista.filter(c => c.nivel === nivel);
+    if (desde) lista = lista.filter(c => c.fecha.slice(0, 10) >= desde);
+    if (hasta) lista = lista.filter(c => c.fecha.slice(0, 10) <= hasta);
+
+    renderRepoLista(lista);
+  }
+
+  function formatoFechaCorta(iso) {
+    return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function resumenCambiosTexto(cambios) {
+    const partes = [];
+    if (cambios.nuevas.length) partes.push(`${cambios.nuevas.length} nueva(s)`);
+    if (cambios.modificadas.length) partes.push(`${cambios.modificadas.length} modificada(s)`);
+    if (cambios.eliminadas.length) partes.push(`${cambios.eliminadas.length} eliminada(s)`);
+    return 'Cambios respecto al contrato anterior: ' + partes.join(', ');
+  }
+
+  function renderCambiosBox(cambios) {
+    const filas = [];
+    if (cambios.nuevas.length) filas.push(`<div><span class="k">Nuevas:</span> ${cambios.nuevas.map(t => escapeHtml(t)).join(', ')}</div>`);
+    if (cambios.modificadas.length) filas.push(`<div><span class="k">Modificadas:</span> ${cambios.modificadas.map(t => escapeHtml(t)).join(', ')}</div>`);
+    if (cambios.eliminadas.length) filas.push(`<div><span class="k">Eliminadas:</span> ${cambios.eliminadas.map(t => escapeHtml(t)).join(', ')}</div>`);
+    return `<div class="repo-changes-box">⚠️ Cambios respecto al contrato anterior de esta empresa y tipo:${filas.join('')}</div>`;
+  }
+
+  function renderClausulasChips(clausulas) {
+    if (!clausulas || !clausulas.length) return '<div class="empty-note" style="padding:4px 0;">No se detectaron cláusulas de riesgo.</div>';
+    return `<div>${clausulas.map(c => `<span class="repo-clause-chip">${escapeHtml(c.label)}</span>`).join('')}</div>`;
+  }
+
+  function tarjetaRepositorio(c) {
+    const nivelClase = 'nivel-' + (c.nivel || 'bajo');
+    const nivelTexto = c.nivel ? `${NIVEL_RIESGO_LABEL[c.nivel]} · ${c.puntuacion}/10` : 'Sin riesgo';
+    const tipoTexto = c.tipo ? TIPO_CONTRATO_LABEL[c.tipo] : 'Sin clasificar';
+    const tieneCambios = !!(c.cambios && c.cambios.tieneCambios);
+
+    return `
+      <div class="repo-card" data-id="${c.id}">
+        <div class="repo-card-top">
+          ${swatchHtml(c.empresa)}
+          <div class="repo-card-info">
+            <div class="repo-card-fecha">${formatoFechaCorta(c.fecha)}</div>
+            <div class="repo-card-meta">${escapeHtml(tipoTexto)} · ${escapeHtml(c.provincia || 'Provincia desconocida')}</div>
+          </div>
+          <span class="repo-risk-badge ${nivelClase}">${escapeHtml(nivelTexto)}</span>
+          ${tieneCambios ? `<span class="change-dot" title="${escapeHtml(resumenCambiosTexto(c.cambios))}"></span>` : ''}
+          <button class="repo-expand-btn" type="button">Detalle ▾</button>
+        </div>
+        <div class="repo-card-detail" hidden>
+          ${renderClausulasChips(c.clausulas)}
+          ${tieneCambios ? renderCambiosBox(c.cambios) : ''}
+          ${!c.tipo ? renderFilaClasificar(c.id, null) : ''}
+          <div>
+            <button class="repo-view-text-btn" type="button" data-id="${c.id}">Ver texto anonimizado completo</button>
+            <pre class="repo-full-text" hidden></pre>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRepoLista(lista) {
+    const cont = document.getElementById('repoLista');
+    if (!lista.length) {
+      cont.innerHTML = '<div class="empty-note">No hay contratos que coincidan con estos filtros.</div>';
+      return;
+    }
+    cont.innerHTML = lista.map(c => tarjetaRepositorio(c)).join('');
+
+    cont.querySelectorAll('.repo-expand-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const detalle = btn.closest('.repo-card').querySelector('.repo-card-detail');
+        detalle.hidden = !detalle.hidden;
+        btn.textContent = detalle.hidden ? 'Detalle ▾' : 'Detalle ▴';
+      });
+    });
+    cont.querySelectorAll('.repo-classify-row button[data-clasificar]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fila = btn.closest('.repo-classify-row');
+        const ok = await clasificarContrato(Number(btn.dataset.id), btn.dataset.clasificar, fila);
+        if (ok) cargarRepositorio();
+      });
+    });
+    cont.querySelectorAll('.repo-view-text-btn').forEach(btn => {
+      btn.addEventListener('click', () => verTextoCompletoRepositorio(Number(btn.dataset.id), btn));
+    });
+  }
+
+  async function verTextoCompletoRepositorio(id, btnEl) {
+    const pre = btnEl.nextElementSibling;
+    if (pre.textContent) {
+      pre.hidden = !pre.hidden;
+      return;
+    }
+    const textoOriginalBtn = btnEl.textContent;
+    btnEl.textContent = 'Cargando…';
+    btnEl.disabled = true;
+    try {
+      const { ok, datos } = await llamarAPI(`/api/repositorio/${id}`);
+      pre.textContent = ok ? (datos.textoAnonimizado || '(sin texto)') : ((datos && datos.error) || 'No se pudo cargar el texto.');
+      pre.hidden = false;
+    } catch (e) {
+      pre.textContent = 'No se pudo conectar con el servidor.';
+      pre.hidden = false;
+    } finally {
+      btnEl.textContent = textoOriginalBtn;
+      btnEl.disabled = false;
+    }
+  }
+
+  function renderRepoTimeline() {
+    const cont = document.getElementById('repoTimeline');
+    if (!cont) return;
+    if (!repoHistEmpresaSel) {
+      cont.innerHTML = '<div class="empty-note">Elige una compañía arriba para ver su evolución.</div>';
+      return;
+    }
+    const items = repoDatosCompletos
+      .filter(c => c.empresa === repoHistEmpresaSel && c.tipo === repoHistTipoSel)
+      .slice()
+      .sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+
+    if (!items.length) {
+      cont.innerHTML = '<div class="empty-note">No hay contratos de esta compañía y tipo todavía.</div>';
+      return;
+    }
+
+    cont.innerHTML = items.map((c, i) => {
+      const nivelTexto = c.nivel ? `${NIVEL_RIESGO_LABEL[c.nivel]} · ${c.puntuacion}/10` : 'Sin riesgo';
+      const tieneCambios = !!(c.cambios && c.cambios.tieneCambios);
+      let cuerpoCambios;
+      if (tieneCambios) cuerpoCambios = renderCambiosBox(c.cambios);
+      else if (i === 0) cuerpoCambios = '<div class="empty-note" style="padding:6px 0 0;">Primer contrato registrado de este grupo.</div>';
+      else cuerpoCambios = '<div class="empty-note" style="padding:6px 0 0;">Sin cambios respecto al anterior.</div>';
+
+      return `
+        <div class="repo-timeline-item">
+          <div class="repo-timeline-dot-col">
+            <div class="repo-timeline-dot ${tieneCambios ? 'has-changes' : ''}"></div>
+            ${i < items.length - 1 ? '<div class="repo-timeline-line"></div>' : ''}
+          </div>
+          <div class="repo-timeline-content">
+            <div class="repo-card-fecha">${formatoFechaCorta(c.fecha)}</div>
+            <div class="repo-card-meta">${escapeHtml(c.provincia || 'Provincia desconocida')} · <span class="repo-risk-badge nivel-${c.nivel || 'bajo'}">${escapeHtml(nivelTexto)}</span></div>
+            ${cuerpoCambios}
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   /* ---------- Analisis Avanzado: analisis legal con IA (Claude) ----------
