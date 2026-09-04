@@ -580,8 +580,17 @@ async function manejarChat(req, res) {
    API: analisis de contratos (protegido por sesion)
    ================================================================ */
 
-const EXTENSIONES_ANALISIS_PERMITIDAS = new Set([".pdf", ".docx", ".jpg", ".jpeg", ".png"]);
-const MIMES_ANALISIS_PERMITIDOS = new Set([analisis.MIME_PDF, analisis.MIME_DOCX, ...analisis.MIMES_IMAGEN]);
+const EXTENSIONES_ANALISIS_PERMITIDAS = new Set([
+  ".pdf", ".doc", ".docx", ".odt", ".txt", ".jpg", ".jpeg", ".png",
+]);
+const MIMES_ANALISIS_PERMITIDOS = new Set([
+  analisis.MIME_PDF,
+  analisis.MIME_DOCX,
+  analisis.MIME_DOC,
+  analisis.MIME_ODT,
+  analisis.MIME_TXT,
+  ...analisis.MIMES_IMAGEN,
+]);
 
 const uploadAnalisis = multer({
   storage: multer.memoryStorage(),
@@ -591,7 +600,7 @@ const uploadAnalisis = multer({
     if (MIMES_ANALISIS_PERMITIDOS.has(file.mimetype) || EXTENSIONES_ANALISIS_PERMITIDAS.has(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Formato no admitido. Sube un PDF, un Word (.docx) o una imagen JPG/PNG."));
+      cb(new Error("Formato no admitido. Sube un PDF, un Word (.doc/.docx), un OpenDocument (.odt), un texto (.txt) o una imagen JPG/PNG."));
     }
   },
 }).single("file");
@@ -667,6 +676,80 @@ async function apiAnalisis(req, res) {
         return enviarJSON(res, 503, { error: e.message });
       }
       enviarJSON(res, 500, { error: "No se pudo analizar el archivo: " + e.message });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* ================================================================
+   API: analisis legal avanzado con IA (protegido por sesion)
+   ================================================================ */
+
+// Se dispara automaticamente desde el frontend justo despues de subir un
+// contrato en la pestana "Analisis": extrae y anonimiza el texto igual que
+// apiAnalisis, pero en vez de la deteccion de clausulas por patrones, envia
+// el texto a Claude (analisis.analizarConIA) actuando como abogado experto
+// en contratos de seguridad privada y derecho del consumidor español, y
+// genera un informe PDF UIC con la explicacion clausula por clausula.
+async function apiAnalisisAvanzado(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  try {
+    await ejecutarMulter(req, res);
+  } catch (e) {
+    const mensaje =
+      e.code === "LIMIT_FILE_SIZE"
+        ? "El archivo supera el tamaño máximo permitido (20 MB)."
+        : e.message || "No se pudo procesar el archivo.";
+    return enviarJSON(res, 400, { error: mensaje });
+  }
+
+  if (!req.file) {
+    return enviarJSON(res, 400, { error: "No se ha recibido ningún archivo." });
+  }
+
+  try {
+    const textoOriginal = await analisis.extraerTexto(req.file.buffer, req.file.mimetype, req.file.originalname);
+    if (!textoOriginal || !textoOriginal.trim()) {
+      return enviarJSON(res, 422, {
+        error: "No se ha podido extraer texto legible del archivo. Comprueba que el documento no esté vacío, protegido o ilegible.",
+      });
+    }
+
+    const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
+    const { resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas } = await analisis.analizarConIA(textoAnonimizado);
+
+    const resumen = { resumenGeneral, puntuacionGlobal, nivelGlobal, totalAnonimizado, clausulas };
+    const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
+
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="informe-analisis-avanzado-uic.pdf"',
+      "X-Analysis-Summary": cabeceraResumen,
+      "Access-Control-Expose-Headers": "X-Analysis-Summary",
+      "Cache-Control": "no-store",
+    });
+
+    const doc = analisis.generarInformePDFAvanzado({
+      resumenGeneral,
+      puntuacionGlobal,
+      nivelGlobal,
+      clausulas,
+      totalAnonimizado,
+    });
+    doc.pipe(res);
+  } catch (e) {
+    console.error("Error en el análisis legal avanzado:", e);
+    if (!res.headersSent) {
+      if (e.ocrNoDisponible) {
+        return enviarJSON(res, 503, { error: e.message });
+      }
+      if (e instanceof analisis.AnalisisAvanzadoError) {
+        return enviarJSON(res, 502, { error: e.message });
+      }
+      enviarJSON(res, 500, { error: "No se pudo completar el análisis avanzado: " + e.message });
     } else {
       res.end();
     }
@@ -789,6 +872,7 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
+    if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
 
     if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 

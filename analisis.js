@@ -1,13 +1,18 @@
 // analisis.js
 //
 // Motor de analisis de contratos para la pestana "Analisis":
-//   1. Extraccion de texto desde PDF, Word (.docx), JPG/PNG (OCR).
+//   1. Extraccion de texto desde PDF, Word (.doc/.docx), OpenDocument (.odt),
+//      texto plano (.txt) y JPG/PNG (OCR).
 //   2. Anonimizacion de datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones,
 //      telefonos, emails, datos bancarios, nombres de empresa).
 //   3. Deteccion y puntuacion (1-10) de clausulas de riesgo habituales en
 //      contratos de alarmas (permanencia, penalizacion, renovacion automatica,
 //      subida de precio, etc.).
-//   4. Generacion del informe PDF con la plantilla corporativa de UIC.
+//   4. Analisis legal avanzado clausula por clausula con la API de Anthropic
+//      (Claude actuando como abogado experto en contratos de seguridad
+//      privada y derecho del consumidor español).
+//   5. Generacion de informes PDF con la plantilla corporativa de UIC (basico
+//      y avanzado).
 //
 // Todo el procesado ocurre en el servidor: el archivo original nunca se
 // reenvia al navegador ni se incrusta en el informe, asi que ni los datos
@@ -21,6 +26,8 @@ const mammoth = require("mammoth");
 const sharp = require("sharp");
 const tesseractOcr = require("node-tesseract-ocr");
 const PDFDocument = require("pdfkit");
+const WordExtractor = require("word-extractor");
+const JSZip = require("jszip");
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
 
@@ -37,6 +44,9 @@ const BORDE = "#dddddd";
 
 const MIME_PDF = "application/pdf";
 const MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const MIME_DOC = "application/msword";
+const MIME_ODT = "application/vnd.oasis.opendocument.text";
+const MIME_TXT = "text/plain";
 const MIMES_IMAGEN = new Set(["image/jpeg", "image/png"]);
 
 // node-tesseract-ocr invoca el binario "tesseract" del sistema operativo en
@@ -92,6 +102,32 @@ async function extraerTextoImagen(buffer) {
   }
 }
 
+// El texto de un .odt vive en content.xml dentro del zip, marcado con
+// elementos de OpenDocument (text:p, text:h, ...). Se insertan saltos de
+// linea en los limites de parrafo/salto antes de quitar las etiquetas, para
+// no perder la estructura del documento.
+async function extraerTextoOdt(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const archivoContenido = zip.file("content.xml");
+  if (!archivoContenido) {
+    throw new Error("El archivo .odt no contiene content.xml: puede estar dañado o no ser un OpenDocument válido.");
+  }
+  const xml = await archivoContenido.async("string");
+  const conSaltos = xml
+    .replace(/<text:p\b[^>]*>/g, "\n")
+    .replace(/<text:h\b[^>]*>/g, "\n")
+    .replace(/<text:tab\s*\/>/g, "\t")
+    .replace(/<text:line-break\s*\/>/g, "\n");
+  const sinEtiquetas = conSaltos.replace(/<[^>]+>/g, "");
+  return sinEtiquetas
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
 async function extraerTexto(buffer, mimetype, nombreArchivo) {
   const ext = path.extname(nombreArchivo || "").toLowerCase();
 
@@ -110,11 +146,27 @@ async function extraerTexto(buffer, mimetype, nombreArchivo) {
     return resultado.value || "";
   }
 
+  if (mimetype === MIME_DOC || ext === ".doc") {
+    const extractor = new WordExtractor();
+    const documento = await extractor.extract(buffer);
+    return documento.getBody() || "";
+  }
+
+  if (mimetype === MIME_ODT || ext === ".odt") {
+    return await extraerTextoOdt(buffer);
+  }
+
+  if (mimetype === MIME_TXT || ext === ".txt") {
+    return buffer.toString("utf-8");
+  }
+
   if (MIMES_IMAGEN.has(mimetype) || ext === ".jpg" || ext === ".jpeg" || ext === ".png") {
     return await extraerTextoImagen(buffer);
   }
 
-  throw new Error("Formato de archivo no soportado. Sube un PDF, un Word (.docx), o una imagen JPG/PNG.");
+  throw new Error(
+    "Formato de archivo no soportado. Sube un PDF, un Word (.doc/.docx), un OpenDocument (.odt), texto plano (.txt) o una imagen JPG/PNG."
+  );
 }
 
 /* ================================================================
@@ -304,7 +356,135 @@ function detectarClausulas(textoAnonimizado) {
 }
 
 /* ================================================================
-   4. Generacion del informe PDF (plantilla UIC)
+   4. Analisis legal avanzado con la API de Anthropic
+   ================================================================ */
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const MODELO_ANALISIS_AVANZADO = "claude-opus-5";
+const MAX_TOKENS_ANALISIS_AVANZADO = 16000;
+// Limite prudente de caracteres reenviados al modelo: evita contratos
+// desproporcionados (escaneos con mucho ruido OCR) y mantiene la peticion
+// dentro de un tiempo de respuesta razonable para el usuario.
+const MAX_CARACTERES_ANALISIS_AVANZADO = 60000;
+
+const SYSTEM_PROMPT_ANALISIS_LEGAL = `Eres un abogado especializado en contratos de seguridad privada, con 15 años de experiencia, y experto en derecho del consumidor español. Tu misión es analizar contratos de alarmas y seguridad para proteger a personas consumidoras, muchas de ellas mayores y sin ninguna formación jurídica.
+
+Basas tu análisis exclusivamente en la legislación española vigente:
+- Ley 5/2014, de 4 de abril, de Seguridad Privada.
+- Real Decreto Legislativo 1/2007 (Ley General para la Defensa de los Consumidores y Usuarios, LGDCU).
+- Ley 7/1998, sobre Condiciones Generales de la Contratación (LCGC).
+- Código Civil español.
+- Reglamento (UE) 2016/679 (RGPD) y Ley Orgánica 3/2018 (LOPDGDD).
+
+Analiza el contrato cláusula por cláusula. Para cada cláusula relevante que identifiques:
+- Numérala tal como aparece en el documento original (si no tiene numeración propia, asígnale un número correlativo).
+- Ponle un título muy simple y descriptivo (máximo 8 palabras).
+- Explícala en un lenguaje MUY sencillo, como si hablases con una persona mayor sin ningún conocimiento legal: frases cortas, sin tecnicismos ni jerga jurídica, yendo directa al grano de lo que significa para ella.
+- Indica la base legal española aplicable de forma concreta (ley y, si es posible, artículo). Nunca inventes un artículo o una ley que no exista: si no estás seguro del número exacto, cita solo la ley general aplicable.
+- Asigna un nivel de riesgo para la persona consumidora: "bajo", "medio", "alto" o "muy_alto", según cuánto pueda perjudicarle esa cláusula.
+
+Tu tono es siempre profesional, íntegro y protector de los intereses de la persona consumidora. Sé preciso y justo: no exageres los riesgos ni los minimices. Si una cláusula es habitual y no supone un riesgo relevante, dilo también con claridad y márcala como riesgo "bajo".
+
+Además del detalle por cláusula, entrega una valoración global del contrato (puntuación de 1 a 10, donde 10 es el riesgo más alto para la persona consumidora) y un resumen general breve en el mismo lenguaje sencillo.`;
+
+const ESQUEMA_ANALISIS_LEGAL = {
+  type: "object",
+  properties: {
+    resumenGeneral: {
+      type: "string",
+      description: "Resumen general del contrato en lenguaje muy sencillo, 2-4 frases, dirigido a una persona sin conocimientos legales.",
+    },
+    puntuacionGlobal: {
+      type: "integer",
+      minimum: 1,
+      maximum: 10,
+      description: "Puntuación global de riesgo para la persona consumidora, de 1 (mínimo) a 10 (máximo).",
+    },
+    nivelGlobal: { type: "string", enum: ["bajo", "medio", "alto", "muy_alto"] },
+    clausulas: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          numero: { type: "string", description: "Número o referencia de la cláusula tal como aparece en el contrato." },
+          titulo: { type: "string", description: "Título simple y descriptivo, máximo 8 palabras." },
+          explicacion: { type: "string", description: "Explicación en lenguaje muy sencillo, 2-5 frases." },
+          baseLegal: { type: "string", description: "Ley y, si es posible, artículo español aplicable." },
+          riesgo: { type: "string", enum: ["bajo", "medio", "alto", "muy_alto"] },
+        },
+        required: ["numero", "titulo", "explicacion", "baseLegal", "riesgo"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["resumenGeneral", "puntuacionGlobal", "nivelGlobal", "clausulas"],
+  additionalProperties: false,
+};
+
+class AnalisisAvanzadoError extends Error {}
+
+// Envia el texto (ya anonimizado) a la API de Anthropic para que Claude,
+// actuando como abogado experto, analice el contrato clausula por clausula.
+// La respuesta viene forzada a un JSON Schema (output_config.format), por lo
+// que el primer bloque de texto de la respuesta es JSON valido garantizado.
+async function analizarConIA(textoAnonimizado) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AnalisisAvanzadoError("El servidor no tiene configurada la variable de entorno ANTHROPIC_API_KEY.");
+  }
+
+  const textoRecortado = textoAnonimizado.slice(0, MAX_CARACTERES_ANALISIS_AVANZADO);
+
+  const respuesta = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: MODELO_ANALISIS_AVANZADO,
+      max_tokens: MAX_TOKENS_ANALISIS_AVANZADO,
+      system: SYSTEM_PROMPT_ANALISIS_LEGAL,
+      messages: [
+        {
+          role: "user",
+          content: `Analiza el siguiente contrato de seguridad/alarmas cláusula por cláusula:\n\n${textoRecortado}`,
+        },
+      ],
+      output_config: {
+        effort: "high",
+        format: { type: "json_schema", schema: ESQUEMA_ANALISIS_LEGAL },
+      },
+    }),
+  });
+
+  const datos = await respuesta.json();
+
+  if (!respuesta.ok) {
+    const mensajeError =
+      (datos && datos.error && datos.error.message) || `Error ${respuesta.status} al llamar a la API de Anthropic.`;
+    throw new AnalisisAvanzadoError(mensajeError);
+  }
+
+  const bloqueTexto = (datos.content || []).find((b) => b.type === "text");
+  if (!bloqueTexto) {
+    throw new AnalisisAvanzadoError("El asistente no ha devuelto un análisis interpretable.");
+  }
+
+  let analisis;
+  try {
+    analisis = JSON.parse(bloqueTexto.text);
+  } catch (e) {
+    throw new AnalisisAvanzadoError("No se pudo interpretar la respuesta del asistente.");
+  }
+
+  if (!Array.isArray(analisis.clausulas)) analisis.clausulas = [];
+  return analisis;
+}
+
+/* ================================================================
+   5. Generacion de informes PDF (plantilla UIC)
    ================================================================ */
 
 function colorNivel(nivel) {
@@ -316,19 +496,34 @@ function colorNivel(nivel) {
   }
 }
 
-// Crea el PDFDocument del informe y lo devuelve ya cerrado (doc.end() ya se
-// ha llamado); quien invoque esta funcion solo tiene que hacer doc.pipe(res).
-function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, conteosAnonimizacion, totalAnonimizado }) {
-  const doc = new PDFDocument({
-    size: "A4",
-    margin: 50,
-    bufferPages: true, // necesario para volver a paginas anteriores y anadir el pie de pagina
-    info: { Title: "Informe de análisis de contrato - UIC" },
-  });
+// Colores por nivel de riesgo (verde/amarillo/naranja/rojo) usados en el
+// informe de analisis avanzado: a diferencia de colorNivel() (solo tonos
+// rojos, para el informe basico), aqui cada nivel tiene un color distinto.
+const VERDE = "#1f9d55";
+const AMARILLO = "#c9971f";
+const NARANJA = "#d97706";
 
-  const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+function colorRiesgo(riesgo) {
+  switch (riesgo) {
+    case "bajo": return { color: VERDE, etiqueta: "Riesgo bajo" };
+    case "medio": return { color: AMARILLO, etiqueta: "Riesgo medio" };
+    case "alto": return { color: NARANJA, etiqueta: "Riesgo alto" };
+    default: return { color: ROJO_OSCURO, etiqueta: "Riesgo muy alto" };
+  }
+}
 
-  /* ---- Cabecera con logo UIC ---- */
+function etiquetaNivelGlobal(nivelGlobal) {
+  switch (nivelGlobal) {
+    case "bajo": return "Bajo";
+    case "medio": return "Medio";
+    case "alto": return "Alto";
+    default: return "Muy alto";
+  }
+}
+
+// Cabecera comun (logo UIC, titulo, fecha y linea separadora) para ambos
+// informes; devuelve la posicion Y donde empieza el cuerpo del documento.
+function dibujarCabecera(doc, anchoUtil, titulo) {
   if (fs.existsSync(LOGO_PATH)) {
     doc.image(LOGO_PATH, doc.page.margins.left, doc.page.margins.top, { width: 130 });
   }
@@ -336,7 +531,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
     .fillColor(NEGRO)
     .font("Helvetica-Bold")
     .fontSize(18)
-    .text("Informe de análisis de contrato", doc.page.margins.left + 150, doc.page.margins.top + 6, {
+    .text(titulo, doc.page.margins.left + 150, doc.page.margins.top + 6, {
       width: anchoUtil - 150,
     });
   doc
@@ -363,6 +558,44 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
     .stroke();
 
   doc.y = doc.page.margins.top + 100;
+}
+
+// Pie de pagina comun, repetido en todas las paginas ya generadas del
+// documento (se invoca justo antes de doc.end()).
+function dibujarPiePagina(doc, anchoUtil, texto) {
+  // Se escribe por debajo del margen inferior habitual del documento; si no
+  // se anula temporalmente ese margen, pdfkit interpreta la posicion como un
+  // desbordamiento y crea una pagina en blanco adicional solo para el pie.
+  const margenInferiorOriginal = doc.page.margins.bottom;
+  const rangoPaginas = doc.bufferedPageRange();
+  for (let i = 0; i < rangoPaginas.count; i++) {
+    doc.switchToPage(rangoPaginas.start + i);
+    doc.page.margins.bottom = 0;
+    doc
+      .fillColor(GRIS)
+      .font("Helvetica")
+      .fontSize(8)
+      .text(texto, doc.page.margins.left, doc.page.height - margenInferiorOriginal + 15, {
+        width: anchoUtil,
+        align: "center",
+      });
+    doc.page.margins.bottom = margenInferiorOriginal;
+  }
+}
+
+// Crea el PDFDocument del informe y lo devuelve ya cerrado (doc.end() ya se
+// ha llamado); quien invoque esta funcion solo tiene que hacer doc.pipe(res).
+function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, conteosAnonimizacion, totalAnonimizado }) {
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: 50,
+    bufferPages: true, // necesario para volver a paginas anteriores y anadir el pie de pagina
+    info: { Title: "Informe de análisis de contrato - UIC" },
+  });
+
+  const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  dibujarCabecera(doc, anchoUtil, "Informe de análisis de contrato");
 
   /* ---- Nota de anonimizacion ---- */
   doc
@@ -477,27 +710,145 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
     doc.x = doc.page.margins.left;
   });
 
-  /* ---- Pie de pagina ---- */
-  // Se escribe por debajo del margen inferior habitual del documento; si no
-  // se anula temporalmente ese margen, pdfkit interpreta la posicion como un
-  // desbordamiento y crea una pagina en blanco adicional solo para el pie.
-  const margenInferiorOriginal = doc.page.margins.bottom;
-  const rangoPaginas = doc.bufferedPageRange();
-  for (let i = 0; i < rangoPaginas.count; i++) {
-    doc.switchToPage(rangoPaginas.start + i);
-    doc.page.margins.bottom = 0;
+  dibujarPiePagina(
+    doc,
+    anchoUtil,
+    "Informe generado automáticamente por SegurPanel (UIC). Análisis orientativo, no constituye asesoramiento legal."
+  );
+
+  doc.end();
+  return doc;
+}
+
+// Informe legal avanzado: analisis clausula por clausula generado por Claude
+// (analizarConIA), con explicacion en lenguaje sencillo, base legal y una
+// barra de color por nivel de riesgo (verde/amarillo/naranja/rojo).
+function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas, totalAnonimizado }) {
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: 50,
+    bufferPages: true,
+    info: { Title: "Informe de análisis legal avanzado - UIC" },
+  });
+
+  const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  dibujarCabecera(doc, anchoUtil, "Análisis legal avanzado del contrato");
+
+  doc
+    .fillColor(GRIS)
+    .font("Helvetica-Oblique")
+    .fontSize(9)
+    .text(
+      (totalAnonimizado > 0
+        ? `Antes de este análisis se anonimizaron automáticamente ${totalAnonimizado} dato(s) sensible(s) del documento original. `
+        : "") +
+        "Análisis elaborado con asistencia de inteligencia artificial (Claude, de Anthropic), basado en la Ley 5/2014 de Seguridad Privada, la LGDCU, la LCGC, el Código Civil español y el RGPD/LOPDGDD. Es un análisis orientativo y no sustituye el asesoramiento de un abogado colegiado.",
+      { width: anchoUtil }
+    );
+  doc.moveDown(1.2);
+
+  /* ---- Puntuacion global ---- */
+  const cajaY = doc.y;
+  const cajaAlto = 70;
+  doc.roundedRect(doc.page.margins.left, cajaY, anchoUtil, cajaAlto, 6).fillColor(GRIS_CLARO).fill();
+
+  doc
+    .fillColor(NEGRO)
+    .font("Helvetica-Bold")
+    .fontSize(30)
+    .text(`${puntuacionGlobal}/10`, doc.page.margins.left + 20, cajaY + 15);
+
+  const nivelTexto = etiquetaNivelGlobal(nivelGlobal);
+  const { color: colorGlobal } = colorRiesgo(nivelGlobal);
+  const badgeAncho = 110;
+  const badgeX = doc.page.margins.left + 150;
+  const badgeY = cajaY + 22;
+  doc.roundedRect(badgeX, badgeY, badgeAncho, 26, 13).fillColor(colorGlobal).fill();
+  doc
+    .fillColor("#ffffff")
+    .font("Helvetica-Bold")
+    .fontSize(11)
+    .text(`Riesgo ${nivelTexto}`, badgeX, badgeY + 7, { width: badgeAncho, align: "center" });
+
+  doc
+    .fillColor(NEGRO)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(resumenGeneral || "", doc.page.margins.left + 290, cajaY + 12, { width: anchoUtil - 300 });
+
+  doc.x = doc.page.margins.left;
+  doc.y = cajaY + cajaAlto + 20;
+
+  /* ---- Listado de clausulas ---- */
+  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(13).text("Cláusulas analizadas", doc.page.margins.left);
+  doc.moveDown(0.5);
+
+  if (clausulas.length === 0) {
     doc
       .fillColor(GRIS)
       .font("Helvetica")
-      .fontSize(8)
-      .text(
-        "Informe generado automáticamente por SegurPanel (UIC). Análisis orientativo, no constituye asesoramiento legal.",
-        doc.page.margins.left,
-        doc.page.height - margenInferiorOriginal + 15,
-        { width: anchoUtil, align: "center" }
-      );
-    doc.page.margins.bottom = margenInferiorOriginal;
+      .fontSize(10)
+      .text("El asistente no ha identificado cláusulas individuales. Revisa el documento completo manualmente.", doc.page.margins.left);
   }
+
+  const anchoBarra = 5;
+  const anchoTexto = anchoUtil - anchoBarra - 12;
+
+  clausulas.forEach((clausula) => {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - 100) doc.addPage();
+
+    const inicioBloque = doc.y;
+    const xTexto = doc.page.margins.left + anchoBarra + 12;
+    const { color: colorBarra, etiqueta } = colorRiesgo(clausula.riesgo);
+
+    doc
+      .fillColor(NEGRO)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(`Cláusula ${clausula.numero} · ${clausula.titulo}`, xTexto, inicioBloque, { width: anchoTexto - 90 });
+
+    doc
+      .fillColor(colorBarra)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(etiqueta, doc.page.width - doc.page.margins.right - 90, inicioBloque + 1, { width: 90, align: "right" });
+
+    doc.x = xTexto;
+    doc.y = inicioBloque + 18;
+    doc.fillColor(GRIS).font("Helvetica").fontSize(9.5).text(clausula.explicacion, xTexto, doc.y, { width: anchoTexto });
+
+    doc.x = xTexto;
+    doc.moveDown(0.2);
+    doc
+      .fillColor("#888888")
+      .font("Helvetica-Oblique")
+      .fontSize(8.5)
+      .text(`Base legal: ${clausula.baseLegal}`, xTexto, doc.y, { width: anchoTexto });
+
+    const finBloque = doc.y + doc.currentLineHeight() + 6;
+
+    // Barra de color vertical a la izquierda del bloque, representando el
+    // nivel de riesgo de la clausula (verde/amarillo/naranja/rojo).
+    doc.rect(doc.page.margins.left, inicioBloque, anchoBarra, finBloque - inicioBloque).fillColor(colorBarra).fill();
+
+    doc.x = doc.page.margins.left;
+    doc.y = finBloque;
+    doc
+      .moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+      .strokeColor(BORDE)
+      .lineWidth(0.5)
+      .stroke();
+    doc.moveDown(0.6);
+    doc.x = doc.page.margins.left;
+  });
+
+  dibujarPiePagina(
+    doc,
+    anchoUtil,
+    "Informe generado por SegurPanel (UIC) con asistencia de IA. Análisis orientativo, no constituye asesoramiento legal."
+  );
 
   doc.end();
   return doc;
@@ -507,9 +858,15 @@ module.exports = {
   extraerTexto,
   anonimizarTexto,
   detectarClausulas,
+  analizarConIA,
   generarInformePDF,
+  generarInformePDFAvanzado,
   OcrNoDisponibleError,
+  AnalisisAvanzadoError,
   MIME_PDF,
   MIME_DOCX,
+  MIME_DOC,
+  MIME_ODT,
+  MIME_TXT,
   MIMES_IMAGEN,
 };

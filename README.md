@@ -1,11 +1,17 @@
 # segurpanel
 SegurPanel - App portátil para alarmas
 
-## IA Assistant (API real de Anthropic)
+## IA Assistant y Análisis Avanzado (API real de Anthropic)
 
-El chat de la pestaña "IA Assistant" está conectado a la API real de Anthropic
-(modelo `claude-haiku-4-5-20251001`) a través de un pequeño servidor local
-(`server.js`) que mantiene la clave de API fuera del navegador.
+El chat de la pestaña "IA Assistant" (modelo `claude-haiku-4-5-20251001`) y el
+análisis legal cláusula por cláusula de la pestaña "Análisis Avanzado"
+(modelo `claude-opus-5`) están conectados a la API real de Anthropic a través
+de un pequeño servidor local (`server.js`) que mantiene la clave de API fuera
+del navegador. El Análisis Avanzado se dispara automáticamente al subir un
+contrato en la pestaña "Análisis": el asistente actúa como un abogado experto
+en contratos de seguridad privada y derecho del consumidor español, y genera
+un informe PDF UIC con el detalle de cada cláusula (explicación en lenguaje
+sencillo, base legal aplicable y nivel de riesgo).
 
 **1. Configura tu clave de API** (una sola vez; la clave nunca se guarda en
 este repositorio ni se envía al navegador):
@@ -33,7 +39,7 @@ npm start
 directamente con doble clic: el chat necesita hablar con `server.js`).
 
 Si `ANTHROPIC_API_KEY` no está configurada, la app sigue funcionando pero el
-chat mostrará un aviso pidiendo que la configures.
+chat y el Análisis Avanzado mostrarán un aviso pidiendo que la configures.
 
 ## Autenticación y gestión de usuarios
 
@@ -86,7 +92,7 @@ dejarte entrar. Borra `data/SUPER_ADMIN_INICIAL.txt` después de usarla.
 | --- | --- |
 | **Super Admin** | Todo + gestión de usuarios (`/admin`): aprobar/rechazar solicitudes, cambiar roles, dar de alta/baja, asignar claves temporales. |
 | **Admin** | Todo lo mismo que Super Admin **excepto** `/admin` (gestión de usuarios). |
-| **Retención** | Todas las pestañas en **solo lectura**: no puede Armar/Desarmar ni analizar contratos (los controles aparecen bloqueados con un aviso). Sí puede usar el IA Assistant. |
+| **Retención** | No tiene acceso a las pestañas de Análisis / Análisis Avanzado. El resto de pestañas, en **solo lectura** (los controles aparecen bloqueados con un aviso). Sí puede usar el IA Assistant. |
 
 `/admin` solo es accesible para Super Admin; cualquier otra sesión que
 intente entrar es redirigida a `/`.

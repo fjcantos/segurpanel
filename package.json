@@ -10,11 +10,13 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
     "mammoth": "^1.12.2",
     "multer": "^2.3.0",
     "node-tesseract-ocr": "^2.2.1",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.20.2",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "word-extractor": "^1.0.4"
   }
 }
