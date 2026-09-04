@@ -992,13 +992,25 @@
   <!-- ===== ANALISIS ===== -->
   <section id="analisis" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis de contratos</h2>
-    <p class="section-sub">Arrastra un contrato (.txt) para detectar automáticamente cláusulas relevantes. El análisis se hace en tu navegador, el archivo no se envía a ningún servidor.</p>
+    <p class="section-sub">Sube un contrato (PDF, Word o una foto/escaneo en JPG o PNG). El archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe. Al terminar se descarga un PDF con la plantilla UIC.</p>
 
     <div class="dropzone" id="dropzone">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       <div class="dropzone-title">Suelta el archivo aquí o haz clic para seleccionarlo</div>
-      <div class="dropzone-sub">Admite .txt para análisis automático de texto</div>
-      <input type="file" id="fileInput" accept=".txt,.pdf,.doc,.docx">
+      <div class="dropzone-sub">Admite PDF, Word (.docx) y fotos/escaneos JPG o PNG · máx. 20 MB</div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.jpg,.jpeg,.png">
+    </div>
+
+    <div class="risk-summary" id="analisisRiskSummary">
+      <div class="risk-top">
+        <div class="risk-score" id="analisisRiskScoreValue">0<span>/10</span></div>
+        <div class="risk-level-badge" id="analisisRiskLevelBadge">—</div>
+      </div>
+      <div class="risk-gauge-track">
+        <div class="risk-gauge-marker" id="analisisRiskMarker" style="left:0%"></div>
+      </div>
+      <div class="risk-scale-labels"><span>1 · Bajo</span><span>5 · Medio</span><span>10 · Muy alto</span></div>
+      <div class="risk-recommendation" id="analisisRiskRecommendation"></div>
     </div>
 
     <div class="analysis-results" id="analysisResults"></div>
@@ -1247,20 +1259,13 @@
   document.getElementById('offersUpdated').textContent = 'Actualizado: ' + todayStr;
   document.getElementById('pricesUpdated').textContent = 'Datos revisados: ' + todayStr + '.';
 
-  /* ---------- Analisis: drag & drop ---------- */
+  /* ---------- Analisis: subida al servidor, anonimizacion y PDF ---------- */
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
   const resultsEl = document.getElementById('analysisResults');
+  const analisisRiskSummary = document.getElementById('analisisRiskSummary');
+  const EXTENSIONES_ANALISIS_ADMITIDAS = /\.(pdf|docx|jpe?g|png)$/i;
   let docsAnalyzed = 0;
-
-  const CLAUSE_RULES = [
-    { re: /permanencia|per[ií]odo m[ií]nimo/i, label: 'Cláusula de permanencia', level: 'warn' },
-    { re: /penalizaci[oó]n|indemnizaci[oó]n por baja/i, label: 'Penalización por baja anticipada', level: 'danger' },
-    { re: /renovaci[oó]n autom[aá]tica|pr[oó]rroga t[aá]cita/i, label: 'Renovación automática', level: 'warn' },
-    { re: /subida de precio|revisi[oó]n de tarifa|actualizaci[oó]n anual/i, label: 'Revisión / subida de precio', level: 'info' },
-    { re: /propiedad del equipo|cesi[oó]n de uso|comodato/i, label: 'Titularidad del equipo', level: 'info' },
-    { re: /preaviso/i, label: 'Plazo de preaviso para cancelar', level: 'info' }
-  ];
 
   dropzone.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
@@ -1276,39 +1281,108 @@
     if (file) handleFile(file);
   });
 
-  function handleFile(file) {
+  // Decodifica la cabecera X-Analysis-Summary (JSON en base64, codificado
+  // como UTF-8 en el servidor) respetando acentos y enes.
+  function decodeBase64Utf8(b64) {
+    const binario = atob(b64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  async function handleFile(file) {
+    if (!EXTENSIONES_ANALISIS_ADMITIDAS.test(file.name)) {
+      resultsEl.innerHTML = '<div class="empty-note">Formato no admitido. Sube un PDF, un Word (.docx) o una imagen JPG/PNG.</div>';
+      analisisRiskSummary.classList.remove('show');
+      return;
+    }
+
     docsAnalyzed++;
     document.getElementById('statDocsAnalyzed').textContent = docsAnalyzed;
 
     const sizeKb = (file.size / 1024).toFixed(1);
-    resultsEl.innerHTML = `<div class="file-chip">📄 ${escapeHtml(file.name)} · ${sizeKb} KB</div>`;
+    const chip = `<div class="file-chip">📄 ${escapeHtml(file.name)} · ${sizeKb} KB</div>`;
+    resultsEl.innerHTML = chip + '<div class="empty-note">Analizando el documento en el servidor (extracción de texto, anonimización de datos sensibles y detección de cláusulas)… puede tardar unos segundos, especialmente con imágenes escaneadas.</div>';
+    analisisRiskSummary.classList.remove('show');
 
-    if (/\.txt$/i.test(file.name)) {
-      const reader = new FileReader();
-      reader.onload = () => renderClauses(reader.result);
-      reader.readAsText(file);
-    } else {
-      const note = document.createElement('div');
-      note.className = 'empty-note';
-      note.textContent = 'La vista previa automática solo está disponible para archivos .txt. Convierte el contrato a texto plano o revísalo manualmente.';
-      resultsEl.appendChild(note);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const respuesta = await fetch('/api/analisis', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData,
+      });
+
+      if (respuesta.status === 401) {
+        window.location.href = '/';
+        return;
+      }
+
+      if (!respuesta.ok) {
+        let mensaje = 'No se ha podido analizar el archivo.';
+        try {
+          const datos = await respuesta.json();
+          if (datos && datos.error) mensaje = datos.error;
+        } catch (e) { /* respuesta no era JSON */ }
+        resultsEl.innerHTML = chip + `<div class="empty-note">${escapeHtml(mensaje)}</div>`;
+        return;
+      }
+
+      const cabeceraResumen = respuesta.headers.get('X-Analysis-Summary');
+      const blob = await respuesta.blob();
+
+      // El informe PDF se descarga automaticamente al terminar el analisis.
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'informe-analisis-uic.pdf';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      if (cabeceraResumen) {
+        renderResumenAnalisis(chip, JSON.parse(decodeBase64Utf8(cabeceraResumen)));
+      } else {
+        resultsEl.innerHTML = chip + '<div class="empty-note">Informe PDF descargado. No se ha podido mostrar el resumen en pantalla.</div>';
+      }
+    } catch (e) {
+      resultsEl.innerHTML = chip + '<div class="empty-note">No se ha podido conectar con el servidor para analizar el archivo. Comprueba que node server.js está en marcha.</div>';
     }
   }
 
-  function renderClauses(text) {
-    const found = [];
-    CLAUSE_RULES.forEach(rule => {
-      const match = text.match(rule.re);
-      if (match) {
-        const idx = match.index;
-        const start = Math.max(0, idx - 50);
-        const end = Math.min(text.length, idx + match[0].length + 50);
-        const snippet = (start > 0 ? '…' : '') + text.slice(start, end).replace(/\s+/g, ' ').trim() + (end < text.length ? '…' : '');
-        found.push({ ...rule, snippet });
-      }
-    });
+  function renderResumenAnalisis(chip, resumen) {
+    const score = resumen.puntuacionGlobal;
+    const clausulas = resumen.clausulas || [];
 
-    if (found.length === 0) {
+    let levelColor;
+    if (score <= 3) levelColor = '#1f9d55';
+    else if (score <= 6) levelColor = '#b8860b';
+    else if (score <= 8) levelColor = '#d97706';
+    else levelColor = '#c0392b';
+
+    document.getElementById('analisisRiskScoreValue').innerHTML = score + '<span>/10</span>';
+    const badge = document.getElementById('analisisRiskLevelBadge');
+    badge.textContent = 'Riesgo ' + resumen.nivel;
+    badge.style.background = levelColor + '22';
+    badge.style.color = levelColor;
+    document.getElementById('analisisRiskMarker').style.left = ((score - 1) / 9 * 100).toFixed(1) + '%';
+
+    const recEl = document.getElementById('analisisRiskRecommendation');
+    recEl.textContent = clausulas.length === 0
+      ? 'No se han detectado cláusulas de riesgo relevantes. Aun así, revisa el contrato completo antes de firmar.'
+      : `Se recomienda revisar y negociar antes de firmar: ${clausulas.map(c => c.label).join(', ')}. Se ha descargado el informe PDF con el detalle de cada cláusula.`;
+    analisisRiskSummary.classList.add('show');
+
+    let html = chip;
+    if (resumen.totalAnonimizado > 0) {
+      html += `<div class="file-chip">🔒 ${resumen.totalAnonimizado} dato(s) sensible(s) anonimizado(s) automáticamente</div>`;
+    }
+    resultsEl.innerHTML = html;
+
+    if (clausulas.length === 0) {
       const note = document.createElement('div');
       note.className = 'empty-note';
       note.textContent = 'No se han detectado cláusulas relevantes automáticamente. Revisa el documento manualmente.';
@@ -1316,10 +1390,11 @@
       return;
     }
 
-    found.forEach(item => {
+    clausulas.forEach(item => {
+      const level = item.score >= 8 ? 'danger' : item.score >= 5 ? 'warn' : 'info';
       const div = document.createElement('div');
-      div.className = 'clause-item level-' + item.level;
-      div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)}</div><div class="clause-snippet">"${escapeHtml(item.snippet)}"</div></div>`;
+      div.className = 'clause-item level-' + level;
+      div.innerHTML = `<div><div class="clause-label">${escapeHtml(item.label)} <span style="font-weight:400;color:var(--muted);">(${item.score}/10)</span></div><div class="clause-snippet">"${escapeHtml(item.fragmento)}"</div></div>`;
       resultsEl.appendChild(div);
     });
   }

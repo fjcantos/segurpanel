@@ -24,8 +24,10 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
 const db = require("./db");
 const auth = require("./auth");
+const analisis = require("./analisis");
 
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -575,6 +577,100 @@ async function manejarChat(req, res) {
 }
 
 /* ================================================================
+   API: analisis de contratos (protegido por sesion)
+   ================================================================ */
+
+const EXTENSIONES_ANALISIS_PERMITIDAS = new Set([".pdf", ".docx", ".jpg", ".jpeg", ".png"]);
+const MIMES_ANALISIS_PERMITIDOS = new Set([analisis.MIME_PDF, analisis.MIME_DOCX, ...analisis.MIMES_IMAGEN]);
+
+const uploadAnalisis = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (MIMES_ANALISIS_PERMITIDOS.has(file.mimetype) || EXTENSIONES_ANALISIS_PERMITIDAS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Formato no admitido. Sube un PDF, un Word (.docx) o una imagen JPG/PNG."));
+    }
+  },
+}).single("file");
+
+function ejecutarMulter(req, res) {
+  return new Promise((resolve, reject) => {
+    uploadAnalisis(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+async function apiAnalisis(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  try {
+    await ejecutarMulter(req, res);
+  } catch (e) {
+    const mensaje =
+      e.code === "LIMIT_FILE_SIZE"
+        ? "El archivo supera el tamaño máximo permitido (20 MB)."
+        : e.message || "No se pudo procesar el archivo.";
+    return enviarJSON(res, 400, { error: mensaje });
+  }
+
+  if (!req.file) {
+    return enviarJSON(res, 400, { error: "No se ha recibido ningún archivo." });
+  }
+
+  try {
+    const textoOriginal = await analisis.extraerTexto(req.file.buffer, req.file.mimetype, req.file.originalname);
+    if (!textoOriginal || !textoOriginal.trim()) {
+      return enviarJSON(res, 422, {
+        error: "No se ha podido extraer texto legible del archivo. Comprueba que el documento no esté vacío, protegido o ilegible.",
+      });
+    }
+
+    const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
+    const { clausulas, puntuacionGlobal, nivel } = analisis.detectarClausulas(textoAnonimizado);
+
+    const resumen = {
+      puntuacionGlobal,
+      nivel,
+      totalAnonimizado,
+      clausulas: clausulas.map((c) => ({
+        id: c.id,
+        label: c.label,
+        score: c.score,
+        descripcion: c.descripcion,
+        fragmento: c.fragmento,
+      })),
+    };
+    const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
+
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="informe-analisis-uic.pdf"',
+      "X-Analysis-Summary": cabeceraResumen,
+      "Access-Control-Expose-Headers": "X-Analysis-Summary",
+      "Cache-Control": "no-store",
+    });
+
+    const doc = analisis.generarInformePDF({
+      clausulas,
+      puntuacionGlobal,
+      nivel,
+      totalAnonimizado,
+    });
+    doc.pipe(res);
+  } catch (e) {
+    console.error("Error al analizar el contrato:", e);
+    if (!res.headersSent) {
+      enviarJSON(res, 500, { error: "No se pudo analizar el archivo: " + e.message });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* ================================================================
    Estaticos de la PWA
    ================================================================ */
 
@@ -689,6 +785,7 @@ async function manejarPeticion(req, res) {
     }
 
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
+    if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
 
     if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 
