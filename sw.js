@@ -11,7 +11,7 @@
 // Al cambiar cualquier archivo cacheado hay que subir VERSION: eso crea una
 // cache nueva y borra la anterior en el evento activate.
 
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `segurpanel-${VERSION}`;
 
 const SHELL = [
@@ -128,6 +128,53 @@ async function cachePrimero(event) {
     return respuestaSinConexion(event.request);
   }
 }
+
+// ---------- Notificaciones push (ver push.js y /api/push/* en server.js) ----------
+//
+// El payload lo manda el servidor como JSON: { titulo, cuerpo, etiqueta, url }.
+// `etiqueta` (tag) hace que una segunda notificacion del mismo tipo (p.ej.
+// dos avisos seguidos de "alianzas-pendientes") reemplace a la anterior en
+// vez de amontonarse.
+self.addEventListener("push", (event) => {
+  let datos = {};
+  try {
+    datos = event.data ? event.data.json() : {};
+  } catch (e) {
+    datos = { titulo: "SegurPanel", cuerpo: event.data ? event.data.text() : "" };
+  }
+
+  const titulo = datos.titulo || "SegurPanel";
+  const opciones = {
+    body: datos.cuerpo || "",
+    tag: datos.etiqueta || "segurpanel",
+    icon: "./icons/icon-192.png",
+    badge: "./icons/icon-192.png",
+    data: { url: datos.url || "./" },
+  };
+
+  event.waitUntil(self.registration.showNotification(titulo, opciones));
+});
+
+// Al hacer clic en la notificacion: si ya hay una pestana de SegurPanel
+// abierta, la enfoca en vez de abrir una nueva.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "./";
+
+  event.waitUntil(
+    (async () => {
+      const clientes = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const cliente of clientes) {
+        if (new URL(cliente.url).origin === self.location.origin) {
+          cliente.focus();
+          if ("navigate" in cliente) cliente.navigate(url);
+          return;
+        }
+      }
+      await self.clients.openWindow(url);
+    })()
+  );
+});
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;

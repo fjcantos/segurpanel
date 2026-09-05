@@ -27,9 +27,11 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const JSZip = require("jszip");
+const ExcelJS = require("exceljs");
 const db = require("./db");
 const auth = require("./auth");
 const analisis = require("./analisis");
+const push = require("./push");
 
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -325,6 +327,40 @@ async function apiChangePassword(req, res) {
   enviarJSON(res, 200, { usuario: usuarioPublico(usuarioActualizado) }, {
     "Set-Cookie": auth.cookieSesion(req, token),
   });
+}
+
+/* ================================================================
+   API: notificaciones push (protegido por sesion)
+   ================================================================ */
+
+async function apiPushClavePublica(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+  enviarJSON(res, 200, { publicKey: push.clavePublicaVapid });
+}
+
+async function apiPushSuscribir(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const endpoint = typeof cuerpo.endpoint === "string" ? cuerpo.endpoint : "";
+  const claves = cuerpo.keys || {};
+  const p256dh = typeof claves.p256dh === "string" ? claves.p256dh : "";
+  const authKey = typeof claves.auth === "string" ? claves.auth : "";
+
+  if (!endpoint || !p256dh || !authKey) {
+    return enviarJSON(res, 400, { error: "Suscripción push incompleta." });
+  }
+
+  db.guardarSuscripcionPush({ userId: sesion.usuario.id, endpoint, p256dh, auth: authKey });
+  enviarJSON(res, 200, { ok: true });
 }
 
 /* ================================================================
@@ -727,6 +763,17 @@ async function apiAnalisis(req, res) {
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
+    // Envio "fire and forget": no debe retrasar ni poder romper la
+    // descarga del PDF, que es la respuesta real de este endpoint.
+    push
+      .enviarNotificacionAUsuario(sesion.usuario.id, {
+        titulo: "Análisis completado",
+        cuerpo: "Tu contrato ya está analizado. Consulta el informe para ver el detalle.",
+        etiqueta: "analisis-completado",
+        url: "/",
+      })
+      .catch((e) => console.error("Error enviando notificación push de análisis:", e));
+
     res.writeHead(200, {
       "Content-Type": "application/pdf",
       "Content-Disposition": 'attachment; filename="informe-analisis-uic.pdf"',
@@ -871,6 +918,15 @@ async function apiAnalisisAvanzado(req, res) {
     const resumen = { resumenGeneral, puntuacionGlobal, nivelGlobal, totalAnonimizado, clausulas };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
+    push
+      .enviarNotificacionAUsuario(sesion.usuario.id, {
+        titulo: "Análisis avanzado completado",
+        cuerpo: "Tu análisis legal avanzado ya está listo. Consulta el informe para ver el detalle.",
+        etiqueta: "analisis-completado",
+        url: "/",
+      })
+      .catch((e) => console.error("Error enviando notificación push de análisis avanzado:", e));
+
     res.writeHead(200, {
       "Content-Type": "application/pdf",
       "Content-Disposition": 'attachment; filename="informe-analisis-avanzado-uic.pdf"',
@@ -996,6 +1052,126 @@ async function apiActividadTab(req, res) {
 
   db.registrarVisitaTab({ userId: sesion.usuario.id, tab });
   enviarJSON(res, 200, { ok: true });
+}
+
+/* ================================================================
+   API: exportar a Excel (protegido por sesion, cualquier rol autenticado)
+   ================================================================ */
+//
+// Endpoint generico y reutilizable desde las pestañas Comparador,
+// Inteligencia y Estadisticas: el cliente ya tiene los datos que esta
+// mostrando en pantalla (tabla del comparador, graficas de inteligencia,
+// resumen/provincias/clausulas de estadisticas) y solo pide que se
+// formateen como .xlsx con el logo y los colores corporativos; el servidor
+// no vuelve a consultar la base de datos aqui, solo construye el fichero.
+// Por eso no hace falta restringir por rol mas alla de exigir sesion: no
+// expone nada que el cliente no tuviera ya delante.
+
+const COLOR_VERISURE_BURDEOS = "FF8B0026";
+const COLOR_VERISURE_BURDEOS_SUAVE = "FFF2E3E7";
+const RUTA_LOGO_UIC = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
+const MAX_FILAS_EXPORT = 5000;
+const MAX_COLUMNAS_EXPORT = 30;
+const MAX_HOJAS_EXPORT = 6;
+
+function hojaExportValida(hoja) {
+  return (
+    hoja &&
+    typeof hoja.titulo === "string" &&
+    hoja.titulo.trim().length > 0 &&
+    Array.isArray(hoja.columnas) &&
+    hoja.columnas.length > 0 &&
+    hoja.columnas.length <= MAX_COLUMNAS_EXPORT &&
+    hoja.columnas.every((c) => typeof c === "string") &&
+    Array.isArray(hoja.filas) &&
+    hoja.filas.length <= MAX_FILAS_EXPORT &&
+    hoja.filas.every((f) => Array.isArray(f))
+  );
+}
+
+async function apiExportarExcel(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const nombreArchivo =
+    typeof cuerpo.nombreArchivo === "string" && cuerpo.nombreArchivo.trim()
+      ? cuerpo.nombreArchivo.trim().replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 80)
+      : "segurpanel-export";
+  const hojas = Array.isArray(cuerpo.hojas) ? cuerpo.hojas.slice(0, MAX_HOJAS_EXPORT) : [];
+
+  if (hojas.length === 0 || !hojas.every(hojaExportValida)) {
+    return enviarJSON(res, 400, { error: "Datos de exportación inválidos." });
+  }
+
+  try {
+    const libro = new ExcelJS.Workbook();
+    libro.creator = "SegurPanel";
+    libro.created = new Date();
+
+    let logoId = null;
+    try {
+      logoId = libro.addImage({ filename: RUTA_LOGO_UIC, extension: "png" });
+    } catch (e) {
+      logoId = null; // sin el logo tambien se exporta correctamente
+    }
+
+    const fechaExportacion = new Date().toLocaleString("es-ES");
+    const FILA_CABECERA = 5; // deja hueco (filas 1-4) para el logo + titulo + fecha
+
+    hojas.forEach((hoja) => {
+      const ws = libro.addWorksheet(hoja.titulo.slice(0, 31)); // limite de Excel para nombres de hoja
+
+      if (logoId !== null) {
+        ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 130, height: 74 } });
+      }
+      ws.getRow(1).getCell(3).value = "SegurPanel";
+      ws.getRow(1).getCell(3).font = { bold: true, size: 14, color: { argb: COLOR_VERISURE_BURDEOS } };
+      ws.getRow(2).getCell(3).value = `Exportado: ${fechaExportacion}`;
+      ws.getRow(2).getCell(3).font = { italic: true, size: 9, color: { argb: "FF5B6B7C" } };
+
+      const filaCabecera = ws.getRow(FILA_CABECERA);
+      hoja.columnas.forEach((titulo, i) => {
+        const celda = filaCabecera.getCell(i + 1);
+        celda.value = titulo;
+        celda.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_VERISURE_BURDEOS } };
+        celda.alignment = { vertical: "middle", horizontal: "left" };
+      });
+      filaCabecera.commit();
+
+      hoja.filas.forEach((fila, i) => {
+        const r = ws.addRow(fila);
+        if (i % 2 === 1) {
+          r.eachCell((celda) => {
+            celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_VERISURE_BURDEOS_SUAVE } };
+          });
+        }
+      });
+
+      hoja.columnas.forEach((titulo, i) => {
+        const anchoMax = hoja.filas.reduce((m, f) => Math.max(m, String(f[i] ?? "").length), titulo.length);
+        ws.getColumn(i + 1).width = Math.min(50, Math.max(12, anchoMax + 2));
+      });
+    });
+
+    const buffer = await libro.xlsx.writeBuffer();
+    res.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${nombreArchivo}.xlsx"`,
+      "Cache-Control": "no-store",
+    });
+    res.end(Buffer.from(buffer));
+  } catch (e) {
+    console.error("Error generando el Excel:", e);
+    if (!res.headersSent) enviarJSON(res, 500, { error: "No se pudo generar el archivo Excel." });
+  }
 }
 
 /* ================================================================
@@ -1210,6 +1386,22 @@ function agruparAlianzasPorPeriodo(lista, ahora) {
   return grupos;
 }
 
+// Fire and forget: nunca debe retrasar ni romper la respuesta del endpoint
+// de sincronizacion (sync/nueva), que ademas puede recibir un lote de varias
+// alianzas de golpe y solo debe avisar una vez por lote, no una vez por
+// alianza.
+function notificarAlianzasNuevas(insertadas) {
+  if (insertadas <= 0) return;
+  push
+    .enviarNotificacionARoles([auth.ROLES.SUPER_ADMIN, auth.ROLES.ADMIN], {
+      titulo: "Nuevas alianzas pendientes",
+      cuerpo: `${insertadas} alianza${insertadas === 1 ? "" : "s"} nueva${insertadas === 1 ? "" : "s"} en espera de revisión.`,
+      etiqueta: "alianzas-pendientes",
+      url: "/",
+    })
+    .catch((e) => console.error("Error enviando notificación push de alianzas:", e));
+}
+
 async function apiAlianzasGet(req, res) {
   const sesion = exigirSesion(req, res);
   if (!sesion) return;
@@ -1291,6 +1483,7 @@ async function apiAlianzasSync(req, res) {
   }
 
   const insertadas = db.insertarAlianzasPendientes(validas);
+  notificarAlianzasNuevas(insertadas);
   enviarJSON(res, 200, { insertadas, recibidas: lista.length, validas: validas.length });
 }
 
@@ -1402,6 +1595,7 @@ async function apiAlianzasNueva(req, res) {
   };
 
   const insertadas = db.insertarAlianzasPendientes([alianza]);
+  notificarAlianzasNuevas(insertadas);
   enviarJSON(res, 200, {
     ok: true,
     insertada: insertadas > 0,
@@ -1510,6 +1704,11 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/auth/logout") return await apiLogout(req, res);
     if (req.method === "POST" && ruta === "/api/auth/change-password") return await apiChangePassword(req, res);
     if (req.method === "GET" && ruta === "/api/auth/me") return await apiMe(req, res);
+
+    if (req.method === "GET" && ruta === "/api/push/public-key") return await apiPushClavePublica(req, res);
+    if (req.method === "POST" && ruta === "/api/push/subscribe") return await apiPushSuscribir(req, res);
+
+    if (req.method === "POST" && ruta === "/api/export/excel") return await apiExportarExcel(req, res);
 
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);

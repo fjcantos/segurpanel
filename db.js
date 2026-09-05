@@ -103,11 +103,21 @@ db.exec(`
     created_at  TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    endpoint    TEXT NOT NULL UNIQUE,
+    p256dh      TEXT NOT NULL,
+    auth        TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
   CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
+  CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 `);
 
 // Migracion defensiva: contract_stats se creo en una version anterior sin
@@ -493,6 +503,47 @@ function conteoVisitasPorUsuarioYTab() {
     .all();
 }
 
+/* ---------- Suscripciones push (notificaciones web) ---------- */
+//
+// Un mismo usuario puede tener varias suscripciones (una por navegador o
+// dispositivo); `endpoint` es unico porque lo genera el navegador y ya
+// identifica de forma univoca esa suscripcion concreta. Si el usuario ya
+// tenia una suscripcion con ese mismo endpoint (recarga de pagina, permiso
+// vuelto a conceder), se actualiza en vez de duplicarla.
+
+function guardarSuscripcionPush({ userId, endpoint, p256dh, auth }) {
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET
+       user_id = excluded.user_id,
+       p256dh = excluded.p256dh,
+       auth = excluded.auth`
+  ).run(userId, endpoint, p256dh, auth, ahoraISO());
+}
+
+// Se llama cuando el envio a un endpoint falla con 404/410: el navegador ya
+// no reconoce esa suscripcion (desinstalada, permiso revocado, perfil
+// borrado...) y hay que dejar de intentar enviarle nada.
+function borrarSuscripcionPush(endpoint) {
+  db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
+}
+
+function listarSuscripcionesPorUsuario(userId) {
+  return db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId);
+}
+
+function listarSuscripcionesPorRoles(roles) {
+  const marcadores = roles.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT ps.* FROM push_subscriptions ps
+       JOIN users u ON u.id = ps.user_id
+       WHERE u.role IN (${marcadores}) AND u.status = 'active'`
+    )
+    .all(...roles);
+}
+
 module.exports = {
   db,
   DIR_DATOS,
@@ -535,4 +586,8 @@ module.exports = {
   registrarVisitaTab,
   actividadUsuariosActivos,
   conteoVisitasPorUsuarioYTab,
+  guardarSuscripcionPush,
+  borrarSuscripcionPush,
+  listarSuscripcionesPorUsuario,
+  listarSuscripcionesPorRoles,
 };

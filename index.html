@@ -567,6 +567,24 @@
   .btn-discard { background: var(--fill-subtle); color: var(--muted); }
   .btn-discard:hover { background: var(--fill-subtle-2); color: var(--text); }
 
+  .btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent-dark);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 16px;
+  }
+  .btn-export:hover:not(:disabled) { background: var(--accent); color: #fff; }
+  .btn-export:disabled { opacity: 0.6; cursor: not-allowed; }
+
   .period-block { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
   .period-header {
     width: 100%;
@@ -1397,6 +1415,8 @@
 
     <p class="mobile-hint">Desliza la tabla en horizontal para ver todas las columnas.</p>
 
+    <button type="button" class="btn-export" id="btnExportComparador">⬇ Exportar a Excel</button>
+
     <div class="compare-legend" id="compareLegend" hidden></div>
 
     <div class="table-wrap">
@@ -1777,6 +1797,8 @@
     <h2 class="section-title">Inteligencia de mercado</h2>
     <p class="section-sub">Panel de referencia con datos ilustrativos a partir del comparador. Actualiza los valores con datos reales cuando los tengas.</p>
 
+    <button type="button" class="btn-export" id="btnExportInteligencia">⬇ Exportar a Excel</button>
+
     <div class="compare-legend" id="intelLegend" hidden></div>
 
     <div class="intel-grid">
@@ -1804,6 +1826,8 @@
   <section id="estadisticas" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Estadísticas</h2>
     <p class="section-sub">Panel interno de actividad del equipo: contratos analizados, distribución geográfica por compañía detectada, cláusulas más frecuentes y uso de la aplicación. No incluye ningún dato personal de clientes.</p>
+
+    <button type="button" class="btn-export" id="btnExportEstadisticas">⬇ Exportar a Excel</button>
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -2074,6 +2098,98 @@
     let datos = {};
     try { datos = await respuesta.json(); } catch (e) { /* respuesta vacia */ }
     return { ok: respuesta.ok, status: respuesta.status, datos };
+  }
+
+  /* ---------- Notificaciones push (ver push.js y /api/push/* en el servidor) ----------
+     Se pide permiso justo despues de iniciar sesion (ver iniciarSesionUI).
+     Si el navegador no soporta Push, el usuario lo deniega o falla la
+     suscripcion por cualquier motivo, se ignora en silencio: nunca debe
+     bloquear el uso normal de la app. */
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  async function configurarNotificacionesPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return;
+    try {
+      const permiso = await Notification.requestPermission();
+      if (permiso !== 'granted') return;
+
+      const registro = await navigator.serviceWorker.ready;
+      let suscripcion = await registro.pushManager.getSubscription();
+      if (!suscripcion) {
+        const { ok, datos } = await llamarAPI('/api/push/public-key');
+        if (!ok || !datos.publicKey) return;
+        suscripcion = await registro.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(datos.publicKey),
+        });
+      }
+      await llamarAPI('/api/push/subscribe', { method: 'POST', body: JSON.stringify(suscripcion.toJSON()) });
+    } catch (e) {
+      console.warn('No se pudo activar las notificaciones push:', e);
+    }
+  }
+
+  /* ---------- Exportar a Excel (Comparador, Inteligencia, Estadisticas) ----------
+     El servidor no vuelve a calcular nada: solo recibe {titulo, columnas,
+     filas} por cada hoja (ya extraidos/calculados aqui) y los formatea como
+     .xlsx con el logo y los colores corporativos (ver apiExportarExcel en
+     server.js). */
+  async function exportarExcel(boton, nombreArchivo, hojas) {
+    const textoOriginal = boton ? boton.textContent : '';
+    if (boton) { boton.disabled = true; boton.textContent = 'Generando…'; }
+    try {
+      const respuesta = await fetch('/api/export/excel', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombreArchivo, hojas }),
+      });
+      if (!respuesta.ok) {
+        let datos = {};
+        try { datos = await respuesta.json(); } catch (e) { /* respuesta vacia */ }
+        alert(datos.error || 'No se pudo generar el archivo Excel.');
+        return;
+      }
+      const blob = await respuesta.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${nombreArchivo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('No se pudo conectar con el servidor para generar el Excel.');
+    } finally {
+      if (boton) { boton.disabled = false; boton.textContent = textoOriginal; }
+    }
+  }
+
+  // Lee una tabla del DOM y la convierte a {columnas, filas}: las celdas que
+  // solo contienen un swatch de color de empresa (sin texto visible, ver
+  // .company-swatch) usan su atributo data-company como valor de la celda.
+  function extraerTablaParaExcel(tabla) {
+    const columnas = Array.from(tabla.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    const filas = Array.from(tabla.querySelectorAll('tbody tr')).map(tr =>
+      Array.from(tr.children).map(td => {
+        const swatch = td.querySelector('[data-company]');
+        if (swatch) return swatch.dataset.company;
+        return td.textContent.trim();
+      })
+    );
+    return { columnas, filas };
+  }
+
+  function nombreArchivoConFecha(base) {
+    return `${base}-${new Date().toISOString().slice(0, 10)}`;
   }
 
   // Colores corporativos por empresa de alarmas. Fuente unica usada para
@@ -2642,6 +2758,7 @@
     cargarAlianzas();
     cargarResumenInicio();
     registrarVisitaTab('inicio');
+    configurarNotificacionesPush();
   }
 
   function pintarBienvenidaInicio(usuario) {
@@ -3351,6 +3468,34 @@
   renderHBarChart('equipoChart', EQUIPO_DATA, '%');
   renderMarginChart();
 
+  document.getElementById('btnExportComparador').addEventListener('click', (e) => {
+    const { columnas, filas } = extraerTablaParaExcel(document.getElementById('compareTable'));
+    exportarExcel(e.currentTarget, nombreArchivoConFecha('segurpanel-comparador'), [
+      { titulo: 'Comparador', columnas, filas },
+    ]);
+  });
+
+  document.getElementById('btnExportInteligencia').addEventListener('click', (e) => {
+    const avg = MARGIN_DATA.reduce((s, d) => s + d.value, 0) / MARGIN_DATA.length;
+    exportarExcel(e.currentTarget, nombreArchivoConFecha('segurpanel-inteligencia'), [
+      {
+        titulo: 'Cuota mensual media',
+        columnas: ['Empresa', 'Cuota mensual (€)'],
+        filas: PRICE_DATA.map(d => [d.label, d.value]),
+      },
+      {
+        titulo: 'Equipos más solicitados',
+        columnas: ['Equipo', 'Demanda (%)'],
+        filas: EQUIPO_DATA.map(d => [d.label, d.value]),
+      },
+      {
+        titulo: 'Margen competitivo',
+        columnas: ['Empresa', 'Cuota mensual (€)', 'Diferencia vs. media (%)'],
+        filas: MARGIN_DATA.map(d => [d.label, d.value, Number((((d.value - avg) / avg) * 100).toFixed(1))]),
+      },
+    ]);
+  });
+
   /* ---------- Estadisticas (solo super_admin y admin) ----------
      El mapa es un SVG real de las 52 provincias (datos amCharts, ver nota
      de atribucion en la propia pestana), incrustado como constante para
@@ -3580,6 +3725,47 @@
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="empty-note">No se pudo conectar con el servidor.</td></tr>';
     }
   }
+
+  document.getElementById('btnExportEstadisticas').addEventListener('click', async (e) => {
+    const boton = e.currentTarget;
+    const textoOriginal = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Cargando datos…';
+    try {
+      const { ok, datos } = await llamarAPI('/api/estadisticas');
+      if (!ok) { alert((datos && datos.error) || 'No se pudieron cargar las estadísticas.'); return; }
+
+      const r = datos.resumen || {};
+      const resumenFilas = [
+        ['Contratos analizados', r.totalContratos ?? 0],
+        ['Contratos analizados hoy', r.contratosHoy ?? 0],
+        ['Alertas activas hoy', r.alertasActivas ?? 0],
+        ['Riesgo promedio (1-10)', r.riesgoPromedio != null ? Number(r.riesgoPromedio.toFixed(2)) : '—'],
+        ['Cláusula más frecuente', r.clausulaMasFrecuente ? r.clausulaMasFrecuente.label : '—'],
+        ['Usuarios activos', r.usuariosActivos ?? 0],
+      ];
+
+      boton.textContent = 'Generando…';
+      await exportarExcel(null, nombreArchivoConFecha('segurpanel-estadisticas'), [
+        { titulo: 'Resumen', columnas: ['Indicador', 'Valor'], filas: resumenFilas },
+        {
+          titulo: 'Provincias',
+          columnas: ['Provincia', 'Compañía dominante', 'Contratos'],
+          filas: (datos.provincias || []).map(p => [p.provincia, p.empresaDominante, p.total]),
+        },
+        {
+          titulo: 'Cláusulas frecuentes',
+          columnas: ['Cláusula', 'Apariciones'],
+          filas: (datos.clausulas || []).map(c => [c.label, c.count]),
+        },
+      ]);
+    } catch (e2) {
+      alert('No se pudo conectar con el servidor.');
+    } finally {
+      boton.disabled = false;
+      boton.textContent = textoOriginal;
+    }
+  });
 
   function registrarVisitaTab(tab) {
     fetch('/api/actividad/tab', {
