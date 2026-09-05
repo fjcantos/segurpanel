@@ -356,11 +356,11 @@ function fechaUltimaAlianza() {
 // clausulas de riesgo ya calculadas, y el texto YA ANONIMIZADO completo
 // (Repositorio): nunca el texto original ni ningun dato personal, porque la
 // anonimizacion ya sustituyo nombres/DNI/IBAN/telefono/email/direccion/CP
-// antes de que este texto se genere. `tipo` (hogar/negocio) lo elige la
-// persona usuaria ANTES de analizar (selector en la pestana Analisis) y se
-// guarda ya en el INSERT; si por lo que sea llega vacio (contratos antiguos,
-// o el flujo de subida directa a Repositorio), se puede rellenar despues
-// desde la pestana Analisis o Repositorio.
+// antes de que este texto se genere. `tipo` (hogar/negocio) se detecta
+// automaticamente por palabras clave (ver detectarTipoContrato en
+// analisis.js) y se guarda ya en el INSERT; si no hay certeza (o para
+// contratos antiguos de antes de esta deteccion), llega vacio y se puede
+// rellenar despues desde la pestana Analisis o Repositorio.
 // tab_visits registra que un usuario ha abierto una pestana de la app, para
 // poder mostrar "pestañas mas usadas" en la actividad del equipo.
 

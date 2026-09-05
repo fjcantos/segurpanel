@@ -667,11 +667,12 @@ async function apiAnalisis(req, res) {
       fragmento: c.fragmento,
     }));
 
-    // El tipo (hogar/negocio) lo elige la persona usuaria en un selector
-    // ANTES de lanzar el analisis (ver index.html), y llega aqui como campo
-    // de texto del propio formulario multipart junto al archivo.
-    const tipoRecibido = typeof req.body.tipo === "string" ? req.body.tipo.trim().toLowerCase() : "";
-    const tipo = tipoRecibido === "hogar" || tipoRecibido === "negocio" ? tipoRecibido : null;
+    // El tipo (hogar/negocio) se detecta automaticamente por palabras clave
+    // en el texto ORIGINAL (antes de anonimizar: esas palabras no son un dato
+    // sensible). Si hay empate (incluido 0-0, sin ninguna palabra clave) no
+    // hay certeza y se guarda sin tipo: el frontend ofrece entonces elegirlo
+    // a mano via /api/repositorio/:id/tipo (ver renderFilaClasificar).
+    const { tipo, certeza: tipoDetectadoConCerteza } = analisis.detectarTipoContrato(textoOriginal);
 
     const contratoId = db.registrarContratoAnalizado({
       provincia,
@@ -690,6 +691,7 @@ async function apiAnalisis(req, res) {
       totalAnonimizado,
       clausulas: clausulasCompletas,
       tipo,
+      tipoDetectadoConCerteza,
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 

@@ -664,44 +664,6 @@
   .dropzone-sub { color: var(--muted); font-size: 0.85rem; }
   #fileInput { display: none; }
 
-  .tipo-picker {
-    margin-top: 16px;
-    background: var(--card);
-    border: 1px solid var(--accent);
-    border-radius: 14px;
-    padding: 18px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .tipo-picker-text { font-weight: 700; color: var(--heading); font-size: 0.95rem; }
-  .tipo-picker-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .tipo-picker-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #fff;
-    font-weight: 700;
-    font-size: 0.86rem;
-    padding: 10px 18px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-  .tipo-picker-btn svg { width: 16px; height: 16px; }
-  .tipo-picker-btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-  .tipo-picker-cancel {
-    border: none;
-    background: none;
-    color: var(--muted);
-    font-size: 0.82rem;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-
   .analysis-results { margin-top: 22px; }
   .file-chip {
     display: inline-flex;
@@ -1713,28 +1675,13 @@
   <!-- ===== ANALISIS ===== -->
   <section id="analisis" class="tab-content" data-restricted="retencion">
     <h2 class="section-title">Análisis de contratos</h2>
-    <p class="section-sub">Sube uno o varios contratos a la vez (PDF, Word, OpenDocument, texto plano o fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno). Antes de analizarlos indicarás si son de Hogar o de Negocio, para guardarlos ya clasificados en el Repositorio. Cada archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe. Tanto con un solo archivo como con varios, cada uno descarga su PDF y pasa además automáticamente por el análisis legal avanzado en la pestaña «Análisis Avanzado»; con varios archivos se procesan uno por uno y al terminar se descarga un ZIP con todos los informes.</p>
+    <p class="section-sub">Sube uno o varios contratos a la vez (PDF, Word, OpenDocument, texto plano o fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno). Cada archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe, y se detecta automáticamente si el contrato es de Hogar o de Negocio para guardarlo ya clasificado en el Repositorio; solo si no hay certeza se te pedirá indicarlo tú. Tanto con un solo archivo como con varios, cada uno descarga su PDF y pasa además automáticamente por el análisis legal avanzado en la pestaña «Análisis Avanzado»; con varios archivos se procesan uno por uno y al terminar se descarga un ZIP con todos los informes.</p>
 
     <div class="dropzone" id="dropzone">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       <div class="dropzone-title">Suelta uno o varios archivos aquí o haz clic para seleccionarlos</div>
       <div class="dropzone-sub">Admite PDF, Word (.doc/.docx), OpenDocument (.odt), texto (.txt) y fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno</div>
       <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.odt,.txt,.jpg,.jpeg,.png" multiple>
-    </div>
-
-    <div class="tipo-picker" id="tipoPicker" hidden>
-      <div class="tipo-picker-text" id="tipoPickerText">¿Es un contrato de Hogar o de Negocio?</div>
-      <div class="tipo-picker-actions">
-        <button type="button" class="tipo-picker-btn" data-tipo="hogar">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l7-6 7 6"/><path d="M5 9v7h10V9"/></svg>
-          Hogar
-        </button>
-        <button type="button" class="tipo-picker-btn" data-tipo="negocio">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="8" width="12" height="9" rx="1"/><path d="M7 8V5a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
-          Negocio
-        </button>
-        <button type="button" class="tipo-picker-cancel" id="tipoPickerCancel">Cancelar</button>
-      </div>
     </div>
 
     <div class="batch-queue" id="batchQueue" hidden>
@@ -2615,49 +2562,14 @@
     if (files.length) handleFiles(files);
   });
 
-  // Selector de Hogar/Negocio: se muestra ANTES de analizar (y por tanto
-  // antes de guardar nada en el Repositorio), tanto para un archivo como
-  // para un lote. `archivosPendientesTipo` guarda los archivos ya validados
-  // en espera de que la persona usuaria elija el tipo.
-  const tipoPicker = document.getElementById('tipoPicker');
-  const tipoPickerText = document.getElementById('tipoPickerText');
-  let archivosPendientesTipo = null;
-
-  function pedirTipoAntesDeAnalizar(files) {
-    archivosPendientesTipo = files;
-    tipoPickerText.textContent = files.length === 1
-      ? '¿Es un contrato de Hogar o de Negocio? Se guardará en el Repositorio con el tipo que elijas.'
-      : `¿Estos ${files.length} contratos son de Hogar o de Negocio? Se guardarán en el Repositorio con el tipo que elijas.`;
-    tipoPicker.hidden = false;
-  }
-
-  tipoPicker.querySelectorAll('.tipo-picker-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const files = archivosPendientesTipo;
-      const tipo = btn.dataset.tipo;
-      archivosPendientesTipo = null;
-      tipoPicker.hidden = true;
-      if (!files) return;
-      if (files.length === 1) {
-        batchQueue.hidden = true;
-        handleFile(files[0], tipo);
-      } else {
-        resultsEl.innerHTML = '';
-        analisisRiskSummary.classList.remove('show');
-        procesarLote(files, tipo);
-      }
-    });
-  });
-  document.getElementById('tipoPickerCancel').addEventListener('click', () => {
-    archivosPendientesTipo = null;
-    tipoPicker.hidden = true;
-  });
-
-  // Punto de entrada comun para clic-en-dropzone y arrastrar-y-soltar. Antes
-  // de analizar nada se pide el tipo (Hogar/Negocio); solo al elegirlo se
-  // continua con el flujo de siempre: un archivo (analisis basico + analisis
-  // avanzado con IA en paralelo) o un lote (cola uno detras de otro, cada
-  // uno con su propio analisis avanzado, y ZIP final con todos los PDF).
+  // Punto de entrada comun para clic-en-dropzone y arrastrar-y-soltar. El
+  // tipo (Hogar/Negocio) ya no se pide de antemano: el servidor lo detecta
+  // por palabras clave del propio contrato (ver detectarTipoContrato en
+  // analisis.js) y solo si no hay certeza se pide a mano tras el analisis
+  // (ver renderFilaClasificar). Con un archivo se conserva el flujo de
+  // siempre (analisis basico + analisis avanzado con IA en paralelo); con
+  // varios se procesan en cola, uno detras de otro, y al final se descarga
+  // un ZIP con todos los PDF.
   function handleFiles(files) {
     if (files.length > MAX_ARCHIVOS_LOTE) {
       batchQueue.hidden = true;
@@ -2665,7 +2577,14 @@
       resultsEl.innerHTML = `<div class="empty-note">Solo puedes analizar hasta ${MAX_ARCHIVOS_LOTE} archivos a la vez. Has seleccionado ${files.length}: quita alguno e inténtalo de nuevo.</div>`;
       return;
     }
-    pedirTipoAntesDeAnalizar(files);
+    if (files.length === 1) {
+      batchQueue.hidden = true;
+      handleFile(files[0]);
+      return;
+    }
+    resultsEl.innerHTML = '';
+    analisisRiskSummary.classList.remove('show');
+    procesarLote(files);
   }
 
   function formatoTamano(bytes) {
@@ -2703,13 +2622,17 @@
   // Fila "Clasificar: Hogar/Negocio" reutilizada tanto en la cola de lote
   // como tras un analisis de un solo archivo (requisito de Repositorio: el
   // contrato se guarda automaticamente y aqui se ofrece clasificarlo).
+  // El tipo (Hogar/Negocio) se detecta automaticamente por palabras clave del
+  // propio contrato (ver detectarTipoContrato en analisis.js); esta fila solo
+  // pide elegirlo a mano cuando el servidor no ha tenido certeza (empate de
+  // palabras clave, incluido 0-0) o para contratos antiguos aun sin tipo.
   function renderFilaClasificar(contratoId, tipoAsignado, extraClass) {
     const clase = 'repo-classify-row' + (extraClass ? ' ' + extraClass : '');
     if (tipoAsignado) {
       return `<div class="${clase}"><span style="color:var(--green-dark);">Guardado en el Repositorio como ${tipoAsignado === 'hogar' ? 'Hogar' : 'Negocio'}.</span></div>`;
     }
     return `<div class="${clase}">
-      <span>Guardado en el Repositorio. Clasifícalo:</span>
+      <span>No hemos podido determinar el tipo de contrato automáticamente. Indícalo:</span>
       <button type="button" data-id="${contratoId}" data-clasificar="hogar">Hogar</button>
       <button type="button" data-id="${contratoId}" data-clasificar="negocio">Negocio</button>
     </div>`;
@@ -2743,7 +2666,7 @@
     error: 'Error',
   };
 
-  async function procesarLote(files, tipo) {
+  async function procesarLote(files) {
     const cola = files.map(file => {
       let error = null;
       if (!EXTENSIONES_ANALISIS_ADMITIDAS.test(file.name)) {
@@ -2778,7 +2701,6 @@
       try {
         const formData = new FormData();
         formData.append('file', item.file);
-        formData.append('tipo', tipo);
         const respuesta = await fetch('/api/analisis', {
           method: 'POST',
           credentials: 'same-origin',
@@ -2803,10 +2725,13 @@
           const blob = await respuesta.blob();
           const nombrePdf = `${String(i + 1).padStart(2, '0')}-${item.file.name.replace(/\.[^.]+$/, '')}.pdf`;
           pdfsGenerados.push({ nombre: nombrePdf, blob });
-          item.tipoAsignado = tipo;
           item.estado = 'completado';
           if (cabeceraResumen) {
-            try { item.contratoId = JSON.parse(decodeBase64Utf8(cabeceraResumen)).contratoId; } catch (e) { /* ignora */ }
+            try {
+              const resumen = JSON.parse(decodeBase64Utf8(cabeceraResumen));
+              item.contratoId = resumen.contratoId;
+              item.tipoAsignado = resumen.tipo;
+            } catch (e) { /* ignora */ }
           }
           registrarContratoAnalizadoHoy();
         }
@@ -2868,7 +2793,7 @@
     return new TextDecoder('utf-8').decode(bytes);
   }
 
-  async function handleFile(file, tipo) {
+  async function handleFile(file) {
     if (!EXTENSIONES_ANALISIS_ADMITIDAS.test(file.name)) {
       resultsEl.innerHTML = '<div class="empty-note">Formato no admitido. Sube un PDF, un Word (.doc/.docx), un OpenDocument (.odt), un texto (.txt) o una imagen JPG/PNG.</div>';
       analisisRiskSummary.classList.remove('show');
@@ -2890,7 +2815,6 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('tipo', tipo);
 
       const respuesta = await fetch('/api/analisis', {
         method: 'POST',

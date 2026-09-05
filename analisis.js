@@ -390,6 +390,59 @@ function extraerProvinciaYEmpresa(textoOriginal) {
 }
 
 /* ================================================================
+   2c. Deteccion automatica de Hogar/Negocio
+   ================================================================ */
+//
+// Cuenta cuantas palabras clave de cada lista aparecen en el contrato (texto
+// original, antes de anonimizar: estas palabras no son datos sensibles). Gana
+// el lado con mas coincidencias; en empate (incluido 0-0) no hay certeza y el
+// Repositorio se guarda sin tipo, para que la persona usuaria lo indique a
+// mano (ver renderFilaClasificar en index.html).
+
+const PALABRAS_HOGAR = ["hogar", "vivienda", "residencial", "domicilio", "piso", "casa", "apartamento"];
+const PALABRAS_NEGOCIO = ["negocio", "comercio", "empresa", "local comercial", "oficina", "industria", "nave"];
+
+// "Empresa" es la palabra clave de Negocio menos fiable: casi todos los
+// contratos hablan de "la empresa" para referirse a la PROPIA empresa de
+// seguridad que presta el servicio (autorreferencia), lo que no dice nada
+// sobre si el cliente es un hogar o un negocio. Antes de contar palabras
+// clave se elimina esa autorreferencia (nombre conocido de la empresa de
+// alarmas, o "la/esta/dicha empresa" seguida en la misma frase de un verbo
+// habitual de prestacion de servicio) para que "empresa" solo puntue cuando
+// el texto habla realmente del negocio del cliente.
+const AUTORREFERENCIA_EMPRESA_SEGURIDAD = /\b(?:la|esta|dicha)\s+empresa\b(?=[^.]{0,40}\b(?:se compromete|instalar[aá]|prestar[aá]|facilitar[aá]|suministrar[aá]|garantiza|realizar[aá]|mantendr[aá]|de seguridad|de alarmas)\b)/gi;
+
+function limpiarAutorreferenciasEmpresaSeguridad(textoOriginal) {
+  let resultado = textoOriginal;
+  EMPRESAS_CONOCIDAS.forEach((nombre) => {
+    const re = new RegExp("\\b" + nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
+    resultado = resultado.replace(re, "");
+  });
+  return resultado.replace(AUTORREFERENCIA_EMPRESA_SEGURIDAD, "");
+}
+
+function contarPalabrasClave(textoOriginal, palabras) {
+  return palabras.reduce((total, palabra) => {
+    const re = new RegExp("\\b" + palabra.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
+    const coincidencias = textoOriginal.match(re);
+    return total + (coincidencias ? coincidencias.length : 0);
+  }, 0);
+}
+
+function detectarTipoContrato(textoOriginal) {
+  const textoParaDeteccion = limpiarAutorreferenciasEmpresaSeguridad(textoOriginal);
+  const puntosHogar = contarPalabrasClave(textoParaDeteccion, PALABRAS_HOGAR);
+  const puntosNegocio = contarPalabrasClave(textoParaDeteccion, PALABRAS_NEGOCIO);
+  if (puntosHogar === puntosNegocio) return { tipo: null, certeza: false, puntosHogar, puntosNegocio };
+  return {
+    tipo: puntosHogar > puntosNegocio ? "hogar" : "negocio",
+    certeza: true,
+    puntosHogar,
+    puntosNegocio,
+  };
+}
+
+/* ================================================================
    3. Deteccion y puntuacion de clausulas de riesgo
    ================================================================ */
 
@@ -1006,6 +1059,7 @@ module.exports = {
   anonimizarTexto,
   anonimizarResumenIA,
   extraerProvinciaYEmpresa,
+  detectarTipoContrato,
   detectarClausulas,
   analizarConIA,
   generarInformePDF,
