@@ -197,18 +197,37 @@ const REGLAS_ANONIMIZACION = [
   {
     id: "direccion",
     etiqueta: "[DIRECCIÓN]",
-    re: /\b(?:Calle|C\/|Avda\.?|Avenida|Plaza|Pza\.?|Paseo|Polígono|Poligono|Camino|Urbanización|Urbanizacion)\s+[^\n,;]{3,60}/gi,
+    re: /\b(?:Calle|C\/|Avda\.?|Avenida|Plaza|Pza\.?|Paseo|Pº\.?|Polígono|Poligono|Camino|Urbanización|Urbanizacion|Vía|Via|Ronda|Travesía|Travesia|Glorieta|Bloque)\s+[^\n,;]{3,60}/gi,
+  },
+  // Piso/puerta/planta (p.ej. "3º B", "Piso 2, Puerta 4") que suelen acompañar
+  // a una direccion ya anonimizada por la regla anterior.
+  {
+    id: "piso_puerta",
+    etiqueta: "[PISO/PUERTA]",
+    re: /\b(?:Piso|Puerta|Planta|Escalera|Portal)\s*[:.\-]?\s*[0-9A-Za-zºª]{1,4}\b/gi,
   },
   // Codigo postal + poblacion (p.ej. "28045 Madrid")
   { id: "cp", etiqueta: "[CÓDIGO POSTAL]", re: /\b\d{5}\b(?=\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})/g },
-  // Nombres de persona tras etiquetas habituales de contrato
+  // Numero de cliente/abonado/poliza/contrato (identificador interno que
+  // permite rastrear a la persona aunque el nombre ya se haya anonimizado)
+  {
+    id: "referencia",
+    etiqueta: "[REF]",
+    re: /(?:N[uú]mero|N[ºo]\.?)\s+de\s+(?:cliente|abonado|p[oó]liza|contrato|expediente|instalaci[oó]n)(\s*:?\s*)([A-Za-z0-9/\-]{3,20})/gi,
+    grupoReemplazo: 2,
+  },
+  // Nombres de persona tras etiquetas habituales de contrato. Admite
+  // apellidos compuestos con conectores en minuscula ("de", "del", "la"...).
   {
     id: "nombre",
     etiqueta: "[NOMBRE]",
-    re: /(?:D\.|Dña\.|Sr\.|Sra\.|Nombre y apellidos|Nombre del cliente|Nombre del titular|Titular|Abonado|Representante legal|Cliente)(\s*:?\s*)([A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+){1,4})/g,
+    re: /(?:D\.|Dña\.|Don|Doña|Sr\.|Sra\.|Nombre y apellidos|Nombre del cliente|Nombre del titular|Nombre del contratante|Titular|Abonado|Asegurado|Contratante|Suscriptor|Representante legal|Representado por|En representaci[oó]n de|Firmado por|Apellidos y nombre|Cliente)(\s*:?\s*)([A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+(?:\s+(?:de|del|de la|de los|de las|la|las|los|y)\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+|\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+){1,4})/g,
     grupoReemplazo: 2,
   },
   // Razon social generica ("... S.L.", "... S.A.", "... S.L.U.", "... S.C.")
+  // que no sea una de las empresas de alarmas ya cubiertas por
+  // EMPRESAS_CONOCIDAS (p.ej. el negocio del propio cliente, o un
+  // subcontratista).
   {
     id: "empresa",
     etiqueta: "[EMPRESA]",
@@ -216,9 +235,37 @@ const REGLAS_ANONIMIZACION = [
   },
 ];
 
+// La empresa de seguridad/alarmas contratante recibe una etiqueta propia,
+// distinta de [EMPRESA] (razon social generica de terceros), para que quede
+// igual de anonima pero identificable como "la empresa de seguridad" en el
+// informe sin revelar cual es.
+const ETIQUETA_EMPRESA_SEGURIDAD = "[EMPRESA_SEGURIDAD]";
+
 function anonimizarTexto(texto) {
   let resultado = texto;
   const conteos = {};
+
+  // Las empresas de alarmas conocidas se sustituyen ANTES que la regla
+  // generica de razon social ("... S.L./S.A."), para que su [EMPRESA_SEGURIDAD]
+  // no acabe pisada por la etiqueta generica [EMPRESA] si el nombre tambien
+  // termina en "S.L."/"S.A." (p.ej. "Sector Alarm España S.L.U.").
+  EMPRESAS_CONOCIDAS.forEach((nombreEmpresa) => {
+    // Admite hasta 2 palabras con mayuscula inicial entre el nombre conocido
+    // y el sufijo de forma societaria (p.ej. "Sector Alarm España, S.L.U."),
+    // para no dejar ese sufijo suelto a merced de la regla generica [EMPRESA].
+    const re = new RegExp(
+      "\\b" +
+        nombreEmpresa.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+        "\\b(?:(?:\\s+[A-ZÁÉÍÓÚÑ][\\wÀ-ÿ]*){0,2}[\\s,]+S\\.?\\s?(?:L\\.?U?\\.?|A\\.?U?\\.?|C\\.?|COOP\\.?)\\.?)?",
+      "gi"
+    );
+    let n = 0;
+    resultado = resultado.replace(re, () => {
+      n++;
+      return ETIQUETA_EMPRESA_SEGURIDAD;
+    });
+    if (n > 0) conteos.empresaSeguridad = (conteos.empresaSeguridad || 0) + n;
+  });
 
   REGLAS_ANONIMIZACION.forEach((regla) => {
     let n = 0;
@@ -235,18 +282,28 @@ function anonimizarTexto(texto) {
     if (n > 0) conteos[regla.id] = n;
   });
 
-  EMPRESAS_CONOCIDAS.forEach((nombreEmpresa) => {
-    const re = new RegExp("\\b" + nombreEmpresa.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
-    let n = 0;
-    resultado = resultado.replace(re, () => {
-      n++;
-      return "[EMPRESA]";
-    });
-    if (n > 0) conteos.empresa = (conteos.empresa || 0) + n;
-  });
-
   const totalAnonimizado = Object.values(conteos).reduce((s, v) => s + v, 0);
   return { texto: resultado, conteos, total: totalAnonimizado };
+}
+
+// Segunda pasada de anonimizacion, pensada para el TEXTO YA GENERADO por la
+// IA en el analisis avanzado (resumenGeneral y cada campo de cada clausula):
+// aunque la IA solo recibe texto ya anonimizado como entrada, esta pasada
+// actua como red de seguridad por si reformulase o reintrodujese algun dato
+// que la primera pasada no hubiera cubierto, para que el informe final sea
+// siempre 100% anonimo.
+function anonimizarResumenIA(resumen) {
+  const limpiar = (valor) => (typeof valor === "string" ? anonimizarTexto(valor).texto : valor);
+  return {
+    ...resumen,
+    resumenGeneral: limpiar(resumen.resumenGeneral),
+    clausulas: (resumen.clausulas || []).map((c) => ({
+      ...c,
+      titulo: limpiar(c.titulo),
+      explicacion: limpiar(c.explicacion),
+      baseLegal: limpiar(c.baseLegal),
+    })),
+  };
 }
 
 /* ================================================================
@@ -468,7 +525,12 @@ Analiza el contrato cláusula por cláusula. Para cada cláusula relevante que i
 
 Tu tono es siempre profesional, íntegro y protector de los intereses de la persona consumidora. Sé preciso y justo: no exageres los riesgos ni los minimices. Si una cláusula es habitual y no supone un riesgo relevante, dilo también con claridad y márcala como riesgo "bajo".
 
-Además del detalle por cláusula, entrega una valoración global del contrato (puntuación de 1 a 10, donde 10 es el riesgo más alto para la persona consumidora) y un resumen general breve en el mismo lenguaje sencillo.`;
+Además del detalle por cláusula, entrega una valoración global del contrato (puntuación de 1 a 10, donde 10 es el riesgo más alto para la persona consumidora) y un resumen general breve en el mismo lenguaje sencillo.
+
+ANONIMATO ABSOLUTO (regla innegociable): el texto que recibes ya ha sido anonimizado automáticamente y contiene marcadores como [NOMBRE], [DNI/NIF], [DIRECCIÓN], [TELÉFONO], [EMAIL], [IBAN], [EMPRESA_SEGURIDAD], etc. en lugar de los datos reales.
+- Nunca intentes adivinar, inferir o reconstruir el dato real oculto tras un marcador (nombre, empresa, dirección, DNI...). Si necesitas referirte a él, usa el propio marcador o una descripción genérica (p.ej. "la empresa de seguridad", "la persona titular").
+- Si por cualquier motivo detectas en el texto un nombre propio, una razón social, un teléfono, un email, un DNI/NIE/CIF, una dirección o cualquier otro dato que permita identificar a una persona o empresa concreta y que NO esté ya anonimizado, no lo repitas literalmente en tu respuesta: sustitúyelo tú mismo por el marcador genérico que corresponda.
+- En ningún campo de tu respuesta (resumen, título, explicación o base legal) debe aparecer un nombre propio de persona, una razón social real, una dirección, un teléfono, un email, un DNI/NIE/CIF ni ningún otro dato identificativo. El informe final debe ser 100% anónimo.`;
 
 const ESQUEMA_ANALISIS_LEGAL = {
   type: "object",
@@ -942,6 +1004,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
 module.exports = {
   extraerTexto,
   anonimizarTexto,
+  anonimizarResumenIA,
   extraerProvinciaYEmpresa,
   detectarClausulas,
   analizarConIA,

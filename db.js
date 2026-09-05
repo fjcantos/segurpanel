@@ -356,16 +356,19 @@ function fechaUltimaAlianza() {
 // clausulas de riesgo ya calculadas, y el texto YA ANONIMIZADO completo
 // (Repositorio): nunca el texto original ni ningun dato personal, porque la
 // anonimizacion ya sustituyo nombres/DNI/IBAN/telefono/email/direccion/CP
-// antes de que este texto se genere. `tipo` (hogar/negocio) se guarda vacio
-// al analizar y se rellena despues desde la pestana Analisis o Repositorio.
+// antes de que este texto se genere. `tipo` (hogar/negocio) lo elige la
+// persona usuaria ANTES de analizar (selector en la pestana Analisis) y se
+// guarda ya en el INSERT; si por lo que sea llega vacio (contratos antiguos,
+// o el flujo de subida directa a Repositorio), se puede rellenar despues
+// desde la pestana Analisis o Repositorio.
 // tab_visits registra que un usuario ha abierto una pestana de la app, para
 // poder mostrar "pestañas mas usadas" en la actividad del equipo.
 
-function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas, textoAnonimizado, userId }) {
+function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas, textoAnonimizado, userId, tipo }) {
   const info = db
     .prepare(
-      `INSERT INTO contract_stats (provincia, empresa, puntuacion, clausulas_json, texto_anonimizado, user_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO contract_stats (provincia, empresa, puntuacion, clausulas_json, texto_anonimizado, user_id, created_at, tipo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       provincia || null,
@@ -374,7 +377,8 @@ function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas,
       JSON.stringify(clausulas || []),
       textoAnonimizado || null,
       userId || null,
-      ahoraISO()
+      ahoraISO(),
+      tipo === "hogar" || tipo === "negocio" ? tipo : null
     );
   return Number(info.lastInsertRowid);
 }

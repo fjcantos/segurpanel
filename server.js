@@ -667,6 +667,12 @@ async function apiAnalisis(req, res) {
       fragmento: c.fragmento,
     }));
 
+    // El tipo (hogar/negocio) lo elige la persona usuaria en un selector
+    // ANTES de lanzar el analisis (ver index.html), y llega aqui como campo
+    // de texto del propio formulario multipart junto al archivo.
+    const tipoRecibido = typeof req.body.tipo === "string" ? req.body.tipo.trim().toLowerCase() : "";
+    const tipo = tipoRecibido === "hogar" || tipoRecibido === "negocio" ? tipoRecibido : null;
+
     const contratoId = db.registrarContratoAnalizado({
       provincia,
       empresa,
@@ -674,6 +680,7 @@ async function apiAnalisis(req, res) {
       clausulas: clausulasCompletas,
       textoAnonimizado,
       userId: sesion.usuario.id,
+      tipo,
     });
 
     const resumen = {
@@ -682,6 +689,7 @@ async function apiAnalisis(req, res) {
       nivel,
       totalAnonimizado,
       clausulas: clausulasCompletas,
+      tipo,
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
@@ -819,7 +827,12 @@ async function apiAnalisisAvanzado(req, res) {
     }
 
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
-    const { resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas } = await analisis.analizarConIA(textoAnonimizado);
+    const analisisIA = await analisis.analizarConIA(textoAnonimizado);
+    // Segunda pasada de anonimizacion sobre el TEXTO GENERADO por la IA: la
+    // IA solo ve texto ya anonimizado, pero esta red de seguridad evita que
+    // el informe final pueda reintroducir algun dato identificable si el
+    // modelo reformulase o citase algo del contexto.
+    const { resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas } = analisis.anonimizarResumenIA(analisisIA);
 
     const resumen = { resumenGeneral, puntuacionGlobal, nivelGlobal, totalAnonimizado, clausulas };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
