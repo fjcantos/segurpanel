@@ -356,6 +356,35 @@
   .btn-discard { background: #f1f3f5; color: var(--muted); }
   .btn-discard:hover { background: #e4e7eb; color: #333; }
 
+  .period-block { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .period-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--card);
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+  }
+  .period-header:hover { background: rgba(11,37,69,0.04); }
+  .period-title { font-weight: 700; color: var(--navy); font-size: 0.85rem; letter-spacing: 0.4px; }
+  .period-count {
+    background: rgba(11,37,69,0.08);
+    color: var(--navy);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+  }
+  .period-count.is-pending { background: #e11d2e; color: #fff; }
+  .period-chevron { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+  .period-body.alliance-grid { padding: 16px; margin: 0; }
+  .period-body[hidden] { display: none; }
+
   /* ---------- Equipos ---------- */
   .brand-heading {
     display: flex;
@@ -1237,11 +1266,11 @@
 
     <div id="alianzasPendientesWrap" hidden>
       <h3 class="section-subtitle">Pendientes de revisar <span class="pending-count" id="alianzasPendientesCount">0</span></h3>
-      <div class="alliance-grid" id="alianzasPendientesGrid"></div>
+      <div id="alianzasPendientesPeriodos"></div>
     </div>
 
     <h3 class="section-subtitle">Acuerdos publicados</h3>
-    <div class="alliance-grid" id="alianzasPublicadasGrid">
+    <div id="alianzasPublicadasPeriodos">
       <div class="empty-note">Cargando…</div>
     </div>
   </section>
@@ -2001,26 +2030,77 @@
     cargarAlianzas();
   }
 
+  // Cada alianza cae en exactamente un periodo (los agrupa el servidor);
+  // aqui solo se pintan en este orden, de mas reciente a mas antiguo.
+  const PERIODOS_ALIANZAS = [
+    { clave: 'hoy', titulo: 'HOY', abierto: true },
+    { clave: 'semana', titulo: 'ESTA SEMANA', abierto: true },
+    { clave: 'mes', titulo: 'ESTE MES', abierto: false },
+    { clave: 'historico', titulo: 'HISTÓRICO', abierto: false },
+  ];
+
+  function bloquePeriodoAlianzas(titulo, lista, pendiente, abiertoPorDefecto) {
+    const mensajeVacio = pendiente
+      ? 'No hay contenido nuevo pendiente de revisar.'
+      : 'No hay acuerdos en este período.';
+    const contenido = lista.length
+      ? lista.map(a => tarjetaAlianza(a, pendiente)).join('')
+      : `<div class="empty-note">${mensajeVacio}</div>`;
+    const claseCuenta = pendiente ? 'period-count is-pending' : 'period-count';
+    return `
+      <div class="period-block">
+        <button class="period-header" type="button">
+          <span class="period-title">${titulo}</span>
+          <span class="${claseCuenta}">${lista.length}</span>
+          <span class="period-chevron">${abiertoPorDefecto ? '▴' : '▾'}</span>
+        </button>
+        <div class="alliance-grid period-body"${abiertoPorDefecto ? '' : ' hidden'}>${contenido}</div>
+      </div>`;
+  }
+
+  function renderPeriodosAlianzas(contenedorId, grupos, pendiente) {
+    const cont = document.getElementById(contenedorId);
+    if (!cont) return;
+    const g = grupos || {};
+    cont.innerHTML = PERIODOS_ALIANZAS.map(p =>
+      bloquePeriodoAlianzas(p.titulo, g[p.clave] || [], pendiente, p.abierto)
+    ).join('');
+
+    cont.querySelectorAll('.period-header').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cuerpo = btn.nextElementSibling;
+        cuerpo.hidden = !cuerpo.hidden;
+        btn.querySelector('.period-chevron').textContent = cuerpo.hidden ? '▾' : '▴';
+      });
+    });
+
+    if (pendiente) {
+      cont.querySelectorAll('.btn-publish').forEach(btn =>
+        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'publicar'))
+      );
+      cont.querySelectorAll('.btn-discard').forEach(btn =>
+        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'descartar'))
+      );
+    }
+  }
+
   async function cargarAlianzas() {
-    const gridPublicadas = document.getElementById('alianzasPublicadasGrid');
-    if (!gridPublicadas) return; // sesion aun no resuelta o markup no presente
+    const contPublicadas = document.getElementById('alianzasPublicadasPeriodos');
+    if (!contPublicadas) return; // sesion aun no resuelta o markup no presente
 
     let ok, datos;
     try {
       ({ ok, datos } = await llamarAPI('/api/alianzas'));
     } catch (e) {
-      gridPublicadas.innerHTML = '<div class="empty-note">No se ha podido conectar con el servidor.</div>';
+      contPublicadas.innerHTML = '<div class="empty-note">No se ha podido conectar con el servidor.</div>';
       return;
     }
     if (!ok) {
-      gridPublicadas.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudieron cargar las alianzas.')}</div>`;
+      contPublicadas.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudieron cargar las alianzas.')}</div>`;
       return;
     }
 
-    const publicadas = datos.publicadas || [];
-    gridPublicadas.innerHTML = publicadas.length
-      ? publicadas.map(a => tarjetaAlianza(a, false)).join('')
-      : '<div class="empty-note">Todavía no hay acuerdos publicados.</div>';
+    renderPeriodosAlianzas('alianzasPublicadasPeriodos', datos.publicadas, false);
 
     const spanActualizado = document.getElementById('alianzasUpdated');
     if (spanActualizado) {
@@ -2031,24 +2111,17 @@
 
     if (rolActual === 'super_admin') {
       const pendWrap = document.getElementById('alianzasPendientesWrap');
-      const pendGrid = document.getElementById('alianzasPendientesGrid');
       const pendCount = document.getElementById('alianzasPendientesCount');
-      const pendientes = datos.pendientes || [];
+      const pendientes = datos.pendientes || {};
+      const totalPendientes = PERIODOS_ALIANZAS.reduce((n, p) => n + ((pendientes[p.clave] || []).length), 0);
 
       pendWrap.hidden = false;
-      pendCount.textContent = pendientes.length;
-      pendGrid.innerHTML = pendientes.length
-        ? pendientes.map(a => tarjetaAlianza(a, true)).join('')
-        : '<div class="empty-note">No hay contenido nuevo pendiente de revisar.</div>';
+      pendCount.textContent = totalPendientes;
+      renderPeriodosAlianzas('alianzasPendientesPeriodos', pendientes, true);
 
-      pendGrid.querySelectorAll('.btn-publish').forEach(btn =>
-        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'publicar'))
-      );
-      pendGrid.querySelectorAll('.btn-discard').forEach(btn =>
-        btn.addEventListener('click', () => resolverAlianza(btn.dataset.id, 'descartar'))
-      );
-
-      actualizarNotifDot(pendientes.length);
+      // El punto rojo solo avisa de alianzas nuevas de HOY sin revisar; las
+      // pendientes mas antiguas no deben dejarlo encendido indefinidamente.
+      actualizarNotifDot(datos.pendientesHoy || 0);
     }
   }
 

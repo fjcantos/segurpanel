@@ -1130,16 +1130,53 @@ const SECTORES_ALIANZA = new Set([
 ]);
 const MAX_ALIANZAS_POR_SYNC = 200;
 
+// Periodos con los que se agrupan las alianzas en el panel: cada alianza
+// cae en exactamente un periodo, evaluados en este orden de prioridad (mas
+// reciente primero) para no mostrarla duplicada en dos secciones. "Esta
+// semana" son los ultimos 7 dias SIN contar hoy, y "este mes" es el resto
+// del mes en curso sin contar esos 7 dias.
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+function periodoDeAlianza(fechaDeteccion, ahora) {
+  const fecha = new Date(fechaDeteccion);
+  if (Number.isNaN(fecha.getTime())) return "historico";
+
+  if (fecha.toISOString().slice(0, 10) === ahora.toISOString().slice(0, 10)) {
+    return "hoy";
+  }
+  if (ahora.getTime() - fecha.getTime() <= 7 * MS_POR_DIA) {
+    return "semana";
+  }
+  if (fecha.getUTCFullYear() === ahora.getUTCFullYear() && fecha.getUTCMonth() === ahora.getUTCMonth()) {
+    return "mes";
+  }
+  return "historico";
+}
+
+function agruparAlianzasPorPeriodo(lista, ahora) {
+  const grupos = { hoy: [], semana: [], mes: [], historico: [] };
+  for (const a of lista) {
+    grupos[periodoDeAlianza(a.fechaDeteccion, ahora)].push(a);
+  }
+  return grupos;
+}
+
 async function apiAlianzasGet(req, res) {
   const sesion = exigirSesion(req, res);
   if (!sesion) return;
 
+  const ahora = new Date();
   const respuesta = {
-    publicadas: db.listarAlianzasPorEstado("published"),
+    publicadas: agruparAlianzasPorPeriodo(db.listarAlianzasPorEstado("published"), ahora),
     actualizado: db.fechaUltimaAlianza(),
   };
   if (sesion.usuario.role === auth.ROLES.SUPER_ADMIN) {
-    respuesta.pendientes = db.listarAlianzasPorEstado("pending");
+    const pendientes = agruparAlianzasPorPeriodo(db.listarAlianzasPorEstado("pending"), ahora);
+    respuesta.pendientes = pendientes;
+    // El punto rojo de la pestaña solo debe encenderse por alianzas nuevas
+    // de HOY: una vez revisadas las de hoy, aunque queden pendientes mas
+    // antiguas sin resolver, no debe seguir parpadeando.
+    respuesta.pendientesHoy = pendientes.hoy.length;
   }
   enviarJSON(res, 200, respuesta);
 }
