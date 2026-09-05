@@ -442,6 +442,15 @@ function clasificarContrato(id, tipo) {
   return db.prepare("SELECT id, tipo FROM contract_stats WHERE id = ?").get(id);
 }
 
+// Usado por "Resetear datos de prueba" (panel de Super Admin): contract_stats
+// es la unica tabla que alimenta Repositorio, Estadisticas y el mapa de
+// provincias (estadisticasPorProvincia lee de aqui), asi que borrarla entera
+// limpia los tres a la vez sin tocar usuarios, sesiones ni alianzas.
+function borrarContractStats() {
+  const info = db.prepare("DELETE FROM contract_stats").run();
+  return info.changes;
+}
+
 function estadisticasPorProvincia() {
   return db
     .prepare(
@@ -520,6 +529,7 @@ module.exports = {
   listarRepositorioResumen,
   obtenerContratoDetalle,
   clasificarContrato,
+  borrarContractStats,
   estadisticasPorProvincia,
   contarUsuariosActivos,
   registrarVisitaTab,

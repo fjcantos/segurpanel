@@ -126,6 +126,15 @@
   }
   .modal .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
   .modal .modal-actions button { flex: 1; }
+  .modal .modal-error {
+    display: none; background: var(--danger-bg); color: var(--danger); border-radius: 8px;
+    padding: 8px 10px; font-size: 0.8rem; margin-top: 10px;
+  }
+  .modal .modal-error.show { display: block; }
+
+  .card-danger { border-color: #f3c8c1; }
+  .card-danger h2 { color: var(--danger); }
+  .card-danger .card-sub { margin-bottom: 16px; }
 
   @media (max-width: 700px) {
     .content { padding: 18px 14px 60px; }
@@ -174,6 +183,12 @@
       </table>
     </div>
   </div>
+
+  <div class="card card-danger">
+    <h2>Zona de peligro</h2>
+    <p class="card-sub">Borra permanentemente todos los contratos del Repositorio, las estadísticas de contratos y el historial del mapa de provincias. No afecta a usuarios ni a alianzas. Esta acción no se puede deshacer.</p>
+    <button class="btn btn-danger" type="button" id="btnResetDatos">Resetear datos de prueba</button>
+  </div>
 </main>
 
 <div class="toast" id="toast"></div>
@@ -204,6 +219,20 @@
     <div class="modal-actions">
       <button class="btn btn-outline" type="button" id="modalAprobarCancelar">Cancelar</button>
       <button class="btn btn-ok" type="button" id="modalAprobarConfirmar">Aprobar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalResetDatos">
+  <div class="modal">
+    <h3>Resetear datos de prueba</h3>
+    <p>Vas a borrar permanentemente <strong>todos los contratos del Repositorio</strong>, las estadísticas de contratos y el historial del mapa de provincias. Esta acción no se puede deshacer.</p>
+    <label for="modalResetDatosPassword">Confirma tu contraseña de Super Admin</label>
+    <input type="password" id="modalResetDatosPassword" autocomplete="current-password">
+    <div class="modal-error" id="modalResetDatosError"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="modalResetDatosCancelar">Cancelar</button>
+      <button class="btn btn-danger" type="button" id="modalResetDatosConfirmar">Borrar datos</button>
     </div>
   </div>
 </div>
@@ -422,6 +451,48 @@
     if (!ok) { toast(datos.error || 'No se pudo asignar la clave temporal.', true); return; }
     mostrarClaveTemporal('Clave temporal asignada', datos.tempPassword);
   }
+
+  /* ---------- Zona de peligro: resetear datos de prueba ---------- */
+  function abrirModalResetDatos() {
+    $('modalResetDatosPassword').value = '';
+    $('modalResetDatosError').classList.remove('show');
+    $('modalResetDatos').classList.add('show');
+    $('modalResetDatosPassword').focus();
+  }
+  function cerrarModalResetDatos() {
+    $('modalResetDatos').classList.remove('show');
+  }
+  $('btnResetDatos').addEventListener('click', abrirModalResetDatos);
+  $('modalResetDatosCancelar').addEventListener('click', cerrarModalResetDatos);
+
+  $('modalResetDatosConfirmar').addEventListener('click', async () => {
+    const password = $('modalResetDatosPassword').value;
+    const errorEl = $('modalResetDatosError');
+    errorEl.classList.remove('show');
+    if (!password) {
+      errorEl.textContent = 'Introduce tu contraseña para confirmar.';
+      errorEl.classList.add('show');
+      return;
+    }
+    $('modalResetDatosConfirmar').disabled = true;
+    try {
+      const { ok, status, datos } = await llamar('/api/admin/reset-test-data', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      if (!ok) {
+        errorEl.textContent = status === 401
+          ? 'Contraseña incorrecta.'
+          : (datos.error || 'No se pudieron borrar los datos de prueba.');
+        errorEl.classList.add('show');
+        return;
+      }
+      cerrarModalResetDatos();
+      toast(datos.mensaje || 'Datos de prueba eliminados correctamente.');
+    } finally {
+      $('modalResetDatosConfirmar').disabled = false;
+    }
+  });
 
   $('btnLogout').addEventListener('click', async () => {
     await llamar('/api/auth/logout', { method: 'POST' });

@@ -506,6 +506,38 @@ async function apiAdminResetPassword(req, res, id) {
   enviarJSON(res, 200, { usuario: usuarioPublico(db.buscarUsuarioPorId(id)), tempPassword });
 }
 
+// Borra de un golpe todo el Repositorio de contratos, contract_stats y (al
+// ser la misma tabla) el historial que alimenta el mapa de provincias.
+// Exige confirmar con la CONTRASEÑA ACTUAL de quien ejecuta la accion (no
+// basta con ser super_admin: es una operacion destructiva e irreversible),
+// asi que reutiliza el mismo verificarPassword que el cambio de contrasena.
+async function apiAdminResetDatosPrueba(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const password = typeof cuerpo.password === "string" ? cuerpo.password : "";
+  if (!auth.verificarPassword(password, sesion.usuario.password_hash)) {
+    return enviarJSON(res, 401, {
+      error: "Contraseña incorrecta.",
+      code: "CREDENCIALES_INVALIDAS",
+    });
+  }
+
+  const eliminados = db.borrarContractStats();
+  enviarJSON(res, 200, {
+    ok: true,
+    eliminados,
+    mensaje: `Datos de prueba eliminados: ${eliminados} contrato(s) borrado(s) del Repositorio, Estadísticas y el mapa de provincias.`,
+  });
+}
+
 /* ================================================================
    API: chat con Claude (protegido por sesion)
    ================================================================ */
@@ -1494,6 +1526,7 @@ async function manejarPeticion(req, res) {
       id = idResetPasswordUsuario(ruta);
       if (id !== null) return await apiAdminResetPassword(req, res, id);
     }
+    if (req.method === "POST" && ruta === "/api/admin/reset-test-data") return await apiAdminResetDatosPrueba(req, res);
 
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
