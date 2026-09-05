@@ -1628,6 +1628,7 @@ const ESTATICOS_PERMITIDOS = new Set([
   "/icons/icon-512.png",
   "/icons/icon-192-maskable.png",
   "/icons/icon-512-maskable.png",
+  "/assets/LOGO_UIC_limpio.png",
 ]);
 
 function servirEstatico(rutaUrl, res) {
