@@ -383,6 +383,25 @@ function contarContratosAnalizados() {
   return db.prepare("SELECT COUNT(*) AS n FROM contract_stats").get().n;
 }
 
+// created_at se guarda en UTC (new Date().toISOString()); date('now') de
+// SQLite tambien es UTC por defecto, asi que ambas fechas son comparables
+// sin conversion de zona horaria.
+function contarContratosAnalizadosHoy() {
+  return db
+    .prepare("SELECT COUNT(*) AS n FROM contract_stats WHERE date(created_at) = date('now')")
+    .get().n;
+}
+
+// "Alerta activa" = contrato de riesgo alto o muy alto detectado hoy
+// (mismo umbral que nivelDesdeRiesgo en server.js: puntuacion > 6).
+function contarAlertasActivasHoy() {
+  return db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM contract_stats WHERE date(created_at) = date('now') AND puntuacion > 6"
+    )
+    .get().n;
+}
+
 function riesgoPromedioContratos() {
   const fila = db.prepare("SELECT AVG(puntuacion) AS media FROM contract_stats WHERE puntuacion IS NOT NULL").get();
   return fila && fila.media !== null ? fila.media : null;
@@ -490,6 +509,8 @@ module.exports = {
   fechaUltimaAlianza,
   registrarContratoAnalizado,
   contarContratosAnalizados,
+  contarContratosAnalizadosHoy,
+  contarAlertasActivasHoy,
   riesgoPromedioContratos,
   listarClausulasContratos,
   listarRepositorioResumen,

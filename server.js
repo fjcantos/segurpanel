@@ -917,6 +917,8 @@ async function apiEstadisticas(req, res) {
   enviarJSON(res, 200, {
     resumen: {
       totalContratos: db.contarContratosAnalizados(),
+      contratosHoy: db.contarContratosAnalizadosHoy(),
+      alertasActivas: db.contarAlertasActivasHoy(),
       riesgoPromedio,
       clausulaMasFrecuente: clausulas[0] || null,
       usuariosActivos: db.contarUsuariosActivos(),
