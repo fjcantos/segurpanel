@@ -728,21 +728,70 @@
   .batch-queue-summary { margin-top: 14px; font-size: 0.85rem; color: var(--text); border-top: 1px dashed var(--border); padding-top: 12px; }
 
   /* ---------- Normativa ---------- */
-  .norm-group { margin-bottom: 22px; }
-  .norm-group h3 { color: var(--heading); font-size: 1rem; margin: 0 0 10px; }
-  .norm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-  .norm-list li {
+  .norm-disclaimer {
+    background: var(--info-bg);
+    border-left: 3px solid var(--info);
+    color: var(--text);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+  .norm-search-wrap { margin-bottom: 18px; }
+  .norm-search-wrap input {
+    width: 100%;
+    max-width: 520px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 11px 18px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--card);
+  }
+  .norm-search-wrap input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .norm-category[hidden] { display: none; }
+  .norm-list-acc { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+
+  .norm-item {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 12px 16px;
-    font-size: 0.88rem;
+    overflow: hidden;
+  }
+  .norm-item[hidden] { display: none; }
+  .norm-item > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 14px;
     display: flex;
-    justify-content: space-between;
+    align-items: center;
     gap: 10px;
     flex-wrap: wrap;
   }
-  .norm-code { color: var(--green-dark); font-weight: 700; font-size: 0.78rem; }
+  .norm-item > summary::-webkit-details-marker { display: none; }
+  .norm-item > summary::after { content: '+'; margin-left: auto; color: var(--muted); font-weight: 700; font-size: 1rem; }
+  .norm-item[open] > summary::after { content: '–'; }
+  .norm-item-title { font-weight: 700; color: var(--heading); font-size: 0.9rem; }
+  .norm-code {
+    background: var(--fill-subtle);
+    color: var(--green-dark);
+    font-weight: 700;
+    font-size: 0.72rem;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .norm-item-body { padding: 0 16px 14px; }
+  .norm-item-resumen { color: var(--text); font-size: 0.86rem; line-height: 1.45; margin: 0 0 10px; }
+  .norm-detail { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; }
+  .norm-detail:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .norm-detail strong { display: block; font-size: 0.76rem; color: var(--heading); margin-bottom: 3px; }
+  .norm-detail p { margin: 0; font-size: 0.83rem; color: var(--text); line-height: 1.5; }
+  .norm-item-table { margin-top: 10px; }
+  .norm-item-table table.compare { font-size: 0.8rem; }
 
   /* ---------- Inteligencia ---------- */
   .intel-grid {
@@ -1711,35 +1760,16 @@
   <!-- ===== NORMATIVA ===== -->
   <section id="normativa" class="tab-content">
     <h2 class="section-title">Normativa de seguridad</h2>
-    <p class="section-sub">Referencias legales y técnicas aplicables a la seguridad privada y sistemas de alarma en España. Consulta siempre el texto oficial vigente en BOE, AENOR o el organismo correspondiente.</p>
+    <p class="section-sub">Referencia completa de legislación, normas técnicas, derechos del consumidor y organismos aplicables a la seguridad privada y los sistemas de alarma en España.</p>
 
-    <div class="norm-group">
-      <h3>Legislación</h3>
-      <ul class="norm-list">
-        <li><span>Ley 5/2014, de Seguridad Privada</span><span class="norm-code">Ley 5/2014</span></li>
-        <li><span>Reglamento de Seguridad Privada</span><span class="norm-code">RD 195/2023</span></li>
-        <li><span>Régimen sancionador en materia de seguridad privada</span><span class="norm-code">Ley 5/2014, Título V</span></li>
-      </ul>
+    <div class="norm-disclaimer">Contenido divulgativo para apoyar la argumentación comercial y la atención al cliente. No sustituye el asesoramiento legal: consulta siempre el texto oficial vigente en el BOE, AENOR o el organismo correspondiente antes de basar en él una decisión.</div>
+
+    <div class="norm-search-wrap">
+      <input type="search" id="normBuscador" placeholder="🔍 Buscar en la normativa (ej. desistimiento, UNE-EN 50131, AEPD, permanencia…)" autocomplete="off">
     </div>
 
-    <div class="norm-group">
-      <h3>Normas técnicas</h3>
-      <ul class="norm-list">
-        <li><span>Sistemas de alarma contra intrusión y atraco</span><span class="norm-code">UNE-EN 50131</span></li>
-        <li><span>Sistemas de transmisión de alarmas y avisos</span><span class="norm-code">UNE-EN 50136</span></li>
-        <li><span>Sistemas de control de accesos</span><span class="norm-code">UNE-EN 60839</span></li>
-        <li><span>Videovigilancia (CCTV) para aplicaciones de seguridad</span><span class="norm-code">UNE-EN 62676</span></li>
-      </ul>
-    </div>
-
-    <div class="norm-group">
-      <h3>Organismos y protección de datos</h3>
-      <ul class="norm-list">
-        <li><span>Reglamento General de Protección de Datos</span><span class="norm-code">RGPD (UE) 2016/679</span></li>
-        <li><span>Ley Orgánica de Protección de Datos</span><span class="norm-code">LOPDGDD 3/2018</span></li>
-        <li><span>Registro Nacional de Seguridad Privada</span><span class="norm-code">Cuerpo Nacional de Policía</span></li>
-      </ul>
-    </div>
+    <div id="normativaAcordeon"></div>
+    <div class="empty-note" id="normSinResultados" hidden>No se ha encontrado ninguna coincidencia. Prueba con otro término.</div>
   </section>
 
   <!-- ===== INTELIGENCIA ===== -->
@@ -2216,6 +2246,342 @@
   }
 
   renderEquiposEmpresas();
+
+  /* ---------- Normativa ---------- */
+  //
+  // Contenido divulgativo (no asesoramiento legal, ver .norm-disclaimer en la
+  // pestana): se guarda como datos en vez de HTML a mano para poder generar
+  // el buscador (filtrarNormativa) sobre el mismo texto que se pinta, sin
+  // duplicarlo.
+  const NORMATIVA_DATA = [
+    {
+      id: 'legislacion',
+      titulo: 'Legislación principal',
+      items: [
+        {
+          titulo: 'Ley 5/2014, de 4 de abril, de Seguridad Privada',
+          codigo: 'Ley 5/2014',
+          resumen: 'Norma marco de la seguridad privada en España: define qué actividades existen, qué empresas y profesionales pueden prestarlas, y el régimen sancionador aplicable. Deroga la antigua Ley 23/1992.',
+          detalles: [
+            { titulo: 'Objeto y ámbito (Título Preliminar, arts. 1-6)', texto: 'Define la seguridad privada como actividad complementaria y subordinada a la seguridad pública, y distingue las actividades compatibles e incompatibles que puede prestar una misma empresa.' },
+            { titulo: 'Empresas de seguridad (arts. 7-24)', texto: 'Regula los requisitos de autorización, la inscripción en el Registro Nacional de Seguridad Privada, el seguro de responsabilidad civil y las obligaciones de las empresas que instalan y mantienen sistemas de alarma.' },
+            { titulo: 'Personal de seguridad (arts. 25-41)', texto: 'Establece las categorías profesionales (vigilantes, directores de seguridad, detectives privados, etc.), su habilitación y su formación obligatoria.' },
+            { titulo: 'Medidas y sistemas de seguridad (arts. 42 y siguientes)', texto: 'Regula la instalación de sistemas de seguridad electrónica y el funcionamiento de las Centrales Receptoras de Alarmas (CRA), incluida la obligación de verificar la señal antes de avisar a las Fuerzas y Cuerpos de Seguridad.' },
+            { titulo: 'Régimen sancionador (arts. 52-64)', texto: 'Clasifica las infracciones en muy graves, graves y leves, con sanciones que van desde el apercibimiento hasta la revocación de la autorización.' },
+          ],
+        },
+        {
+          titulo: 'RD 195/2023, de 21 de marzo, Reglamento de Seguridad Privada',
+          codigo: 'RD 195/2023',
+          resumen: 'Desarrolla reglamentariamente la Ley 5/2014 y sustituye al Reglamento de 1994. Concreta los requisitos técnicos y de procedimiento para empresas, personal y sistemas de seguridad.',
+          detalles: [
+            { titulo: 'Sustituye al RD 2364/1994', texto: 'Actualiza casi tres décadas de normativa reglamentaria adaptándola a la Ley 5/2014 y a la evolución tecnológica de los sistemas de alarma.' },
+            { titulo: 'Sistemas de seguridad electrónica', texto: 'Detalla los requisitos técnicos de instalación, mantenimiento y conexión a Centrales Receptoras de Alarmas, así como los protocolos de verificación previa al aviso policial.' },
+            { titulo: 'Contratos y documentación', texto: 'Regula el contenido mínimo de los contratos de instalación y mantenimiento de sistemas de seguridad que las empresas deben suscribir con sus clientes.' },
+            { titulo: 'Régimen transitorio', texto: 'Establece plazos de adaptación para las empresas y los sistemas ya autorizados bajo la normativa anterior.' },
+          ],
+        },
+        {
+          titulo: 'Real Decreto Legislativo 1/2007, Ley General para la Defensa de los Consumidores y Usuarios',
+          codigo: 'LGDCU / TRLGDCU',
+          resumen: 'Texto refundido que unifica la protección de los consumidores en España: información precontractual, garantías, cláusulas abusivas y derecho de desistimiento.',
+          detalles: [
+            { titulo: 'Derecho de desistimiento (arts. 68-79)', texto: 'Régimen general del derecho a dejar sin efecto un contrato sin justificar la decisión ni asumir penalización, dentro del plazo legal.' },
+            { titulo: 'Contratación a distancia y fuera de establecimiento (arts. 92 y siguientes)', texto: 'Fija en 14 días naturales el plazo de desistimiento cuando el contrato se firma fuera de un establecimiento mercantil (por ejemplo, venta puerta a puerta o telefónica de alarmas), y obliga a informar de ese derecho antes de contratar.' },
+            { titulo: 'Cláusulas abusivas (arts. 82-91)', texto: 'Considera abusiva cualquier cláusula no negociada individualmente que cause un desequilibrio importante en perjuicio del consumidor, incluidas las de permanencia desproporcionada o penalizaciones excesivas por baja.' },
+            { titulo: 'Información precontractual (art. 60 y siguientes)', texto: 'Obliga a informar de forma clara y comprensible sobre precio total, duración, condiciones de permanencia y procedimiento de baja antes de firmar.' },
+          ],
+        },
+        {
+          titulo: 'Ley 7/1998, de Condiciones Generales de Contratación',
+          codigo: 'LCGC',
+          resumen: 'Regula las cláusulas predispuestas por una de las partes e incorporadas a una pluralidad de contratos, como los contratos tipo de alarmas.',
+          detalles: [
+            { titulo: 'Requisitos de incorporación (arts. 5 y 7)', texto: 'Las condiciones generales solo se incorporan al contrato si el adherente ha tenido la oportunidad real de conocerlas y las acepta expresamente; las ilegibles, ambiguas o incomprensibles no quedan incorporadas.' },
+            { titulo: 'Interpretación contra proferentem (art. 6)', texto: 'Las dudas de interpretación sobre una cláusula oscura se resuelven a favor del adherente (el cliente), nunca de quien la redactó.' },
+            { titulo: 'Nulidad de cláusulas (art. 8)', texto: 'Son nulas de pleno derecho las condiciones generales que contradigan una norma imperativa o sean declaradas abusivas conforme a la normativa de consumidores.' },
+          ],
+        },
+        {
+          titulo: 'RGPD (Reglamento UE 2016/679) y LOPDGDD (LO 3/2018)',
+          codigo: 'RGPD + LOPDGDD',
+          resumen: 'Marco europeo y español de protección de datos personales, especialmente relevante en alarmas con videovigilancia, datos biométricos o geolocalización.',
+          detalles: [
+            { titulo: 'Principios del tratamiento (art. 5 RGPD)', texto: 'Licitud, lealtad y transparencia, limitación de la finalidad, minimización de datos, exactitud, limitación del plazo de conservación, e integridad y confidencialidad.' },
+            { titulo: 'Derechos de las personas (arts. 15-22 RGPD)', texto: 'Acceso, rectificación, supresión, limitación del tratamiento, portabilidad y oposición; deben poder ejercerse de forma sencilla y gratuita ante el responsable del tratamiento.' },
+            { titulo: 'Videovigilancia', texto: 'La instalación de cámaras debe respetar el principio de proporcionalidad, señalizarse de forma visible y no captar vía pública ni zonas comunes más allá de lo estrictamente necesario.' },
+            { titulo: 'Plazo de respuesta', texto: 'El responsable del tratamiento debe responder a cualquier solicitud de ejercicio de derechos en el plazo máximo de un mes, prorrogable otros dos en casos complejos.' },
+          ],
+        },
+        {
+          titulo: 'Código Civil (artículos aplicables a los contratos)',
+          codigo: 'Código Civil',
+          resumen: 'Derecho común supletorio que rige la validez, interpretación y cumplimiento de cualquier contrato, incluidos los de alarmas, cuando no hay norma especial aplicable.',
+          detalles: [
+            { titulo: 'Fuerza de ley del contrato (arts. 1091 y 1255)', texto: 'Las obligaciones nacidas de los contratos tienen fuerza de ley entre las partes, que pueden pactar libremente lo que consideren siempre que no sea contrario a la ley, la moral o el orden público.' },
+            { titulo: 'Prohibición de arbitrariedad (art. 1256)', texto: 'La validez y el cumplimiento de los contratos no puede dejarse al arbitrio de una sola de las partes, lo que limita las cláusulas que permiten a la empresa modificar unilateralmente precio o condiciones.' },
+            { titulo: 'Interpretación de los contratos (arts. 1281-1289)', texto: 'Si los términos son claros se estará al sentido literal; si generan duda, se atenderá a la intención de las partes.' },
+            { titulo: 'Incumplimiento y resolución (arts. 1101 y 1124)', texto: 'Quien incumple sus obligaciones contractuales responde de los daños causados, y la otra parte puede exigir el cumplimiento o resolver el contrato con indemnización.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'tecnicas',
+      titulo: 'Normas técnicas',
+      items: [
+        {
+          titulo: 'Sistemas de alarma contra intrusión y atraco',
+          codigo: 'UNE-EN 50131',
+          resumen: 'Norma europea que define los requisitos generales de los sistemas de detección de intrusión y atraco, incluida la clasificación por grados de seguridad.',
+          detalles: [
+            { titulo: 'Estructura de la serie', texto: 'Se compone de varias partes: requisitos generales del sistema, especificaciones de detectores, centrales de control e indicación, equipos de alimentación, etc.' },
+            { titulo: 'Grados de seguridad', texto: 'Clasifica los sistemas en 4 grados según el riesgo asumido (ver tabla), condicionando el tipo de componentes, la resistencia a la manipulación y el nivel de las comunicaciones.' },
+            { titulo: 'Clases de entorno', texto: 'Complementa los grados de seguridad con clases ambientales (interior, exterior, temperatura, humedad) que determinan los requisitos físicos de los equipos.' },
+          ],
+          tabla: {
+            titulo: 'Grados de seguridad UNE-EN 50131',
+            cabecera: ['Grado', 'Riesgo asumido', 'Perfil del intruso esperado'],
+            filas: [
+              ['1', 'Bajo', 'Poco conocimiento de sistemas de alarma y uso de herramientas limitadas.'],
+              ['2', 'Bajo a medio', 'Cierto conocimiento del sistema y uso de herramientas generales.'],
+              ['3', 'Medio a alto', 'Familiarizado con sistemas de alarma, con acceso a un rango amplio de herramientas y equipos electrónicos.'],
+              ['4', 'Alto (la seguridad es el factor prioritario)', 'Capacidad para planificar la intrusión con detalle y acceso a equipos de sustitución completos.'],
+            ],
+          },
+        },
+        {
+          titulo: 'Sistemas y equipos de transmisión de alarmas',
+          codigo: 'UNE-EN 50136',
+          resumen: 'Regula los requisitos de los sistemas y equipos utilizados para transmitir la señal de alarma desde el domicilio o negocio hasta la Central Receptora de Alarmas (CRA).',
+          detalles: [
+            { titulo: 'Vías de transmisión', texto: 'Cubre distintos medios (línea telefónica, radiofrecuencia, IP/GPRS) y sus requisitos de fiabilidad, tiempo máximo de transmisión y supervisión de la línea.' },
+            { titulo: 'Redundancia', texto: 'Los sistemas de mayor grado exigen doble vía de comunicación (por ejemplo IP + GPRS) para que un corte de línea no deje la instalación sin cobertura.' },
+          ],
+        },
+        {
+          titulo: 'Centros de recepción y tratamiento de alarmas (CRA)',
+          codigo: 'UNE-EN 50518',
+          resumen: 'Norma que regula los requisitos de las Centrales Receptoras de Alarmas, desde su ubicación física hasta los procedimientos operativos del personal.',
+          detalles: [
+            { titulo: 'Parte 1: ubicación y construcción', texto: 'Requisitos de seguridad física del edificio, control de accesos, alimentación eléctrica de emergencia y protección ante incendio o intrusión en la propia CRA.' },
+            { titulo: 'Parte 2: requisitos técnicos', texto: 'Especifica los equipos de recepción, grabación y respaldo de las comunicaciones, con sistemas redundantes para garantizar el servicio 24/7.' },
+            { titulo: 'Parte 3: procedimientos operativos', texto: 'Regula la cualificación del personal operador, los protocolos de verificación de alarmas y los tiempos máximos de respuesta antes de avisar a las Fuerzas y Cuerpos de Seguridad.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'consumidor',
+      titulo: 'Derechos del consumidor',
+      items: [
+        {
+          titulo: 'Cómo cancelar un contrato de alarma',
+          codigo: 'Baja del servicio',
+          resumen: 'Pasos generales para dar de baja un contrato de seguridad, más allá del plazo de desistimiento inicial.',
+          detalles: [
+            { titulo: 'Revisa el plazo de permanencia', texto: 'Comprueba en el contrato la duración pactada y si existe una cláusula de permanencia con penalización por baja anticipada; debe ser proporcionada y estar informada con claridad.' },
+            { titulo: 'Solicítala por un canal que deje constancia', texto: 'Comunica la baja por escrito (burofax, email con acuse de recibo o formulario de la propia empresa) respetando el preaviso pactado, normalmente de 1 a 3 meses.' },
+            { titulo: 'Exige confirmación por escrito', texto: 'Guarda la confirmación de la baja efectiva y de la retirada o desactivación de los equipos, así como el cese de cualquier cargo posterior.' },
+            { titulo: 'Si la empresa no atiende la baja', texto: 'Puedes reclamar ante la propia empresa (hoja de reclamaciones), la OMIC de tu municipio o una Junta Arbitral de Consumo.' },
+          ],
+        },
+        {
+          titulo: 'Plazos legales de desistimiento',
+          codigo: '14 días naturales',
+          resumen: 'El consumidor tiene derecho a desistir sin penalización ni justificación de un contrato firmado fuera de un establecimiento mercantil o a distancia (venta puerta a puerta, telefónica u online).',
+          detalles: [
+            { titulo: 'Cómputo del plazo', texto: 'Los 14 días naturales se cuentan desde la firma del contrato; si el consumidor no fue informado de este derecho, el plazo se puede ampliar hasta 12 meses adicionales.' },
+            { titulo: 'Cómo ejercerlo', texto: 'Basta una declaración inequívoca (formulario de desistimiento, email o burofax); no es necesario motivar la decisión ni asumir coste alguno, salvo en su caso los servicios ya prestados expresamente solicitados.' },
+            { titulo: 'Efectos', texto: 'La empresa debe reembolsar cualquier cantidad pagada en un plazo máximo de 14 días desde que se le comunica el desistimiento.' },
+          ],
+        },
+        {
+          titulo: 'Reclamaciones ante organismos oficiales',
+          codigo: 'Vías de reclamación',
+          resumen: 'Existen distintas vías según el tipo de conflicto: uno contractual o económico con la empresa, u otro sobre irregularidades de la propia empresa o del personal de seguridad.',
+          detalles: [
+            { titulo: 'Hoja de reclamaciones', texto: 'Toda empresa debe tener a disposición del consumidor hojas de reclamaciones oficiales; es el primer paso habitual antes de acudir a un organismo externo.' },
+            { titulo: 'OMIC y Juntas Arbitrales de Consumo', texto: 'Las Oficinas Municipales de Información al Consumidor median gratuitamente, y el Sistema Arbitral de Consumo permite resolver el conflicto sin acudir a los tribunales si la empresa está adherida.' },
+            { titulo: 'Asociaciones de consumidores', texto: 'OCU y FACUA ofrecen asesoramiento, mediación y, en su caso, acompañamiento en reclamaciones colectivas contra prácticas irregulares del sector.' },
+            { titulo: 'Irregularidades de la empresa o del personal de seguridad', texto: 'Si el conflicto no es económico sino sobre el cumplimiento de la Ley 5/2014 (falta de habilitación, incumplimientos técnicos, etc.), la denuncia se dirige a la Unidad Central de Seguridad Privada de la Policía Nacional.' },
+          ],
+        },
+        {
+          titulo: 'Contactos de la Dirección General de la Policía',
+          codigo: 'UCSP',
+          resumen: 'La Unidad Central de Seguridad Privada (UCSP), dependiente de la Dirección General de la Policía, es el órgano que autoriza, registra e inspecciona a las empresas y al personal de seguridad privada en España.',
+          detalles: [
+            { titulo: 'Qué gestiona', texto: 'El Registro Nacional de Seguridad Privada, las autorizaciones de apertura de empresas de seguridad, las habilitaciones del personal y la tramitación de denuncias e inspecciones.' },
+            { titulo: 'Cómo contactar', texto: 'A través de la sede electrónica oficial de la Policía Nacional o de la Unidad de Seguridad Privada de la Jefatura Superior de Policía de tu provincia; búscalo como "Unidad Central de Seguridad Privada" en el portal del Ministerio del Interior.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'organismos',
+      titulo: 'Organismos y contactos',
+      items: [
+        {
+          titulo: 'Ministerio del Interior',
+          resumen: 'Departamento del Gobierno del que depende la Secretaría de Estado de Seguridad y, a través de ella, toda la política de seguridad privada en España.',
+          detalles: [
+            { titulo: 'Qué gestiona', texto: 'La elaboración normativa en materia de seguridad privada (Ley 5/2014, RD 195/2023) y la supervisión general del sector a través de la Dirección General de la Policía y la Guardia Civil.' },
+            { titulo: 'Cómo contactar', texto: 'Consulta su portal oficial y sede electrónica para trámites, normativa publicada y datos de contacto de cada unidad.' },
+          ],
+        },
+        {
+          titulo: 'Dirección General de la Policía — Unidad Central de Seguridad Privada',
+          codigo: 'UCSP',
+          resumen: 'Órgano operativo responsable del control administrativo del sector: autoriza empresas, habilita a los profesionales y tramita inspecciones y denuncias.',
+          detalles: [
+            { titulo: 'Registro Nacional de Seguridad Privada', texto: 'Toda empresa que instale o mantenga sistemas de alarma debe estar inscrita; conviene comprobar la habilitación de una empresa antes de contratar sus servicios.' },
+            { titulo: 'Cómo contactar', texto: 'A través de la sede electrónica de la Policía Nacional o presencialmente en la Unidad de Seguridad Privada de la Jefatura Superior de Policía de tu provincia.' },
+          ],
+        },
+        {
+          titulo: 'OCU — Organización de Consumidores y Usuarios',
+          resumen: 'Asociación independiente de defensa de los consumidores que publica análisis y comparativas del sector de alarmas, y tramita reclamaciones de sus socios.',
+          detalles: [
+            { titulo: 'Qué ofrece', texto: 'Asesoramiento jurídico, comparativas independientes de compañías de alarmas y gestión de reclamaciones individuales.' },
+            { titulo: 'Cómo contactar', texto: 'A través de su web oficial y su atención al socio; la mayoría de servicios de asesoramiento requieren alta como socio.' },
+          ],
+        },
+        {
+          titulo: 'FACUA — Consumidores en Acción',
+          resumen: 'Asociación de consumidores que realiza campañas y denuncias públicas sobre prácticas irregulares en distintos sectores, incluido el de la seguridad.',
+          detalles: [
+            { titulo: 'Qué ofrece', texto: 'Información sobre derechos del consumidor, canal de denuncias y campañas ante prácticas comerciales agresivas o cláusulas abusivas detectadas en el sector.' },
+            { titulo: 'Cómo contactar', texto: 'A través de su web oficial y de las oficinas de sus federaciones autonómicas.' },
+          ],
+        },
+        {
+          titulo: 'AEPD — Agencia Española de Protección de Datos',
+          resumen: 'Autoridad independiente que vela por el cumplimiento del RGPD y la LOPDGDD en España, incluidas las reclamaciones sobre videovigilancia o mal uso de datos personales por empresas de alarmas.',
+          detalles: [
+            { titulo: 'Qué gestiona', texto: 'Reclamaciones de los ciudadanos cuando una empresa no atiende en plazo el ejercicio de sus derechos (acceso, supresión, oposición, etc.), y sanciona los incumplimientos graves de la normativa de protección de datos.' },
+            { titulo: 'Antes de reclamar ante la AEPD', texto: 'Es necesario haberse dirigido antes por escrito al responsable del tratamiento (la empresa de alarmas) ejerciendo el derecho correspondiente y no haber obtenido respuesta satisfactoria en plazo.' },
+            { titulo: 'Cómo contactar', texto: 'A través de la sede electrónica oficial de la AEPD, donde se puede presentar la reclamación de forma telemática.' },
+          ],
+        },
+      ],
+    },
+  ];
+
+  function normTablaHtml(tabla) {
+    if (!tabla) return '';
+    const filas = tabla.filas.map(f => `<tr>${f.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
+    return `
+      <div class="norm-item-table">
+        <div class="table-wrap">
+          <table class="compare">
+            <thead><tr>${tabla.cabecera.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function normItemBusqueda(item) {
+    const partes = [item.titulo, item.codigo || '', item.resumen]
+      .concat((item.detalles || []).map(d => `${d.titulo} ${d.texto}`));
+    return partes.join(' ').toLowerCase();
+  }
+
+  function normItemHtml(item) {
+    const detallesHtml = (item.detalles || [])
+      .map(d => `<div class="norm-detail"><strong>${escapeHtml(d.titulo)}</strong><p>${escapeHtml(d.texto)}</p></div>`)
+      .join('');
+    return `
+      <details class="norm-item" data-search="${escapeHtml(normItemBusqueda(item))}">
+        <summary>
+          <span class="norm-item-title">${escapeHtml(item.titulo)}</span>
+          ${item.codigo ? `<span class="norm-code">${escapeHtml(item.codigo)}</span>` : ''}
+        </summary>
+        <div class="norm-item-body">
+          <p class="norm-item-resumen">${escapeHtml(item.resumen)}</p>
+          ${detallesHtml}
+          ${normTablaHtml(item.tabla)}
+        </div>
+      </details>`;
+  }
+
+  function normCategoriaHtml(cat, esPrimera) {
+    const itemsHtml = cat.items.map(normItemHtml).join('');
+    return `
+      <div class="period-block norm-category" data-cat="${cat.id}">
+        <button class="period-header" type="button">
+          <span class="period-title">${escapeHtml(cat.titulo)}</span>
+          <span class="period-count">${cat.items.length}</span>
+          <span class="period-chevron">${esPrimera ? '▴' : '▾'}</span>
+        </button>
+        <div class="period-body norm-list-acc"${esPrimera ? '' : ' hidden'}>${itemsHtml}</div>
+      </div>`;
+  }
+
+  function renderNormativa() {
+    const cont = document.getElementById('normativaAcordeon');
+    if (!cont) return;
+    cont.innerHTML = NORMATIVA_DATA.map((cat, i) => normCategoriaHtml(cat, i === 0)).join('');
+
+    cont.querySelectorAll('.period-header').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cuerpo = btn.nextElementSibling;
+        cuerpo.hidden = !cuerpo.hidden;
+        btn.querySelector('.period-chevron').textContent = cuerpo.hidden ? '▾' : '▴';
+      });
+    });
+
+    const buscador = document.getElementById('normBuscador');
+    if (buscador) buscador.addEventListener('input', () => filtrarNormativa(buscador.value));
+  }
+
+  // Filtra por título+código+resumen+detalles de cada norma (data-search, en
+  // minusculas). Con la busqueda activa se despliegan automaticamente las
+  // categorias y normas que coinciden; al vaciar el campo se restaura el
+  // estado inicial (solo la primera categoria abierta).
+  function filtrarNormativa(query) {
+    const cont = document.getElementById('normativaAcordeon');
+    if (!cont) return;
+    const q = query.trim().toLowerCase();
+    const categorias = Array.from(cont.querySelectorAll('.norm-category'));
+    let totalVisible = 0;
+
+    categorias.forEach((catEl, i) => {
+      const items = Array.from(catEl.querySelectorAll('.norm-item'));
+      let visiblesEnCat = 0;
+      items.forEach(item => {
+        const coincide = !q || (item.dataset.search || '').includes(q);
+        item.hidden = !coincide;
+        if (coincide) {
+          visiblesEnCat++;
+          if (q) item.open = true;
+        } else if (q) {
+          item.open = false;
+        }
+      });
+      totalVisible += visiblesEnCat;
+
+      const body = catEl.querySelector('.period-body');
+      const header = catEl.querySelector('.period-header');
+      const chevron = header.querySelector('.period-chevron');
+
+      if (q) {
+        catEl.hidden = visiblesEnCat === 0;
+        body.hidden = visiblesEnCat === 0;
+        chevron.textContent = visiblesEnCat > 0 ? '▴' : '▾';
+      } else {
+        catEl.hidden = false;
+        body.hidden = i !== 0;
+        chevron.textContent = i === 0 ? '▴' : '▾';
+      }
+    });
+
+    const notaVacia = document.getElementById('normSinResultados');
+    if (notaVacia) notaVacia.hidden = !(q && totalVisible === 0);
+  }
+
+  renderNormativa();
 
   function aplicarModoSoloLectura() {
     const contenido = document.querySelector('main.content');
