@@ -55,13 +55,13 @@
     animation: entradaBrand 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
   }
   .brand .logo-halo {
-    width: 132px; height: 132px;
+    width: 160px; height: 160px;
     border-radius: 28px;
     background: radial-gradient(circle, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 70%);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 12px 40px rgba(0,0,0,0.45);
   }
-  .brand img { width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0,0,0,0.4)); }
+  .brand img { width: 120px; height: auto; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0,0,0,0.4)); }
   .brand .name { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.3px; color: #fff; }
   .brand .sub { font-size: 0.84rem; color: var(--muted); }
 
@@ -190,13 +190,13 @@
   /* ---------- Responsive: movil y tablet ---------- */
   @media (max-width: 820px) {
     .wrap { gap: 20px; }
-    .brand .logo-halo { width: 112px; height: 112px; }
-    .brand img { width: 80px; height: 80px; }
+    .brand .logo-halo { width: 140px; height: 140px; }
+    .brand img { width: 100px; height: auto; }
   }
   @media (max-width: 420px) {
     .panel { padding: 24px 18px 20px; border-radius: 16px; }
-    .brand .logo-halo { width: 92px; height: 92px; border-radius: 22px; }
-    .brand img { width: 66px; height: 66px; }
+    .brand .logo-halo { width: 118px; height: 118px; border-radius: 22px; }
+    .brand img { width: 84px; height: auto; }
     .brand .name { font-size: 1.3rem; }
   }
 
@@ -372,10 +372,17 @@
   }
 
   function mostrarBienvenidaYRedirigir(usuario) {
-    const primerNombre = usuario.name ? usuario.name.trim().split(/\s+/)[0] : '';
-    $('welcomeTitulo').textContent = primerNombre ? `${saludoSegunHora()}, ${primerNombre}` : saludoSegunHora();
-    $('welcomeOverlay').classList.add('show');
-    setTimeout(() => { window.location.href = '/'; }, 1000);
+    // Todo lo de aqui dentro es cosmetico (saludo, nombre): si algo falla no
+    // debe impedir la redireccion, o la pantalla de bienvenida se quedaria
+    // congelada para siempre.
+    try {
+      const primerNombre = usuario && usuario.name ? usuario.name.trim().split(/\s+/)[0] : '';
+      $('welcomeTitulo').textContent = primerNombre ? `${saludoSegunHora()}, ${primerNombre}` : saludoSegunHora();
+      $('welcomeOverlay').classList.add('show');
+    } catch (err) {
+      $('welcomeOverlay').classList.add('show');
+    }
+    setTimeout(() => { window.location.href = '/'; }, 2000);
   }
 
   /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ---------- */
