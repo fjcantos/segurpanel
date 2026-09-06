@@ -371,7 +371,20 @@
     return 'Buenas noches';
   }
 
-  function mostrarBienvenidaYRedirigir(usuario) {
+  function mostrarBienvenidaYRedirigir(usuario, credencial) {
+    // Si el navegador soporta la Credential Management API, le pedimos
+    // explicitamente que guarde la contraseña ahora mismo. Asi Edge/Chrome
+    // no dejan pendiente su propio aviso "¿Guardar contraseña?" para
+    // mostrarlo justo durante la redireccion (lo que hacia parecer que la
+    // pantalla de bienvenida se quedaba colgada).
+    if (credencial && window.PasswordCredential && navigator.credentials && navigator.credentials.store) {
+      navigator.credentials.store(new PasswordCredential({
+        id: credencial.email,
+        password: credencial.password,
+        name: (usuario && usuario.name) || credencial.email,
+      })).catch(() => { /* API no soportada o denegada: no debe afectar al login */ });
+    }
+
     // Todo lo de aqui dentro es cosmetico (saludo, nombre): si algo falla no
     // debe impedir la redireccion, o la pantalla de bienvenida se quedaria
     // congelada para siempre.
@@ -382,7 +395,9 @@
     } catch (err) {
       $('welcomeOverlay').classList.add('show');
     }
-    setTimeout(() => { window.location.href = '/'; }, 2000);
+    // Redireccion automatica, sin necesidad de ningun clic; 1.5s como maximo
+    // de espera para que se vea el saludo.
+    setTimeout(() => { window.location.href = '/'; }, 1500);
   }
 
   /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ---------- */
@@ -416,7 +431,7 @@
         mostrarVista('cambiar');
         conCargaBoton($('btnLogin'), false);
       } else {
-        mostrarBienvenidaYRedirigir(datos.usuario);
+        mostrarBienvenidaYRedirigir(datos.usuario, { email: $('loginEmail').value, password: $('loginPassword').value });
         // El boton se queda en estado de carga: en un instante se navega
         // fuera de esta pagina, no hace falta restaurarlo.
       }
@@ -477,7 +492,7 @@
         conCargaBoton($('btnCambiar'), false);
         return;
       }
-      mostrarBienvenidaYRedirigir(datos.usuario);
+      mostrarBienvenidaYRedirigir(datos.usuario, { email: (datos.usuario && datos.usuario.email) || '', password: $('newPassword').value });
     } catch (err) {
       mostrarMensaje('msgCambiar', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
       conCargaBoton($('btnCambiar'), false);
