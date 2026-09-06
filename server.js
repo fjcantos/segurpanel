@@ -1483,16 +1483,18 @@ async function apiAlianzasSync(req, res) {
     return enviarJSON(res, 400, { error: "Ninguna alianza del envío tiene un formato válido." });
   }
 
-  const insertadas = db.insertarAlianzasPendientes(validas);
-  notificarAlianzasNuevas(insertadas);
-  enviarJSON(res, 200, { insertadas, recibidas: lista.length, validas: validas.length });
+  const { count } = db.insertarAlianzasPendientes(validas);
+  notificarAlianzasNuevas(count);
+  enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
 }
 
 // ---------------------------------------------------------------
 // POST /api/alianzas/nueva: variante de ingesta pensada para el scraper de
-// la Raspberry Pi tal y como esta escrito hoy (un POST por cada alianza
-// nueva que detecta, con los 6 campos que el propio scraper produce:
-// empresa_alarma, socio_comercial, tipo_acuerdo, fecha, fuente y resumen).
+// la Raspberry Pi tal y como esta escrito hoy: un array JSON con todas las
+// alianzas nuevas detectadas en la misma ejecucion, cada una con los campos
+// id, empresa_alarma, socio_comercial, sector, tipo_acuerdo, fecha, fuente,
+// titulo, resumen y origen. Por compatibilidad con envios antiguos tambien
+// se acepta un unico objeto suelto (sin envolver en array).
 // Se autentica con "Authorization: Bearer <ALIANZAS_TOKEN>" en vez del
 // header a medida x-scraper-token que usa /sync, y escribe en la misma
 // tabla `alianzas` como 'pending' -> el punto rojo de la pestaña Alianzas
@@ -1549,6 +1551,55 @@ function generarExternalIdAlianza({ empresaAlarma, socio, fuente }) {
     .slice(0, 32);
 }
 
+// Normaliza un elemento del array que envia el scraper (campos en
+// snake_case) al formato interno que usa insertarAlianzasPendientes. El
+// scraper ya calcula "sector" y aporta un "id" propio para deduplicar, asi
+// que se usan directamente en vez de inferirlos; "fuente" es la URL de la
+// noticia y "origen" el nombre legible de la fuente (p.ej. "Google News"),
+// igual que antes distinguian "url" y "fuente" internamente.
+function normalizarAlianzaNueva(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return { error: "Cada alianza debe ser un objeto." };
+  }
+
+  const empresaAlarma = typeof item.empresa_alarma === "string" ? item.empresa_alarma.trim() : "";
+  const socio = typeof item.socio_comercial === "string" ? item.socio_comercial.trim() : "";
+  const fuenteUrl = typeof item.fuente === "string" ? item.fuente.trim() : "";
+
+  if (!empresaAlarma || !socio || !fuenteUrl) {
+    return { error: "Faltan campos obligatorios: empresa_alarma, socio_comercial y fuente." };
+  }
+
+  let sector = typeof item.sector === "string" ? item.sector.trim() : "";
+  if (!SECTORES_ALIANZA.has(sector)) {
+    sector = inferirSectorPorSocio(socio) || "";
+  }
+  if (!sector) {
+    return { error: `No se reconoce el sector del socio comercial "${socio}".` };
+  }
+
+  const idRecibido = item.id !== undefined && item.id !== null ? String(item.id).trim() : "";
+  const externalId = idRecibido || generarExternalIdAlianza({ empresaAlarma, socio, fuente: fuenteUrl });
+
+  const titulo = typeof item.titulo === "string" ? item.titulo.trim() : "";
+  const resumen = typeof item.resumen === "string" ? item.resumen.trim() : "";
+  const origen = typeof item.origen === "string" ? item.origen.trim() : "";
+
+  return {
+    alianza: {
+      externalId,
+      empresaAlarma,
+      sector,
+      socio,
+      tipoAcuerdo: typeof item.tipo_acuerdo === "string" ? item.tipo_acuerdo.trim() : null,
+      titular: (titulo || resumen).slice(0, 500) || null,
+      fuente: origen || extraerDominio(fuenteUrl) || fuenteUrl,
+      url: fuenteUrl,
+      fechaPublicacion: typeof item.fecha === "string" ? item.fecha.trim() : null,
+    },
+  };
+}
+
 async function apiAlianzasNueva(req, res) {
   const tokenEsperado = process.env.ALIANZAS_TOKEN;
   if (!tokenEsperado) {
@@ -1568,44 +1619,47 @@ async function apiAlianzasNueva(req, res) {
     return enviarJSON(res, 400, { error: e.message });
   }
 
-  const empresaAlarma = typeof cuerpo.empresa_alarma === "string" ? cuerpo.empresa_alarma.trim() : "";
-  const socio = typeof cuerpo.socio_comercial === "string" ? cuerpo.socio_comercial.trim() : "";
-  const fuente = typeof cuerpo.fuente === "string" ? cuerpo.fuente.trim() : "";
-
-  if (!empresaAlarma || !socio || !fuente) {
-    return enviarJSON(res, 400, {
-      error: "Faltan campos obligatorios: empresa_alarma, socio_comercial y fuente.",
-    });
+  // El scraper envia un array con todas las alianzas nuevas de la ejecucion;
+  // un objeto suelto tambien se acepta por compatibilidad.
+  const lista = Array.isArray(cuerpo) ? cuerpo : [cuerpo];
+  if (lista.length === 0) {
+    return enviarJSON(res, 400, { error: "El envío no contiene ninguna alianza." });
+  }
+  if (lista.length > MAX_ALIANZAS_POR_SYNC) {
+    return enviarJSON(res, 400, { error: `Demasiadas alianzas en un solo envío (máximo ${MAX_ALIANZAS_POR_SYNC}).` });
   }
 
-  const sector = inferirSectorPorSocio(socio);
-  if (!sector) {
-    return enviarJSON(res, 400, { error: `No se reconoce el sector del socio comercial "${socio}".` });
+  const validas = [];
+  let primerError = null;
+  for (const item of lista) {
+    const resultado = normalizarAlianzaNueva(item);
+    if (resultado.error) {
+      if (!primerError) primerError = resultado.error;
+    } else {
+      validas.push(resultado.alianza);
+    }
   }
 
-  const alianza = {
-    externalId: generarExternalIdAlianza({ empresaAlarma, socio, fuente }),
-    empresaAlarma,
-    sector,
-    socio,
-    tipoAcuerdo: typeof cuerpo.tipo_acuerdo === "string" ? cuerpo.tipo_acuerdo.trim() : null,
-    titular: typeof cuerpo.resumen === "string" ? cuerpo.resumen.trim().slice(0, 500) : null,
-    fuente: extraerDominio(fuente) || fuente,
-    url: fuente,
-    fechaPublicacion: typeof cuerpo.fecha === "string" ? cuerpo.fecha.trim() : null,
-  };
+  if (validas.length === 0) {
+    return enviarJSON(res, 400, { error: primerError || "Ninguna alianza del envío tiene un formato válido." });
+  }
 
-  const insertadas = db.insertarAlianzasPendientes([alianza]);
-  notificarAlianzasNuevas(insertadas);
-  if (insertadas > 0) {
+  const { count, filas } = db.insertarAlianzasPendientes(validas);
+  notificarAlianzasNuevas(count);
+  if (count > 0) {
     email
-      .enviarEmailAlianzasNuevas([alianza])
-      .catch((e) => console.error("Error enviando email de nueva alianza:", e));
+      .enviarEmailAlianzasNuevas(filas)
+      .catch((e) => console.error("Error enviando email de nuevas alianzas:", e));
   }
   enviarJSON(res, 200, {
     ok: true,
-    insertada: insertadas > 0,
-    mensaje: insertadas > 0 ? "Alianza registrada como pendiente de revisión." : "Alianza ya existía (ignorada).",
+    recibidas: lista.length,
+    validas: validas.length,
+    insertadas: count,
+    mensaje:
+      count > 0
+        ? `${count} alianza${count === 1 ? "" : "s"} registrada${count === 1 ? "" : "s"} como pendiente${count === 1 ? "" : "s"} de revisión.`
+        : "Ninguna alianza nueva (ya existían o fueron ignoradas).",
   });
 }
 

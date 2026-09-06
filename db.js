@@ -294,6 +294,10 @@ function limpiarSesionesCaducadas() {
 // estable generado por el scraper a partir de la URL de la noticia, para no
 // duplicar la misma alianza en sucesivas ejecuciones diarias.
 
+// Devuelve { count, filas }: filas son los elementos de `lista` que
+// realmente se han insertado (no las que ya existian y INSERT OR IGNORE ha
+// descartado), para que el llamador pueda avisar (push/email) solo de las
+// alianzas que de verdad son nuevas.
 function insertarAlianzasPendientes(lista) {
   const ahora = ahoraISO();
   const insertar = db.prepare(
@@ -301,7 +305,7 @@ function insertarAlianzasPendientes(lista) {
       (external_id, empresa_alarma, sector, socio, tipo_acuerdo, titular, fuente, url, fecha_publicacion, fecha_deteccion, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
   );
-  let insertadas = 0;
+  const filas = [];
   for (const a of lista) {
     const info = insertar.run(
       a.externalId,
@@ -316,9 +320,9 @@ function insertarAlianzasPendientes(lista) {
       a.fechaDeteccion || ahora,
       ahora
     );
-    if (info.changes > 0) insertadas++;
+    if (info.changes > 0) filas.push(a);
   }
-  return insertadas;
+  return { count: filas.length, filas };
 }
 
 function alianzaPublica(a) {
