@@ -1529,10 +1529,15 @@ function inferirSectorPorSocio(socio) {
   return SECTOR_POR_SOCIO.get(String(socio || "").trim().toLowerCase()) || null;
 }
 
+// Acepta tanto "Authorization: Bearer <token>" como "Authorization: <token>"
+// a secas: algunos scripts del scraper (siguiendo el mismo estilo que el
+// header a medida X-Scraper-Token de /sync, que no lleva prefijo) mandan el
+// token directo sin anteponer "Bearer ", y eso no debe traducirse en un 401.
 function extraerTokenBearer(req) {
-  const cabecera = req.headers["authorization"] || "";
-  const m = /^Bearer\s+(.+)$/i.exec(cabecera.trim());
-  return m ? m[1].trim() : null;
+  const cabecera = String(req.headers["authorization"] || "").trim();
+  if (!cabecera) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(cabecera);
+  return m ? m[1].trim() : cabecera;
 }
 
 function extraerDominio(url) {
@@ -1601,7 +1606,7 @@ function normalizarAlianzaNueva(item) {
 }
 
 async function apiAlianzasNueva(req, res) {
-  const tokenEsperado = process.env.ALIANZAS_TOKEN;
+  const tokenEsperado = (process.env.ALIANZAS_TOKEN || "").trim();
   if (!tokenEsperado) {
     return enviarJSON(res, 503, {
       error: "El servidor no tiene configurada la variable de entorno ALIANZAS_TOKEN.",

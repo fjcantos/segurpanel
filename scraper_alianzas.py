@@ -29,21 +29,45 @@ Comportamiento:
     quedan igualmente guardadas en el cache local y se reintentará el envío
     en la siguiente ejecución (se vuelven a considerar "nuevas" hasta que
     el envío tenga éxito).
+  - Cada ejecución normal también vuelca TODAS las alianzas detectadas (sean
+    novedad o no) en ALIANZAS_JSON, que sirve de base para --force-send y
+    --test.
+
+Argumentos de línea de comandos:
+  --force-send  No hace ninguna búsqueda nueva: envía a SegurPanel todas las
+                alianzas guardadas en ALIANZAS_JSON, aunque ya se hubieran
+                enviado antes. Util para reenviar el historico completo tras
+                un problema en el servidor.
+  --test        Igual que --force-send pero solo con las 3 primeras alianzas
+                de ALIANZAS_JSON, para probar la conexión con SegurPanel
+                (URL, token) sin reenviar todo el histórico.
 
 Configuración (variables de entorno):
   SEGURPANEL_SYNC_URL      URL completa del endpoint, p.ej.
                            https://tu-app.onrender.com/api/alianzas/sync
   SEGURPANEL_SCRAPER_TOKEN Debe coincidir con SCRAPER_TOKEN en el servidor.
-  ALIANZAS_CACHE           Ruta del fichero de cache local (por defecto,
-                           alianzas_cache.json junto a este script).
+  ALIANZAS_CACHE           Ruta del fichero de cache local de IDs (por
+                           defecto, alianzas_cache.json junto a este script).
+  ALIANZAS_JSON            Ruta del fichero con todas las alianzas detectadas
+                           (por defecto, alianzas.json junto a este script);
+                           es lo que leen --force-send y --test.
 
 Cron sugerido (todos los días a las 07:00):
   0 7 * * * SEGURPANEL_SYNC_URL="https://tu-app.onrender.com/api/alianzas/sync" \
             SEGURPANEL_SCRAPER_TOKEN="el-mismo-secreto-que-en-el-servidor" \
             /usr/bin/python3 /home/pi/segurpanel/scraper_alianzas.py \
             >> /home/pi/segurpanel/scraper_alianzas.log 2>&1
+
+Probar la conexión a mano:
+  SEGURPANEL_SYNC_URL="..." SEGURPANEL_SCRAPER_TOKEN="..." \
+    python3 scraper_alianzas.py --test
+
+Reenviar todo el histórico a mano:
+  SEGURPANEL_SYNC_URL="..." SEGURPANEL_SCRAPER_TOKEN="..." \
+    python3 scraper_alianzas.py --force-send
 """
 
+import argparse
 import json
 import os
 import re
@@ -118,8 +142,10 @@ MAX_CACHE_ENTRADAS = 2000  # evita que el fichero de cache crezca sin limite
 
 RUTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
 ALIANZAS_CACHE = os.environ.get("ALIANZAS_CACHE", os.path.join(RUTA_SCRIPT, "alianzas_cache.json"))
+ALIANZAS_JSON = os.environ.get("ALIANZAS_JSON", os.path.join(RUTA_SCRIPT, "alianzas.json"))
 SYNC_URL = os.environ.get("SEGURPANEL_SYNC_URL", "")
 SYNC_TOKEN = os.environ.get("SEGURPANEL_SCRAPER_TOKEN", "")
+NUM_ALIANZAS_TEST = 3
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +297,28 @@ def guardar_cache(cache):
 
 
 # ---------------------------------------------------------------------------
+# Volcado completo de alianzas detectadas (base de --force-send y --test)
+# ---------------------------------------------------------------------------
+
+def cargar_alianzas_json():
+    if not os.path.exists(ALIANZAS_JSON):
+        return []
+    try:
+        with open(ALIANZAS_JSON, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+            return datos if isinstance(datos, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def guardar_alianzas_json(alianzas):
+    tmp = ALIANZAS_JSON + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(alianzas, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, ALIANZAS_JSON)
+
+
+# ---------------------------------------------------------------------------
 # Envio a SegurPanel
 # ---------------------------------------------------------------------------
 
@@ -307,7 +355,52 @@ def sincronizar_con_segurpanel(alianzas):
 # Main
 # ---------------------------------------------------------------------------
 
+def parsear_argumentos():
+    parser = argparse.ArgumentParser(
+        description="Scraper de alianzas de SegurPanel (busca acuerdos y los sincroniza con el panel)."
+    )
+    parser.add_argument(
+        "--force-send",
+        action="store_true",
+        help=(
+            "No busca alianzas nuevas: envía a SegurPanel TODAS las guardadas en "
+            f"{ALIANZAS_JSON}, aunque ya se hubieran enviado antes."
+        ),
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help=(
+            f"Igual que --force-send pero solo con las {NUM_ALIANZAS_TEST} primeras alianzas "
+            f"de {ALIANZAS_JSON}, para probar la conexión con SegurPanel sin reenviar todo."
+        ),
+    )
+    return parser.parse_args()
+
+
+def enviar_desde_archivo(solo_prueba):
+    alianzas_guardadas = cargar_alianzas_json()
+    if not alianzas_guardadas:
+        print(
+            f"[error] No hay alianzas guardadas en {ALIANZAS_JSON}. "
+            "Ejecuta el scraper una vez sin --force-send/--test para generarlo.",
+            file=sys.stderr,
+        )
+        return False
+
+    a_enviar = alianzas_guardadas[:NUM_ALIANZAS_TEST] if solo_prueba else alianzas_guardadas
+    etiqueta = f"prueba de conexión ({len(a_enviar)} primeras)" if solo_prueba else "reenvío forzado"
+    print(f"[info] {etiqueta}: enviando {len(a_enviar)} de {len(alianzas_guardadas)} alianzas guardadas en {ALIANZAS_JSON}.")
+    return sincronizar_con_segurpanel(a_enviar)
+
+
 def main():
+    args = parsear_argumentos()
+
+    if args.force_send or args.test:
+        enviado_ok = enviar_desde_archivo(solo_prueba=args.test)
+        sys.exit(0 if enviado_ok else 1)
+
     cache = cargar_cache()
     vistos = set(cache["vistos"])
     enviados = set(cache["enviados"])
@@ -326,6 +419,9 @@ def main():
     for a in todas_detectadas:
         por_id.setdefault(a["externalId"], a)
     todas_detectadas = list(por_id.values())
+
+    # Volcado completo (novedad o no): es lo que leen --force-send y --test.
+    guardar_alianzas_json(todas_detectadas)
 
     # "Cambios respecto al día anterior": lo que no estaba ya en el cache de
     # ejecuciones previas, o que sí estaba pero aún no se había podido enviar
