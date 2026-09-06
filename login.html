@@ -396,8 +396,28 @@
       $('welcomeOverlay').classList.add('show');
     }
     // Redireccion automatica, sin necesidad de ningun clic; 1.5s como maximo
-    // de espera para que se vea el saludo.
-    setTimeout(() => { window.location.href = '/'; }, 1500);
+    // de espera para que se vea el saludo. location.replace() no deja la
+    // pantalla de bienvenida en el historial (no se puede volver a ella con
+    // "atras") y, a diferencia de asignar location.href, no depende de que
+    // el navegador procese antes ningun cambio pendiente en el documento.
+    let redirigido = false;
+    function irAlPanel() {
+      if (redirigido) return;
+      redirigido = true;
+      window.location.replace('/');
+    }
+    const inicio = Date.now();
+    setTimeout(irAlPanel, 1500);
+    // Red de seguridad: en Edge/Chrome en PC, el aviso nativo "¿Guardar
+    // contraseña?" puede retrasar la ejecucion del setTimeout anterior. Este
+    // intervalo comprueba el tiempo real transcurrido y fuerza la
+    // redireccion en cuanto se cumplan los 1.5s, aparezca o no ese aviso.
+    const vigilancia = setInterval(() => {
+      if (Date.now() - inicio >= 1500) {
+        clearInterval(vigilancia);
+        irAlPanel();
+      }
+    }, 150);
   }
 
   /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ---------- */
