@@ -1147,6 +1147,7 @@
     .topbar-right { gap: 8px; }
     .user-badge { display: none; }
     a.user-link, button.user-link { padding: 7px 12px; font-size: 0.76rem; }
+    .btn-push-txt { display: none; }
 
     .tabs {
       padding: 0 6px;
@@ -1256,6 +1257,7 @@
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar entre modo claro y oscuro"></button>
     <div class="user-menu" id="userMenu" hidden>
       <span class="user-badge" id="userBadge"></span>
+      <button class="user-link" id="btnActivarPush" type="button" hidden title="Activar notificaciones" aria-label="Activar notificaciones">🔔 <span class="btn-push-txt">Activar notificaciones</span></button>
       <a class="user-link" id="adminLink" href="/admin" hidden>Admin</a>
       <button class="user-link" id="logoutBtn" type="button">Salir</button>
     </div>
@@ -2114,8 +2116,22 @@
     return outputArray;
   }
 
+  function pushEsSoportado() {
+    return ('serviceWorker' in navigator) && ('PushManager' in window) && typeof Notification !== 'undefined';
+  }
+
+  // Muestra el boton "Activar notificaciones" de la cabecera solo cuando
+  // tiene sentido: el navegador soporta Push y el usuario todavia no ha
+  // decidido nada (si ya las deniego, el navegador no volveria a preguntar
+  // aunque pulse el boton).
+  function actualizarBotonPush() {
+    const btn = document.getElementById('btnActivarPush');
+    if (!btn) return;
+    btn.hidden = !pushEsSoportado() || Notification.permission !== 'default';
+  }
+
   async function configurarNotificacionesPush() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return;
+    if (!pushEsSoportado()) return;
     try {
       const permiso = await Notification.requestPermission();
       if (permiso !== 'granted') return;
@@ -2133,8 +2149,14 @@
       await llamarAPI('/api/push/subscribe', { method: 'POST', body: JSON.stringify(suscripcion.toJSON()) });
     } catch (e) {
       console.warn('No se pudo activar las notificaciones push:', e);
+    } finally {
+      actualizarBotonPush();
     }
   }
+
+  document.getElementById('btnActivarPush').addEventListener('click', () => {
+    configurarNotificacionesPush();
+  });
 
   /* ---------- Exportar a Excel (Comparador, Inteligencia, Estadisticas) ----------
      El servidor no vuelve a calcular nada: solo recibe {titulo, columnas,
@@ -2734,6 +2756,7 @@
       `${usuario.name ? usuario.name + ' · ' : ''}<span class="role-tag">${ETIQUETAS_ROL[usuario.role] || usuario.role}</span>`;
     document.getElementById('userBadge').title = usuario.email;
     pintarBienvenidaInicio(usuario);
+    actualizarBotonPush();
 
     if (usuario.role === 'super_admin') {
       document.getElementById('adminLink').hidden = false;
