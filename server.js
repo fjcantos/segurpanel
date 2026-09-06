@@ -32,6 +32,7 @@ const db = require("./db");
 const auth = require("./auth");
 const analisis = require("./analisis");
 const push = require("./push");
+const email = require("./email");
 
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -1596,6 +1597,11 @@ async function apiAlianzasNueva(req, res) {
 
   const insertadas = db.insertarAlianzasPendientes([alianza]);
   notificarAlianzasNuevas(insertadas);
+  if (insertadas > 0) {
+    email
+      .enviarEmailAlianzasNuevas([alianza])
+      .catch((e) => console.error("Error enviando email de nueva alianza:", e));
+  }
   enviarJSON(res, 200, {
     ok: true,
     insertada: insertadas > 0,
@@ -1808,6 +1814,12 @@ servidor.listen(PORT, () => {
   if (!process.env.ALIANZAS_TOKEN) {
     console.warn(
       "AVISO: ALIANZAS_TOKEN no está configurada. POST /api/alianzas/nueva (usado por scraper_alianzas.py) rechazará todas las peticiones hasta que la definas."
+    );
+  }
+
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    console.warn(
+      "AVISO: SMTP_USER/SMTP_PASSWORD no están configuradas. No se enviarán emails cuando el scraper detecte alianzas nuevas."
     );
   }
 
