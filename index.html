@@ -585,6 +585,63 @@
   .btn-export:hover:not(:disabled) { background: var(--accent); color: #fff; }
   .btn-export:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  .proposal-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 18px;
+    max-width: 720px;
+  }
+  .proposal-field { display: flex; flex-direction: column; gap: 6px; }
+  .proposal-field-wide { grid-column: 1 / -1; }
+  .proposal-field label { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+  .proposal-field select,
+  .proposal-field input,
+  .proposal-field textarea {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 0.88rem;
+    color: var(--text);
+    background: var(--card-bg, #fff);
+    resize: vertical;
+  }
+  .proposal-field-wide .btn-publish { flex: 0 0 auto; padding: 10px 20px; border-radius: 999px; font-size: 0.85rem; }
+  .proposal-status { margin-left: 12px; font-size: 0.82rem; color: var(--muted); }
+  .proposal-status.is-error { color: var(--danger, #c0392b); }
+
+  .compare-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .compare-toolbar label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+  .compare-toolbar select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    color: var(--text);
+    background: var(--card-bg, #fff);
+  }
+  .watch-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--border);
+    line-height: 1;
+  }
+  .watch-btn.is-watched { color: #d97706; }
+  .company-note-input {
+    width: 100%;
+    min-width: 160px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    color: var(--text);
+    resize: vertical;
+  }
+
   .period-block { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
   .period-header {
     width: 100%;
@@ -1311,6 +1368,10 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
     Análisis Avanzado
   </button>
+  <button class="tab-btn" data-tab="generadorPropuestas">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 2.5h7l3 3V17a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5z"/><path d="M12 2.5V6h3.5M7 9h6M7 12h6M7 15h3.5"/></svg>
+    Propuestas
+  </button>
   <button class="tab-btn" data-tab="iaAssistant">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 17l3-3 3 3M7 8h.01M13 8h.01"/></svg>
     IA Assistant
@@ -1419,6 +1480,18 @@
 
     <button type="button" class="btn-export" id="btnExportComparador">⬇ Exportar a Excel</button>
 
+    <div class="compare-toolbar">
+      <label for="ordenComparador">Ordenar por</label>
+      <select id="ordenComparador">
+        <option value="">Orden por defecto</option>
+        <option value="precio-asc">Precio (menor a mayor)</option>
+        <option value="precio-desc">Precio (mayor a menor)</option>
+        <option value="permanencia-asc">Permanencia (menor a mayor)</option>
+        <option value="permanencia-desc">Permanencia (mayor a menor)</option>
+        <option value="valoracion-desc">Valoración (mejor a peor)</option>
+      </select>
+    </div>
+
     <div class="compare-legend" id="compareLegend" hidden></div>
 
     <div class="table-wrap">
@@ -1434,7 +1507,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr>
+          <tr data-precio-min="44" data-permanencia-meses="24" data-valoracion="4.2">
             <td class="company-name"><span class="company-swatch" data-company="Verisure" style="background:#CC0000"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~44 – 55 €/mes</td>
@@ -1442,7 +1515,7 @@
             <td>Central, sensores movimiento/apertura, cámaras, sirena</td>
             <td class="rating">4.2 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="35" data-permanencia-meses="24" data-valoracion="4.0">
             <td class="company-name"><span class="company-swatch" data-company="Sector Alarm" style="background:linear-gradient(135deg, #000000 50%, #CC0000 50%)"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~35 – 45 €/mes</td>
@@ -1450,7 +1523,7 @@
             <td>Central, sensores movimiento/apertura, cámara, app propia</td>
             <td class="rating">4.0 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="28" data-permanencia-meses="12" data-valoracion="3.8">
             <td class="company-name"><span class="company-swatch" data-company="Sicor" style="background:#1B5E20"></span></td>
             <td>Variable según instalador</td>
             <td>~28 – 38 €/mes</td>
@@ -1458,7 +1531,7 @@
             <td>Central, detectores volumétricos, contactos magnéticos</td>
             <td class="rating">3.8 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="25" data-permanencia-meses="12" data-valoracion="3.6">
             <td class="company-name"><span class="company-swatch" data-company="Segurma" style="background:#F57C00"></span></td>
             <td>Variable según instalador</td>
             <td>~25 – 35 €/mes</td>
@@ -1466,7 +1539,7 @@
             <td>Central, sensores básicos, sirena interior/exterior</td>
             <td class="rating">3.6 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="35" data-permanencia-meses="24" data-valoracion="3.9">
             <td class="company-name"><span class="company-swatch" data-company="ADT" style="background:#0D47A1"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~35 – 45 €/mes</td>
@@ -1474,7 +1547,7 @@
             <td>Central, sensores movimiento/apertura, videoverificación</td>
             <td class="rating">3.9 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="25" data-permanencia-meses="0" data-valoracion="3.7">
             <td class="company-name"><span class="company-swatch" data-company="Seguridad 3D" style="background:linear-gradient(135deg, #FDD835 50%, #00796B 50%)"></span></td>
             <td>Variable según instalador</td>
             <td>~25 – 32 €/mes</td>
@@ -1482,7 +1555,7 @@
             <td>Central, sensores, app de control remoto</td>
             <td class="rating">3.7 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="30" data-permanencia-meses="0" data-valoracion="3.9">
             <td class="company-name"><span class="company-swatch" data-company="Grupo Control" style="background:#7B1C2B"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~30 – 42 €/mes</td>
@@ -1490,7 +1563,7 @@
             <td>Central, sensores, app propia</td>
             <td class="rating">3.9 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="28" data-permanencia-meses="12" data-valoracion="3.6">
             <td class="company-name"><span class="company-swatch" data-company="Trablisa" style="background:linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)"></span></td>
             <td>Variable según instalador</td>
             <td>~28 – 38 €/mes</td>
@@ -1498,7 +1571,7 @@
             <td>Central, sensores, videovigilancia opcional</td>
             <td class="rating">3.6 / 5</td>
           </tr>
-          <tr>
+          <tr data-precio-min="29" data-permanencia-meses="12" data-valoracion="3.9">
             <td class="company-name"><span class="company-swatch" data-company="MPA/Prosegur" style="background:#FDD835"></span></td>
             <td>Desde 0€ (promo)</td>
             <td>~29 – 39 €/mes</td>
@@ -1886,6 +1959,17 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <div class="chart-title">Actividad en tiempo real</div>
+      <div class="chart-sub">Pestaña activa y última acción registrada de cada usuario activo. Se actualiza automáticamente cada 20 segundos mientras esta pestaña está abierta.</div>
+      <div class="table-wrap">
+        <table class="compare">
+          <thead><tr><th>Usuario</th><th>Última acción</th><th>Pestaña activa</th><th>Hora</th></tr></thead>
+          <tbody id="statsActividadTiempoRealBody"><tr><td colspan="4" class="empty-note">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <!-- ===== REPOSITORIO (solo super_admin y admin) ===== -->
@@ -1894,6 +1978,8 @@
     <p class="section-sub">Cada contrato analizado en la pestaña Análisis se guarda aquí ya anonimizado (sin ningún dato personal): empresa, tipo, provincia, fecha, riesgo y cláusulas detectadas. Se compara automáticamente con contratos anteriores de la misma empresa y tipo para avisar de cláusulas nuevas, modificadas o eliminadas.</p>
 
     <div class="compare-legend" id="repoLegend" hidden></div>
+
+    <button type="button" class="btn-export" id="btnExportRepositorio">⬇ Exportar a Excel</button>
 
     <div class="repo-filters">
       <div class="repo-filter-group">
@@ -1967,6 +2053,38 @@
     </div>
 
     <div class="analysis-results" id="analysisResultsAdv"></div>
+  </section>
+
+  <!-- ===== GENERADOR DE PROPUESTAS ===== -->
+  <section id="generadorPropuestas" class="tab-content">
+    <h2 class="section-title">Generador de propuestas</h2>
+    <p class="section-sub">Genera una propuesta comercial personalizada en PDF con IA (logo UIC, argumentos de valor, comparativa con la competencia y precio recomendado).</p>
+
+    <form class="proposal-form" id="proposalForm">
+      <div class="proposal-field">
+        <label for="proposalTipoCliente">Tipo de cliente</label>
+        <select id="proposalTipoCliente" name="tipoCliente">
+          <option value="hogar">Hogar</option>
+          <option value="negocio">Negocio</option>
+        </select>
+      </div>
+      <div class="proposal-field">
+        <label for="proposalZona">Zona geográfica</label>
+        <select id="proposalZona" name="zona"></select>
+      </div>
+      <div class="proposal-field">
+        <label for="proposalPresupuesto">Presupuesto aproximado (€/mes)</label>
+        <input type="number" id="proposalPresupuesto" name="presupuesto" min="0" step="1" placeholder="Ej. 40">
+      </div>
+      <div class="proposal-field proposal-field-wide">
+        <label for="proposalNecesidades">Necesidades específicas</label>
+        <textarea id="proposalNecesidades" name="necesidades" rows="3" placeholder="Ej. vivienda unifamiliar con jardín, quiere cámaras exteriores y videoverificación..."></textarea>
+      </div>
+      <div class="proposal-field proposal-field-wide">
+        <button type="submit" class="btn-publish" id="proposalSubmitBtn">Generar propuesta</button>
+        <span class="proposal-status" id="proposalStatus"></span>
+      </div>
+    </form>
   </section>
 
   <!-- ===== IA ASSISTANT ===== -->
@@ -2253,6 +2371,86 @@
       el.innerHTML = construirLeyendaHTML();
       el.hidden = false;
     });
+  }
+
+  // Notas privadas y "vigilar" por empresa (Comparador): columna extra
+  // visible SOLO para super_admin (solo se llama desde el bloque
+  // usuario.role === 'super_admin'), con una estrella de vigilancia y un
+  // textarea de notas internas por fila. Carga/guarda en
+  // /api/comparador/notas y /api/comparador/vigilar (db.js: company_notes).
+  async function configurarComparadorSuperAdmin() {
+    const tabla = document.getElementById('compareTable');
+    const theadRow = tabla && tabla.querySelector('thead tr');
+    if (!tabla || !theadRow || theadRow.querySelector('.watch-col-th')) return;
+
+    const th = document.createElement('th');
+    th.className = 'watch-col-th';
+    th.textContent = 'Vigilar / Notas (solo super_admin)';
+    theadRow.appendChild(th);
+
+    const { ok, datos } = await llamarAPI('/api/comparador/notas');
+    const notasPorEmpresa = {};
+    if (ok && Array.isArray(datos.notas)) {
+      datos.notas.forEach(n => { notasPorEmpresa[n.empresa] = n; });
+    }
+
+    tabla.querySelectorAll('tbody tr').forEach(tr => {
+      const swatch = tr.querySelector('[data-company]');
+      if (!swatch) return;
+      const empresa = swatch.dataset.company;
+      const nota = notasPorEmpresa[empresa];
+
+      const td = document.createElement('td');
+      td.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <button type="button" class="watch-btn${nota && nota.vigilada ? ' is-watched' : ''}" data-empresa="${escapeHtml(empresa)}" title="Vigilar esta empresa">★</button>
+          <textarea class="company-note-input" data-empresa="${escapeHtml(empresa)}" rows="2" placeholder="Nota interna...">${escapeHtml((nota && nota.nota) || '')}</textarea>
+        </div>`;
+      tr.appendChild(td);
+    });
+
+    tabla.querySelectorAll('.watch-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const empresa = btn.dataset.empresa;
+        const vigilada = !btn.classList.contains('is-watched');
+        btn.classList.toggle('is-watched', vigilada);
+        await llamarAPI('/api/comparador/vigilar', { method: 'POST', body: JSON.stringify({ empresa, vigilada }) });
+      });
+    });
+
+    tabla.querySelectorAll('.company-note-input').forEach(textarea => {
+      textarea.addEventListener('blur', async () => {
+        await llamarAPI('/api/comparador/notas', {
+          method: 'POST',
+          body: JSON.stringify({ empresa: textarea.dataset.empresa, nota: textarea.value }),
+        });
+      });
+    });
+  }
+
+  // Orden del Comparador (Precio/Permanencia/Valoración): reordena las filas
+  // ya presentes en el DOM usando los atributos data-precio-min/
+  // data-permanencia-meses/data-valoracion de cada <tr> (tabla estatica, sin
+  // ida y vuelta al servidor). Disponible para cualquier rol.
+  function ordenarComparador(criterio) {
+    const tbody = document.querySelector('#compareTable tbody');
+    if (!tbody) return;
+    const filas = Array.from(tbody.querySelectorAll('tr'));
+    if (!criterio) {
+      // Orden por defecto: el orden original en el que aparecen en el DOM
+      // fuente (dataset.ordenOriginal, memorizado la primera vez).
+      filas.sort((a, b) => Number(a.dataset.ordenOriginal || 0) - Number(b.dataset.ordenOriginal || 0));
+      filas.forEach(f => tbody.appendChild(f));
+      return;
+    }
+    const [campo, direccion] = criterio.split('-');
+    const atributo = { precio: 'precioMin', permanencia: 'permanenciaMeses', valoracion: 'valoracion' }[campo];
+    filas.sort((a, b) => {
+      const va = Number(a.dataset[atributo] || 0);
+      const vb = Number(b.dataset[atributo] || 0);
+      return direccion === 'desc' ? vb - va : va - vb;
+    });
+    filas.forEach(f => tbody.appendChild(f));
   }
 
   // Equipos instalados por compañía (pestaña Equipos). Datos a partir de
@@ -2761,6 +2959,7 @@
     if (usuario.role === 'super_admin') {
       document.getElementById('adminLink').hidden = false;
       mostrarLeyendasSuperAdmin();
+      configurarComparadorSuperAdmin();
     } else {
       // Solo super_admin recibe el desglose de alianzas pendientes (ver
       // apiAlianzasGet en el servidor); en el resto de roles esa tarjeta
@@ -2840,7 +3039,8 @@
   tabButtons.forEach(btn => btn.addEventListener('click', () => {
     activateTab(btn.dataset.tab);
     if (btn.dataset.tab === 'alianzas') cargarAlianzas();
-    if (btn.dataset.tab === 'estadisticas') cargarEstadisticas();
+    if (btn.dataset.tab === 'estadisticas') { cargarEstadisticas(); iniciarPollingActividadTiempoReal(); }
+    else { detenerPollingActividadTiempoReal(); }
     if (btn.dataset.tab === 'repositorio') cargarRepositorio();
     registrarVisitaTab(btn.dataset.tab);
   }));
@@ -3498,6 +3698,14 @@
     ]);
   });
 
+  Array.from(document.querySelectorAll('#compareTable tbody tr')).forEach((tr, i) => {
+    tr.dataset.ordenOriginal = String(i);
+  });
+  const ordenComparadorSelect = document.getElementById('ordenComparador');
+  if (ordenComparadorSelect) {
+    ordenComparadorSelect.addEventListener('change', () => ordenarComparador(ordenComparadorSelect.value));
+  }
+
   document.getElementById('btnExportInteligencia').addEventListener('click', (e) => {
     const avg = MARGIN_DATA.reduce((s, d) => s + d.value, 0) / MARGIN_DATA.length;
     exportarExcel(e.currentTarget, nombreArchivoConFecha('segurpanel-inteligencia'), [
@@ -3685,6 +3893,46 @@
     }).join('');
   }
 
+  const ETIQUETAS_ACCION_AUDITORIA = {
+    login: 'Inicio de sesión',
+    logout: 'Cierre de sesión',
+    analisis_contrato: 'Análisis de contrato',
+    publicar_alianza: 'Publicar alianza',
+    cambio_rol: 'Cambio de rol',
+  };
+
+  function renderStatsActividadTiempoReal(actividad) {
+    const tbody = document.getElementById('statsActividadTiempoRealBody');
+    if (!tbody) return;
+    if (!actividad || !actividad.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-note">No hay usuarios activos.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = actividad.map(u => {
+      const hora = u.horaPestana || u.horaAccion;
+      const horaTexto = hora ? new Date(hora).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+      return `<tr>
+        <td>${escapeHtml(u.name || u.email)}</td>
+        <td>${escapeHtml(ETIQUETAS_ACCION_AUDITORIA[u.ultimaAccion] || u.ultimaAccion || '—')}</td>
+        <td>${escapeHtml(u.pestanaActiva || '—')}</td>
+        <td>${horaTexto}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Refresco automatico de "Actividad en tiempo real" cada 20s, pero solo
+  // mientras la pestana Estadisticas este realmente abierta (se arma al
+  // entrar en la pestana y se desarma al salir, para no hacer polling en
+  // segundo plano sin necesidad).
+  let statsActividadInterval = null;
+  function iniciarPollingActividadTiempoReal() {
+    detenerPollingActividadTiempoReal();
+    statsActividadInterval = setInterval(cargarEstadisticas, 20000);
+  }
+  function detenerPollingActividadTiempoReal() {
+    if (statsActividadInterval) { clearInterval(statsActividadInterval); statsActividadInterval = null; }
+  }
+
   // Evolucion de precios: ilustrativa a partir de PRICE_DATA (Inteligencia),
   // con una pequeña variacion mensual determinista para dibujar una
   // tendencia. Igual que el resto de graficas de mercado de la app, se
@@ -3744,6 +3992,7 @@
       pintarMapaEstadisticas(datos.provincias);
       renderStatsClausulas(datos.clausulas);
       renderStatsActividad(datos.actividad);
+      renderStatsActividadTiempoReal(datos.actividadTiempoReal);
     } catch (e) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="empty-note">No se pudo conectar con el servidor.</td></tr>';
     }
@@ -3888,6 +4137,40 @@
     } catch (e) {
       lista.innerHTML = '<div class="empty-note">No se pudo conectar con el servidor.</div>';
     }
+  }
+
+  // Extrae un color solido "RRGGBB" de COLORES_EMPRESA para el Excel (algunas
+  // empresas usan un gradiente CSS ahi, del que solo se puede tomar el
+  // primer color hexadecimal para pintar la celda).
+  function colorEmpresaHexSolido(empresa) {
+    const valor = COLORES_EMPRESA[empresa];
+    if (!valor) return null;
+    const m = valor.match(/#([0-9A-Fa-f]{6})/);
+    return m ? m[1] : null;
+  }
+
+  const btnExportRepositorio = document.getElementById('btnExportRepositorio');
+  if (btnExportRepositorio) {
+    btnExportRepositorio.addEventListener('click', (e) => {
+      const columnas = ['Empresa', 'Tipo', 'Provincia', 'Fecha', 'Riesgo', 'Cláusulas detectadas'];
+      const coloresEmpresa = {};
+      const filas = repoDatosCompletos.map(c => {
+        const empresa = c.empresa || 'Sin identificar';
+        const colorHex = colorEmpresaHexSolido(c.empresa);
+        if (colorHex) coloresEmpresa[empresa] = colorHex;
+        return [
+          empresa,
+          c.tipo === 'hogar' ? 'Hogar' : c.tipo === 'negocio' ? 'Negocio' : 'Sin clasificar',
+          c.provincia || '—',
+          c.fecha ? new Date(c.fecha).toLocaleDateString('es-ES') : '—',
+          ETIQUETAS_RIESGO[c.nivel] || c.nivel || '—',
+          (c.clausulas || []).map(cl => cl.label).join('; ') || '—',
+        ];
+      });
+      exportarExcel(e.currentTarget, nombreArchivoConFecha('segurpanel-repositorio'), [
+        { titulo: 'Repositorio', columnas, filas, coloresEmpresa },
+      ]);
+    });
   }
 
   function poblarProvinciasRepositorio() {
@@ -4194,6 +4477,91 @@
     enlace.click();
     enlace.remove();
   });
+
+  /* ---------- Generador de propuestas comerciales (API real de Anthropic vía backend local) ---------- */
+  const PROVINCIAS_ESPANA = [
+    'Álava', 'Albacete', 'Alicante', 'Almería', 'Asturias', 'Ávila', 'Badajoz', 'Barcelona',
+    'Burgos', 'Cáceres', 'Cádiz', 'Cantabria', 'Castellón', 'Ciudad Real', 'Córdoba', 'Cuenca',
+    'Girona', 'Granada', 'Guadalajara', 'Guipúzcoa', 'Huelva', 'Huesca', 'Illes Balears', 'Jaén',
+    'A Coruña', 'La Rioja', 'Las Palmas', 'León', 'Lleida', 'Lugo', 'Madrid', 'Málaga', 'Murcia',
+    'Navarra', 'Ourense', 'Palencia', 'Pontevedra', 'Salamanca', 'Santa Cruz de Tenerife',
+    'Segovia', 'Sevilla', 'Soria', 'Tarragona', 'Teruel', 'Toledo', 'Valencia', 'Valladolid',
+    'Vizcaya', 'Zamora', 'Zaragoza', 'Ceuta', 'Melilla',
+  ];
+
+  const proposalForm = document.getElementById('proposalForm');
+  const proposalZonaSelect = document.getElementById('proposalZona');
+  const proposalStatus = document.getElementById('proposalStatus');
+  const proposalSubmitBtn = document.getElementById('proposalSubmitBtn');
+  let proposalPdfBlobUrl = null;
+
+  if (proposalZonaSelect) {
+    proposalZonaSelect.innerHTML = PROVINCIAS_ESPANA
+      .map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`)
+      .join('');
+  }
+
+  function setProposalStatus(mensaje, esError) {
+    if (!proposalStatus) return;
+    proposalStatus.textContent = mensaje || '';
+    proposalStatus.classList.toggle('is-error', !!esError);
+  }
+
+  if (proposalForm) {
+    proposalForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (proposalPdfBlobUrl) { URL.revokeObjectURL(proposalPdfBlobUrl); proposalPdfBlobUrl = null; }
+
+      const tipoCliente = document.getElementById('proposalTipoCliente').value;
+      const zona = proposalZonaSelect.value;
+      const presupuesto = document.getElementById('proposalPresupuesto').value;
+      const necesidades = document.getElementById('proposalNecesidades').value.trim();
+
+      const compareTable = document.getElementById('compareTable');
+      const competencia = compareTable ? extraerTablaParaExcel(compareTable).filas : [];
+
+      proposalSubmitBtn.disabled = true;
+      setProposalStatus('Generando propuesta con IA… puede tardar unos segundos.', false);
+
+      try {
+        const respuesta = await fetch('/api/propuestas/generar', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipoCliente, zona, presupuesto, necesidades, competencia }),
+        });
+
+        if (respuesta.status === 401) {
+          window.location.href = '/';
+          return;
+        }
+
+        if (!respuesta.ok) {
+          let mensaje = 'No se ha podido generar la propuesta.';
+          try {
+            const datos = await respuesta.json();
+            if (datos && datos.error) mensaje = datos.error;
+          } catch (err) { /* respuesta no era JSON */ }
+          setProposalStatus(mensaje, true);
+          return;
+        }
+
+        const blob = await respuesta.blob();
+        proposalPdfBlobUrl = URL.createObjectURL(blob);
+        const enlace = document.createElement('a');
+        enlace.href = proposalPdfBlobUrl;
+        enlace.download = 'propuesta-comercial-uic.pdf';
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        setProposalStatus('Propuesta generada y descargada.', false);
+      } catch (err) {
+        setProposalStatus('No se ha podido conectar con el servidor para generar la propuesta.', true);
+      } finally {
+        proposalSubmitBtn.disabled = false;
+      }
+    });
+  }
 
   /* ---------- IA Assistant: chat (API real de Anthropic vía backend local) ---------- */
   const CHAT_API_URL = '/api/chat';

@@ -96,15 +96,33 @@ ALARM_COMPANIES = [
     "MPA/Prosegur",
 ]
 
-# Los nombres de sector deben coincidir EXACTAMENTE con SECTORES_ALIANZA en
-# server.js, o el servidor rechazará la alianza por sector inválido.
+# Nombres de sector que usa este scraper internamente. No hace falta que
+# coincidan letra por letra con los que valida el servidor (SECTORES_ALIANZA
+# en server.js): antes de enviar cada alianza se traducen con
+# MAPEO_SECTORES_ENDPOINT, más abajo.
 PARTNER_SECTORS = {
-    "Móviles": ["Movistar", "Vodafone", "Orange", "MásMóvil", "Masmóvil"],
+    "Telefonia movil": ["Movistar", "Vodafone", "Orange", "MásMóvil", "Masmóvil"],
     "Grandes superficies": ["Carrefour", "Leroy Merlin", "El Corte Inglés", "MediaMarkt"],
     "Seguros": ["Mapfre", "AXA", "Allianz", "Generali"],
     "Inmobiliarias": ["idealista", "Fotocasa", "pisos.com"],
-    "Suministros (luz, gas, agua)": ["Endesa", "Iberdrola", "Naturgy", "Repsol"],
+    "Energia y agua": ["Endesa", "Iberdrola", "Naturgy", "Repsol"],
 }
+
+# Traduce los nombres de sector de PARTNER_SECTORS al valor EXACTO que acepta
+# /api/alianzas/nueva (SECTORES_ALIANZA en server.js); si algún día llega un
+# sector no listado aquí, se envía tal cual y es el servidor quien lo
+# rechaza con un 400 explícito en vez de fallar en silencio en el scraper.
+MAPEO_SECTORES_ENDPOINT = {
+    "Telefonia movil": "Móviles",
+    "Grandes superficies": "Grandes superficies",
+    "Seguros": "Seguros",
+    "Inmobiliarias": "Inmobiliarias",
+    "Energia y agua": "Suministros (luz, gas, agua)",
+}
+
+
+def normalizar_sector(sector):
+    return MAPEO_SECTORES_ENDPOINT.get(sector, sector)
 
 AGREEMENT_KEYWORDS = [
     ("Alianza estratégica", ["alianza estratégica"]),
@@ -218,7 +236,7 @@ def buscar_en_google_news(alarma):
         encontradas.append({
             "externalId": generar_id_externo("gnews", alarma, enlace),
             "empresaAlarma": alarma,
-            "sector": sector,
+            "sector": normalizar_sector(sector),
             "socio": socio,
             "tipoAcuerdo": detectar_tipo_acuerdo(titulo),
             "titular": titulo,
@@ -258,7 +276,7 @@ def buscar_en_sala_prensa(alarma, url_pagina):
         encontradas.append({
             "externalId": generar_id_externo("prensa", alarma, enlace_absoluto),
             "empresaAlarma": alarma,
-            "sector": sector,
+            "sector": normalizar_sector(sector),
             "socio": socio,
             "tipoAcuerdo": detectar_tipo_acuerdo(texto_plano),
             "titular": texto_plano,

@@ -264,3 +264,16 @@ SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
 Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/alianzas/sync`
 responde `503` y rechaza cualquier envío (evita dejar el endpoint abierto por
 descuido).
+
+## Backup automático y auditoría
+
+`backup.js` copia `segurpanel.db` cada día a las **02:00** (hora local del
+servidor) a `DATA_DIR/backups/` (o `./data/backups/` en local), con la fecha
+en el nombre, y mantiene solo los **últimos 7**. No usa ninguna dependencia
+de cron externa: `server.js` arma un `setInterval` de 60s al arrancar que
+comprueba la hora actual.
+
+Todas las acciones importantes (login, logout, análisis de contrato,
+publicar alianza, cambio de rol) quedan registradas en la tabla SQLite
+`audit_log` (ver `db.js`) y son visibles en el **Panel de auditoría** de
+`admin.html`, solo para el rol **Super Admin**.

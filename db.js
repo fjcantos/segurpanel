@@ -112,12 +112,31 @@ db.exec(`
     created_at  TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS company_notes (
+    empresa      TEXT PRIMARY KEY,
+    nota         TEXT,
+    vigilada     INTEGER NOT NULL DEFAULT 0,
+    updated_by   INTEGER REFERENCES users(id),
+    updated_at   TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users(id),
+    email       TEXT,
+    action      TEXT NOT NULL,
+    detail      TEXT,
+    ip          TEXT,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
   CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
 `);
 
 // Migracion defensiva: contract_stats se creo en una version anterior sin
@@ -507,6 +526,85 @@ function conteoVisitasPorUsuarioYTab() {
     .all();
 }
 
+/* ---------- Notas privadas y vigilancia de empresas (Comparador) ---------- */
+//
+// Solo super_admin puede leer/escribir (ver server.js): notas internas por
+// empresa del comparador (texto libre) y marca de "vigilar", con quien la
+// actualizo por ultima vez. `empresa` es la clave (coincide con el texto de
+// data-company en index.html), asi que una fila por empresa basta.
+
+function listarNotasEmpresas() {
+  return db.prepare("SELECT * FROM company_notes").all();
+}
+
+function guardarNotaEmpresa({ empresa, nota, userId }) {
+  db.prepare(
+    `INSERT INTO company_notes (empresa, nota, vigilada, updated_by, updated_at)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT(empresa) DO UPDATE SET
+       nota = excluded.nota, updated_by = excluded.updated_by, updated_at = excluded.updated_at`
+  ).run(empresa, nota || null, userId || null, ahoraISO());
+  return db.prepare("SELECT * FROM company_notes WHERE empresa = ?").get(empresa);
+}
+
+function alternarVigilanciaEmpresa({ empresa, vigilada, userId }) {
+  db.prepare(
+    `INSERT INTO company_notes (empresa, nota, vigilada, updated_by, updated_at)
+     VALUES (?, NULL, ?, ?, ?)
+     ON CONFLICT(empresa) DO UPDATE SET
+       vigilada = excluded.vigilada, updated_by = excluded.updated_by, updated_at = excluded.updated_at`
+  ).run(empresa, vigilada ? 1 : 0, userId || null, ahoraISO());
+  return db.prepare("SELECT * FROM company_notes WHERE empresa = ?").get(empresa);
+}
+
+/* ---------- Actividad en tiempo real (Estadisticas) ---------- */
+//
+// Combina la ultima pestana visitada (tab_visits) con la ultima accion de
+// auditoria (audit_log) por usuario activo, para la tabla "Actividad en
+// tiempo real". A diferencia de actividadUsuariosActivos() (conexion mas
+// reciente historica), esto refleja lo que el usuario esta haciendo ahora.
+
+function actividadTiempoReal() {
+  return db
+    .prepare(
+      `SELECT u.id, u.email, u.name, u.role,
+              (SELECT tab FROM tab_visits WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) AS pestana_activa,
+              (SELECT created_at FROM tab_visits WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) AS hora_pestana,
+              (SELECT action FROM audit_log WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) AS ultima_accion,
+              (SELECT created_at FROM audit_log WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) AS hora_accion
+       FROM users u
+       WHERE u.status = 'active'
+       ORDER BY hora_pestana DESC`
+    )
+    .all();
+}
+
+/* ---------- Logs de auditoria ---------- */
+//
+// Registra acciones importantes (login, logout, analisis de contrato,
+// publicar alianza, cambio de rol) para el panel de Super Admin. Nunca debe
+// romper el flujo que la origina: el llamador (server.js) envuelve cada
+// llamada en try/catch. `email` se guarda desnormalizado (ademas de
+// user_id) para que el registro siga siendo legible aunque el usuario se
+// borre en el futuro.
+
+function registrarAuditoria({ userId, email, action, detail, ip }) {
+  db.prepare(
+    `INSERT INTO audit_log (user_id, email, action, detail, ip, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(userId || null, email || null, action, detail || null, ip || null, ahoraISO());
+}
+
+function listarAuditoria({ limit, before } = {}) {
+  const tope = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  if (before) {
+    return db
+      .prepare("SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?")
+      .all(Number(before), tope);
+  }
+  return db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(tope);
+}
+
 /* ---------- Suscripciones push (notificaciones web) ---------- */
 //
 // Un mismo usuario puede tener varias suscripciones (una por navegador o
@@ -590,6 +688,12 @@ module.exports = {
   registrarVisitaTab,
   actividadUsuariosActivos,
   conteoVisitasPorUsuarioYTab,
+  listarNotasEmpresas,
+  guardarNotaEmpresa,
+  alternarVigilanciaEmpresa,
+  actividadTiempoReal,
+  registrarAuditoria,
+  listarAuditoria,
   guardarSuscripcionPush,
   borrarSuscripcionPush,
   listarSuscripcionesPorUsuario,

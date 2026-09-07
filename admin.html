@@ -184,6 +184,21 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>Panel de auditoría</h2>
+    <p class="card-sub">Registro de acciones importantes: inicio/cierre de sesión, análisis de contrato, publicación de alianzas y cambios de rol.</p>
+    <div class="table-wrap">
+      <table id="tablaAuditoria">
+        <thead>
+          <tr><th>Usuario</th><th>Acción</th><th>Detalle</th><th>Fecha</th><th>IP</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-note" id="notaAuditoriaVacia" style="display:none;">Todavía no hay ninguna acción registrada.</div>
+    </div>
+    <button class="btn btn-outline" type="button" id="btnCargarMasAuditoria" style="margin-top:10px;">Cargar más</button>
+  </div>
+
   <div class="card card-danger">
     <h2>Zona de peligro</h2>
     <p class="card-sub">Borra permanentemente todos los contratos del Repositorio, las estadísticas de contratos y el historial del mapa de provincias. No afecta a usuarios ni a alianzas. Esta acción no se puede deshacer.</p>
@@ -452,6 +467,58 @@
     mostrarClaveTemporal('Clave temporal asignada', datos.tempPassword);
   }
 
+  /* ---------- Panel de auditoria ---------- */
+  const ETIQUETAS_ACCION_AUDITORIA = {
+    login: 'Inicio de sesión',
+    logout: 'Cierre de sesión',
+    analisis_contrato: 'Análisis de contrato',
+    publicar_alianza: 'Publicar alianza',
+    cambio_rol: 'Cambio de rol',
+  };
+
+  function detalleAuditoriaTexto(registro) {
+    const d = registro.detail;
+    if (!d) return '—';
+    if (typeof d === 'string') return escapeHtml(d);
+    switch (registro.action) {
+      case 'analisis_contrato':
+        return escapeHtml(`${d.empresa || 'Sin identificar'} (${d.tipo || 'sin clasificar'})`);
+      case 'publicar_alianza':
+        return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
+      case 'cambio_rol':
+        return escapeHtml(`${d.usuarioObjetivo || '—'}: ${d.rolAnterior || '—'} → ${d.rolNuevo || '—'}`);
+      default:
+        return escapeHtml(JSON.stringify(d));
+    }
+  }
+
+  let auditoriaUltimoId = null;
+  async function cargarAuditoria(masAlla) {
+    const url = masAlla ? `/api/admin/audit?limit=50&before=${masAlla}` : '/api/admin/audit?limit=50';
+    const { ok, datos } = await llamar(url);
+    if (!ok) { toast(datos.error || 'No se pudo cargar la auditoría.', true); return; }
+
+    const tbody = document.querySelector('#tablaAuditoria tbody');
+    if (!masAlla) tbody.innerHTML = '';
+
+    const registros = datos.registros || [];
+    for (const r of registros) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.email) || '—'}</td>
+        <td>${escapeHtml(ETIQUETAS_ACCION_AUDITORIA[r.action] || r.action)}</td>
+        <td class="wrap-cell">${detalleAuditoriaTexto(r)}</td>
+        <td>${new Date(r.createdAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</td>
+        <td>${escapeHtml(r.ip) || '—'}</td>`;
+      tbody.appendChild(tr);
+    }
+
+    if (registros.length > 0) auditoriaUltimoId = registros[registros.length - 1].id;
+    $('btnCargarMasAuditoria').style.display = registros.length < 50 ? 'none' : 'inline-block';
+    $('notaAuditoriaVacia').style.display = tbody.children.length ? 'none' : 'block';
+  }
+  $('btnCargarMasAuditoria').addEventListener('click', () => cargarAuditoria(auditoriaUltimoId));
+
   /* ---------- Zona de peligro: resetear datos de prueba ---------- */
   function abrirModalResetDatos() {
     $('modalResetDatosPassword').value = '';
@@ -501,7 +568,7 @@
 
   (async () => {
     if (!(await comprobarSesion())) return;
-    await Promise.all([cargarSolicitudes(), cargarUsuarios()]);
+    await Promise.all([cargarSolicitudes(), cargarUsuarios(), cargarAuditoria()]);
   })();
 </script>
 </body>

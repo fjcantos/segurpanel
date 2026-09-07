@@ -10,6 +10,7 @@
 const nodemailer = require("nodemailer");
 
 const DESTINATARIOS_ALIANZAS = ["fjose.cantos@verisure.es", "calvorotador@gmail.com"];
+const DESTINATARIOS_CAMBIOS_CLAUSULAS = ["fjose.cantos@verisure.es"];
 
 let transportador = null;
 let avisoCredencialesMostrado = false;
@@ -100,4 +101,59 @@ async function enviarEmailAlianzasNuevas(alianzas) {
   }
 }
 
-module.exports = { enviarEmailAlianzasNuevas };
+function listaHtml(items) {
+  if (!items || items.length === 0) return '<p style="margin:0;color:#8a7680;font-size:13px;">Ninguna.</p>';
+  const lis = items.map((t) => `<li style="margin:0 0 4px;color:#2b0009;font-size:14px;">${escapeHtml(t)}</li>`).join("");
+  return `<ul style="margin:0;padding-left:18px;">${lis}</ul>`;
+}
+
+function construirHtmlCambioClausulas({ empresa, tipo, nuevas, modificadas, eliminadas, fecha }) {
+  const etiquetaTipo = tipo === "hogar" ? "Hogar" : tipo === "negocio" ? "Negocio" : "Sin clasificar";
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Cambio de cláusulas detectado en el Repositorio</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;line-height:1.5;">
+        <strong>${escapeHtml(empresa)}</strong> (${escapeHtml(etiquetaTipo)}) — nuevo contrato analizado con cláusulas distintas a la versión anterior de la misma empresa.
+      </p>
+      <p style="margin:0 0 16px;color:#8a7680;font-size:12px;">${escapeHtml(fecha || "")}</p>
+
+      <h3 style="margin:16px 0 6px;color:#8B0026;font-size:13px;text-transform:uppercase;letter-spacing:0.4px;">Cláusulas nuevas</h3>
+      ${listaHtml(nuevas)}
+
+      <h3 style="margin:16px 0 6px;color:#8B0026;font-size:13px;text-transform:uppercase;letter-spacing:0.4px;">Cláusulas modificadas</h3>
+      ${listaHtml(modificadas)}
+
+      <h3 style="margin:16px 0 6px;color:#8B0026;font-size:13px;text-transform:uppercase;letter-spacing:0.4px;">Cláusulas eliminadas</h3>
+      ${listaHtml(eliminadas)}
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente desde el Repositorio</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire and forget, igual que enviarEmailAlianzasNuevas: nunca debe romper
+// apiAnalisis si falla el envio.
+async function enviarEmailCambioClausulas(cambio) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: DESTINATARIOS_CAMBIOS_CLAUSULAS.join(", "),
+      subject: `SegurPanel - Cambio de cláusulas: ${cambio.empresa}`,
+      html: construirHtmlCambioClausulas(cambio),
+    });
+  } catch (e) {
+    console.error("Error enviando email de cambio de cláusulas:", e.message || e);
+  }
+}
+
+module.exports = { enviarEmailAlianzasNuevas, enviarEmailCambioClausulas };

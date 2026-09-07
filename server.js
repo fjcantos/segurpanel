@@ -28,11 +28,13 @@ const path = require("path");
 const multer = require("multer");
 const JSZip = require("jszip");
 const ExcelJS = require("exceljs");
+const PDFDocument = require("pdfkit");
 const db = require("./db");
 const auth = require("./auth");
 const analisis = require("./analisis");
 const push = require("./push");
 const email = require("./email");
+const backup = require("./backup");
 
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -131,6 +133,26 @@ function exigirSesion(req, res, { permitirCambioPendiente = false, roles = null 
     return null;
   }
   return sesion;
+}
+
+function obtenerIP(req) {
+  return (req.socket && req.socket.remoteAddress) || null;
+}
+
+// Log de auditoria (panel de Super Admin): fire-and-forget, nunca debe
+// romper el flujo que la origina (login, analisis, publicar alianza...).
+function registrarAuditoriaSegura({ userId, email, action, detail, ip }) {
+  try {
+    db.registrarAuditoria({
+      userId,
+      email,
+      action,
+      detail: detail ? JSON.stringify(detail) : null,
+      ip,
+    });
+  } catch (e) {
+    console.error("Error registrando auditoría:", e);
+  }
 }
 
 function usuarioPublico(u) {
@@ -277,6 +299,13 @@ async function apiLogin(req, res) {
   db.limpiarIntentosFallidos(usuario.id);
   const { token } = auth.crearSesionParaUsuario(req, usuario);
 
+  registrarAuditoriaSegura({
+    userId: usuario.id,
+    email: usuario.email,
+    action: "login",
+    ip: obtenerIP(req),
+  });
+
   enviarJSON(res, 200, { usuario: usuarioPublico(usuario) }, {
     "Set-Cookie": auth.cookieSesion(req, token),
   });
@@ -290,7 +319,15 @@ async function apiMe(req, res) {
 
 async function apiLogout(req, res) {
   const sesion = auth.usuarioDesdePeticion(req);
-  if (sesion) auth.cerrarSesion(sesion.jti);
+  if (sesion) {
+    auth.cerrarSesion(sesion.jti);
+    registrarAuditoriaSegura({
+      userId: sesion.usuario.id,
+      email: sesion.usuario.email,
+      action: "logout",
+      ip: obtenerIP(req),
+    });
+  }
   enviarJSON(res, 200, { ok: true }, { "Set-Cookie": auth.cookieBorrarSesion(req) });
 }
 
@@ -479,7 +516,15 @@ async function apiAdminSetRole(req, res, id) {
     return enviarJSON(res, 400, { error: "No puedes quitar el rol de Super Admin al único Super Admin activo." });
   }
 
+  const rolAnterior = objetivo.role;
   db.actualizarRol(id, cuerpo.role);
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "cambio_rol",
+    detail: { usuarioObjetivo: objetivo.email, rolAnterior, rolNuevo: cuerpo.role },
+    ip: obtenerIP(req),
+  });
   enviarJSON(res, 200, { usuario: usuarioPublico(db.buscarUsuarioPorId(id)) });
 }
 
@@ -573,6 +618,32 @@ async function apiAdminResetDatosPrueba(req, res) {
     eliminados,
     mensaje: `Datos de prueba eliminados: ${eliminados} contrato(s) borrado(s) del Repositorio, Estadísticas y el mapa de provincias.`,
   });
+}
+
+/* ================================================================
+   API: panel de auditoria (solo super_admin)
+   ================================================================ */
+
+function auditoriaPublica(a) {
+  let detail = null;
+  if (a.detail) {
+    try {
+      detail = JSON.parse(a.detail);
+    } catch (e) {
+      detail = a.detail;
+    }
+  }
+  return { id: a.id, email: a.email, action: a.action, detail, ip: a.ip, createdAt: a.created_at };
+}
+
+async function apiAdminAuditoria(req, res, query) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const limit = query.get("limit");
+  const before = query.get("before");
+  const registros = db.listarAuditoria({ limit, before }).map(auditoriaPublica);
+  enviarJSON(res, 200, { registros });
 }
 
 /* ================================================================
@@ -752,6 +823,39 @@ async function apiAnalisis(req, res) {
       userId: sesion.usuario.id,
       tipo,
     });
+
+    registrarAuditoriaSegura({
+      userId: sesion.usuario.id,
+      email: sesion.usuario.email,
+      action: "analisis_contrato",
+      detail: { contratoId, empresa, tipo },
+      ip: obtenerIP(req),
+    });
+
+    // Aviso por email si este contrato tiene clausulas distintas a la
+    // version anterior de la misma empresa+tipo (construirRepositorioCompleto
+    // ya calcula esa comparacion para el Repositorio; aqui se reutiliza en
+    // caliente justo tras insertar el contrato nuevo).
+    if (empresa) {
+      try {
+        const repositorio = construirRepositorioCompleto();
+        const actual = repositorio.find((c) => c.id === contratoId);
+        if (actual && actual.cambios && actual.cambios.tieneCambios) {
+          email
+            .enviarEmailCambioClausulas({
+              empresa,
+              tipo,
+              nuevas: actual.cambios.nuevas,
+              modificadas: actual.cambios.modificadas,
+              eliminadas: actual.cambios.eliminadas,
+              fecha: new Date(actual.fecha).toLocaleString("es-ES"),
+            })
+            .catch((e) => console.error("Error enviando email de cambio de cláusulas:", e));
+        }
+      } catch (e) {
+        console.error("Error comprobando cambios de cláusulas:", e);
+      }
+    }
 
     const resumen = {
       contratoId,
@@ -961,6 +1065,245 @@ async function apiAnalisisAvanzado(req, res) {
 }
 
 /* ================================================================
+   API: generador de propuestas comerciales con IA (protegido por sesion)
+   ================================================================ */
+//
+// Genera una propuesta comercial en PDF con la marca UIC a partir de un
+// formulario corto (tipo de cliente, zona, necesidades, presupuesto) y la
+// tabla del Comparador que el cliente ya tiene renderizada (se envia tal
+// cual en `competencia`, para que la comparativa con la competencia no sea
+// inventada por la IA). Reutiliza el mismo patron de llamada a la API de
+// Anthropic que analisis.analizarConIA (analisis.js:626-684) y la
+// infraestructura visual de PDF ya exportada por analisis.js
+// (dibujarCabecera/dibujarPiePagina/COLORES_PDF), para que el documento
+// tenga el mismo estilo UIC que el informe de Analisis Avanzado.
+
+const MODELO_PROPUESTAS = "claude-opus-5";
+const MAX_TOKENS_PROPUESTA = 4000;
+
+const SYSTEM_PROMPT_PROPUESTAS = `Eres un comercial senior de Verisure (marca UIC - Unión de Instaladores y Consumidores) con 15 años de experiencia vendiendo sistemas de seguridad y alarmas en España, tanto a particulares como a negocios.
+
+Tu tarea es redactar una propuesta comercial profesional, persuasiva y honesta para un cliente potencial, a partir de los datos que te da el agente comercial (tipo de cliente, zona geográfica, necesidades específicas y presupuesto aproximado) y de la tabla de comparativa de precios de la competencia que se te facilita.
+
+Reglas importantes:
+- Usa SOLO los datos de competencia que se te facilitan en la tabla adjunta. Nunca inventes precios, condiciones o características de empresas competidoras que no aparezcan ahí.
+- El precio recomendado debe ser realista, coherente con el presupuesto indicado por el cliente y con los rangos de precio de la competencia que se te facilitan, y expresarse con el formato "XX,XX €/mes".
+- Adapta el tono y los argumentos al tipo de cliente (hogar vs. negocio) y a sus necesidades específicas.
+- Sé profesional, cercano y basado en hechos: nunca desprestigies a la competencia de forma injusta, limítate a resaltar diferenciadores reales (tecnología, atención 24h, tiempo de respuesta, instalación, etc.).
+- Responde siempre en español.`;
+
+const ESQUEMA_PROPUESTA = {
+  type: "object",
+  properties: {
+    titulo: { type: "string", description: "Título breve y atractivo de la propuesta comercial." },
+    introduccion: { type: "string", description: "Párrafo de introducción personalizado para este cliente, 3-5 frases." },
+    argumentosValor: {
+      type: "array",
+      items: { type: "string" },
+      description: "Lista de 4-6 argumentos de valor concretos y relevantes para este cliente.",
+    },
+    comparativaCompetencia: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          empresa: { type: "string" },
+          puntoDiferenciador: { type: "string" },
+        },
+        required: ["empresa", "puntoDiferenciador"],
+        additionalProperties: false,
+      },
+      description: "Un punto diferenciador frente a cada empresa competidora recibida en la tabla de comparativa.",
+    },
+    precioRecomendado: { type: "string", description: "Precio recomendado a ofrecer, formato 'XX,XX €/mes'." },
+    condiciones: { type: "string", description: "Condiciones de la oferta (permanencia, instalación, equipos incluidos), 2-4 frases." },
+    cierre: { type: "string", description: "Párrafo de cierre orientado a conseguir la firma, 2-3 frases." },
+  },
+  required: ["titulo", "introduccion", "argumentosValor", "comparativaCompetencia", "precioRecomendado", "condiciones", "cierre"],
+  additionalProperties: false,
+};
+
+class PropuestaError extends Error {}
+
+async function generarPropuestaComercial({ tipoCliente, zona, necesidades, presupuesto, competencia }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new PropuestaError("El servidor no tiene configurada la variable de entorno ANTHROPIC_API_KEY.");
+  }
+
+  const filasCompetencia = (competencia || [])
+    .slice(0, 20)
+    .map((f) => (Array.isArray(f) ? f.join(" | ") : String(f)))
+    .join("\n");
+
+  const mensaje = `Genera una propuesta comercial con estos datos del cliente potencial:
+- Tipo de cliente: ${tipoCliente === "negocio" ? "Negocio" : "Hogar"}
+- Zona geográfica: ${zona || "No especificada"}
+- Presupuesto aproximado del cliente: ${presupuesto ? presupuesto + " €/mes" : "No especificado"}
+- Necesidades específicas: ${necesidades || "No especificadas"}
+
+Tabla de comparativa de precios de la competencia disponible (úsala tal cual para la comparativa, no inventes datos que no estén aquí):
+${filasCompetencia || "(sin datos de competencia disponibles)"}`;
+
+  const respuesta = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: MODELO_PROPUESTAS,
+      max_tokens: MAX_TOKENS_PROPUESTA,
+      system: SYSTEM_PROMPT_PROPUESTAS,
+      messages: [{ role: "user", content: mensaje }],
+      output_config: {
+        effort: "high",
+        format: { type: "json_schema", schema: ESQUEMA_PROPUESTA },
+      },
+    }),
+  });
+
+  const datos = await respuesta.json();
+  if (!respuesta.ok) {
+    const mensajeError =
+      (datos && datos.error && datos.error.message) || `Error ${respuesta.status} al llamar a la API de Anthropic.`;
+    throw new PropuestaError(mensajeError);
+  }
+
+  const bloqueTexto = (datos.content || []).find((b) => b.type === "text");
+  if (!bloqueTexto) throw new PropuestaError("El asistente no ha devuelto una propuesta interpretable.");
+
+  try {
+    return JSON.parse(bloqueTexto.text);
+  } catch (e) {
+    throw new PropuestaError("No se pudo interpretar la respuesta del asistente.");
+  }
+}
+
+// Construye el PDF de la propuesta reutilizando la cabecera/pie/paleta de
+// colores del informe UIC de analisis.js, para mantener el mismo estilo
+// visual. Igual que generarInformePDFAvanzado: devuelve el doc con
+// doc.end() ya llamado, listo para doc.pipe(res).
+function generarPropuestaPDF({ propuesta, tipoCliente, zona, presupuesto }) {
+  const { NEGRO, GRIS, GRIS_CLARO, ROJO } = analisis.COLORES_PDF;
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: 50,
+    bufferPages: true,
+    info: { Title: "Propuesta comercial - UIC" },
+  });
+
+  const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  analisis.dibujarCabecera(doc, anchoUtil, "Propuesta comercial");
+
+  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(15).text(propuesta.titulo || "Propuesta comercial", doc.page.margins.left);
+  doc.moveDown(0.3);
+  doc
+    .fillColor(GRIS)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(
+      `Tipo de cliente: ${tipoCliente === "negocio" ? "Negocio" : "Hogar"}   ·   Zona: ${zona || "—"}   ·   Presupuesto aprox.: ${presupuesto ? presupuesto + " €/mes" : "—"}`,
+      doc.page.margins.left,
+      doc.y,
+      { width: anchoUtil }
+    );
+  doc.moveDown(1);
+
+  doc.fillColor(NEGRO).font("Helvetica").fontSize(10.5).text(propuesta.introduccion || "", doc.page.margins.left, doc.y, { width: anchoUtil });
+  doc.moveDown(1);
+
+  doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(12).text("Por qué elegirnos", doc.page.margins.left);
+  doc.moveDown(0.3);
+  (propuesta.argumentosValor || []).forEach((arg) => {
+    doc.fillColor(NEGRO).font("Helvetica").fontSize(10).text(`•  ${arg}`, doc.page.margins.left, doc.y, { width: anchoUtil });
+    doc.moveDown(0.2);
+  });
+  doc.moveDown(0.8);
+
+  doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(12).text("Comparativa con la competencia", doc.page.margins.left);
+  doc.moveDown(0.3);
+  (propuesta.comparativaCompetencia || []).forEach((c) => {
+    doc
+      .fillColor(NEGRO)
+      .font("Helvetica-Bold")
+      .fontSize(9.5)
+      .text(`${c.empresa}:`, doc.page.margins.left, doc.y, { continued: true, width: anchoUtil });
+    doc.font("Helvetica").fillColor(GRIS).text(`  ${c.puntoDiferenciador}`);
+    doc.moveDown(0.2);
+  });
+  doc.moveDown(0.8);
+
+  if (doc.y > doc.page.height - doc.page.margins.bottom - 160) doc.addPage();
+
+  const cajaY = doc.y;
+  const cajaAlto = 55;
+  doc.roundedRect(doc.page.margins.left, cajaY, anchoUtil, cajaAlto, 6).fillColor(GRIS_CLARO).fill();
+  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(9).text("PRECIO RECOMENDADO", doc.page.margins.left + 16, cajaY + 12);
+  doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(20).text(propuesta.precioRecomendado || "—", doc.page.margins.left + 16, cajaY + 25);
+  doc.x = doc.page.margins.left;
+  doc.y = cajaY + cajaAlto + 16;
+
+  doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(12).text("Condiciones", doc.page.margins.left);
+  doc.moveDown(0.3);
+  doc.fillColor(NEGRO).font("Helvetica").fontSize(10).text(propuesta.condiciones || "", doc.page.margins.left, doc.y, { width: anchoUtil });
+  doc.moveDown(1);
+
+  doc.fillColor(NEGRO).font("Helvetica-Oblique").fontSize(10).text(propuesta.cierre || "", doc.page.margins.left, doc.y, { width: anchoUtil });
+
+  analisis.dibujarPiePagina(
+    doc,
+    anchoUtil,
+    "Propuesta generada por SegurPanel (UIC) con asistencia de IA. Precios orientativos, sujetos a confirmación comercial."
+  );
+
+  doc.end();
+  return doc;
+}
+
+async function apiPropuestasGenerar(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const tipoCliente = cuerpo.tipoCliente === "negocio" ? "negocio" : "hogar";
+  const zona = typeof cuerpo.zona === "string" ? cuerpo.zona.trim().slice(0, 80) : "";
+  const necesidades = typeof cuerpo.necesidades === "string" ? cuerpo.necesidades.trim().slice(0, 1500) : "";
+  const presupuesto =
+    typeof cuerpo.presupuesto === "number" || typeof cuerpo.presupuesto === "string"
+      ? String(cuerpo.presupuesto).trim().slice(0, 20)
+      : "";
+  const competencia = Array.isArray(cuerpo.competencia) ? cuerpo.competencia.slice(0, 20) : [];
+
+  try {
+    const propuesta = await generarPropuestaComercial({ tipoCliente, zona, necesidades, presupuesto, competencia });
+
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="propuesta-comercial-uic.pdf"',
+      "Cache-Control": "no-store",
+    });
+    const doc = generarPropuestaPDF({ propuesta, tipoCliente, zona, presupuesto });
+    doc.pipe(res);
+  } catch (e) {
+    console.error("Error generando la propuesta comercial:", e);
+    if (!res.headersSent) {
+      if (e instanceof PropuestaError) return enviarJSON(res, 502, { error: e.message });
+      enviarJSON(res, 500, { error: "No se pudo generar la propuesta: " + e.message });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* ================================================================
    API: estadisticas internas (solo super_admin y admin)
    ================================================================ */
 //
@@ -1018,6 +1361,19 @@ async function apiEstadisticas(req, res) {
     pestanasTop: (visitasPorUsuario[u.id] || []).sort((a, b) => b.count - a.count).slice(0, 3),
   }));
 
+  // "Actividad en tiempo real": ultima pestana visitada + ultima accion de
+  // auditoria por usuario activo (ver db.actividadTiempoReal), a diferencia
+  // de `actividad` arriba que es historico agregado.
+  const actividadTiempoReal = db.actividadTiempoReal().map((u) => ({
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    pestanaActiva: u.pestana_activa,
+    horaPestana: u.hora_pestana,
+    ultimaAccion: u.ultima_accion,
+    horaAccion: u.hora_accion,
+  }));
+
   enviarJSON(res, 200, {
     resumen: {
       totalContratos: db.contarContratosAnalizados(),
@@ -1030,6 +1386,7 @@ async function apiEstadisticas(req, res) {
     provincias,
     clausulas,
     actividad,
+    actividadTiempoReal,
   });
 }
 
@@ -1075,6 +1432,19 @@ const MAX_FILAS_EXPORT = 5000;
 const MAX_COLUMNAS_EXPORT = 30;
 const MAX_HOJAS_EXPORT = 6;
 
+// coloresEmpresa es opcional: { [nombreEmpresa]: "FFRRGGBB" } para pintar la
+// celda de la primera columna (Empresa) de cada fila con el mismo color que
+// su swatch en el Comparador (ver COLORES_EMPRESA en index.html). Si no se
+// envia, la hoja se exporta igual que antes (solo zebra-striping).
+function coloresEmpresaValido(coloresEmpresa) {
+  if (coloresEmpresa === undefined || coloresEmpresa === null) return true;
+  return (
+    typeof coloresEmpresa === "object" &&
+    !Array.isArray(coloresEmpresa) &&
+    Object.values(coloresEmpresa).every((v) => typeof v === "string" && /^[0-9A-Fa-f]{6,8}$/.test(v))
+  );
+}
+
 function hojaExportValida(hoja) {
   return (
     hoja &&
@@ -1086,7 +1456,8 @@ function hojaExportValida(hoja) {
     hoja.columnas.every((c) => typeof c === "string") &&
     Array.isArray(hoja.filas) &&
     hoja.filas.length <= MAX_FILAS_EXPORT &&
-    hoja.filas.every((f) => Array.isArray(f))
+    hoja.filas.every((f) => Array.isArray(f)) &&
+    coloresEmpresaValido(hoja.coloresEmpresa)
   );
 }
 
@@ -1154,6 +1525,14 @@ async function apiExportarExcel(req, res) {
             celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_VERISURE_BURDEOS_SUAVE } };
           });
         }
+        if (hoja.coloresEmpresa) {
+          const colorEmpresa = hoja.coloresEmpresa[fila[0]];
+          if (colorEmpresa) {
+            const argb = colorEmpresa.length === 8 ? colorEmpresa : `FF${colorEmpresa}`;
+            r.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+            r.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+          }
+        }
       });
 
       hoja.columnas.forEach((titulo, i) => {
@@ -1173,6 +1552,53 @@ async function apiExportarExcel(req, res) {
     console.error("Error generando el Excel:", e);
     if (!res.headersSent) enviarJSON(res, 500, { error: "No se pudo generar el archivo Excel." });
   }
+}
+
+/* ================================================================
+   API: notas privadas y vigilancia de empresas (Comparador, solo super_admin)
+   ================================================================ */
+
+async function apiComparadorNotasGet(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+  enviarJSON(res, 200, { notas: db.listarNotasEmpresas() });
+}
+
+async function apiComparadorNotasPost(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const empresa = typeof cuerpo.empresa === "string" ? cuerpo.empresa.trim().slice(0, 120) : "";
+  if (!empresa) return enviarJSON(res, 400, { error: "Falta la empresa." });
+  const nota = typeof cuerpo.nota === "string" ? cuerpo.nota.slice(0, 2000) : "";
+
+  const fila = db.guardarNotaEmpresa({ empresa, nota, userId: sesion.usuario.id });
+  enviarJSON(res, 200, { nota: fila });
+}
+
+async function apiComparadorVigilarPost(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const empresa = typeof cuerpo.empresa === "string" ? cuerpo.empresa.trim().slice(0, 120) : "";
+  if (!empresa) return enviarJSON(res, 400, { error: "Falta la empresa." });
+
+  const fila = db.alternarVigilanciaEmpresa({ empresa, vigilada: !!cuerpo.vigilada, userId: sesion.usuario.id });
+  enviarJSON(res, 200, { nota: fila });
 }
 
 /* ================================================================
@@ -1434,6 +1860,15 @@ async function apiAlianzasResolver(req, res, id, status) {
   }
 
   db.resolverAlianza(id, status, sesion.usuario.id);
+  if (status === "published") {
+    registrarAuditoriaSegura({
+      userId: sesion.usuario.id,
+      email: sesion.usuario.email,
+      action: "publicar_alianza",
+      detail: { empresaAlarma: alianza.empresa_alarma, socio: alianza.socio },
+      ip: obtenerIP(req),
+    });
+  }
   enviarJSON(res, 200, { ok: true });
 }
 
@@ -1776,8 +2211,13 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "POST" && ruta === "/api/export/excel") return await apiExportarExcel(req, res);
 
+    if (req.method === "GET" && ruta === "/api/comparador/notas") return await apiComparadorNotasGet(req, res);
+    if (req.method === "POST" && ruta === "/api/comparador/notas") return await apiComparadorNotasPost(req, res);
+    if (req.method === "POST" && ruta === "/api/comparador/vigilar") return await apiComparadorVigilarPost(req, res);
+
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
+    if (req.method === "GET" && ruta === "/api/admin/audit") return await apiAdminAuditoria(req, res, url.searchParams);
 
     if (req.method === "POST") {
       let id = idAprobarSolicitud(ruta);
@@ -1797,6 +2237,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
     if (req.method === "POST" && ruta === "/api/analisis/zip") return await apiAnalisisZip(req, res);
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
+    if (req.method === "POST" && ruta === "/api/propuestas/generar") return await apiPropuestasGenerar(req, res);
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);
@@ -1854,9 +2295,12 @@ if (certFile && keyFile) {
   servidor = http.createServer(manejarPeticion);
 }
 
+backup.iniciarProgramador();
+
 servidor.listen(PORT, () => {
   const protocolo = certFile && keyFile ? "https" : "http";
   console.log(`SegurPanel escuchando en ${protocolo}://localhost:${PORT}/`);
+  console.log(`Backup automático diario a las 02:00 en ${backup.DIR_BACKUPS} (últimos 7).`);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn(
