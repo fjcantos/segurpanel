@@ -35,6 +35,7 @@ const analisis = require("./analisis");
 const push = require("./push");
 const email = require("./email");
 const backup = require("./backup");
+const formaciones = require("./formaciones");
 
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -1304,6 +1305,67 @@ async function apiPropuestasGenerar(req, res) {
 }
 
 /* ================================================================
+   API: formaciones (presentaciones PPTX generadas con IA, protegido
+   por sesion, cualquier rol)
+   ================================================================ */
+//
+// Delega en formaciones.js (mismo patron que analisis.js/generarPropuesta*
+// arriba): genera el contenido de las diapositivas con la API de Anthropic
+// (JSON Schema generico, ver formaciones.js) y construye el .pptx con
+// pptxgenjs. El cliente aporta el contexto que ya tiene en pantalla
+// (fila del Comparador, ficha de equipos, tabla de precios, motivos de
+// baja...) para que la IA no invente datos que contradigan al resto de la
+// app; el servidor solo añade las alianzas publicadas de la empresa
+// elegida (tipo "competencia"), que no estan expuestas tal cual en el DOM.
+
+function contextoFormacionValido(contexto) {
+  return contexto === undefined || (contexto !== null && typeof contexto === "object" && !Array.isArray(contexto));
+}
+
+async function apiFormacionesGenerar(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const tipo = typeof cuerpo.tipo === "string" ? cuerpo.tipo : "";
+  if (!formaciones.TIPOS_VALIDOS.includes(tipo)) {
+    return enviarJSON(res, 400, { error: "Tipo de formación no válido." });
+  }
+  if (tipo === "competencia" && !formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
+    return enviarJSON(res, 400, { error: "Empresa no válida." });
+  }
+  if (!contextoFormacionValido(cuerpo.contexto)) {
+    return enviarJSON(res, 400, { error: "Contexto inválido." });
+  }
+
+  try {
+    const slides = await formaciones.generarFormacion({ tipo, empresa: cuerpo.empresa, contexto: cuerpo.contexto });
+    const buffer = await formaciones.construirPPTX(slides);
+
+    res.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "Content-Disposition": 'attachment; filename="formacion-uic.pptx"',
+      "Cache-Control": "no-store",
+    });
+    res.end(buffer);
+  } catch (e) {
+    console.error("Error generando la formación:", e);
+    if (!res.headersSent) {
+      if (e instanceof formaciones.FormacionError) return enviarJSON(res, 502, { error: e.message });
+      enviarJSON(res, 500, { error: "No se pudo generar la formación: " + e.message });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* ================================================================
    API: estadisticas internas (solo super_admin y admin)
    ================================================================ */
 //
@@ -2238,6 +2300,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/analisis/zip") return await apiAnalisisZip(req, res);
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
     if (req.method === "POST" && ruta === "/api/propuestas/generar") return await apiPropuestasGenerar(req, res);
+    if (req.method === "POST" && ruta === "/api/formaciones/generar") return await apiFormacionesGenerar(req, res);
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);

@@ -610,6 +610,50 @@
   .proposal-status { margin-left: 12px; font-size: 0.82rem; color: var(--muted); }
   .proposal-status.is-error { color: var(--danger, #c0392b); }
 
+  /* ---------- Formaciones ---------- */
+  .formacion-empresa-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+  .formacion-empresa-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    background: var(--card, #fff);
+    border-radius: 999px;
+    padding: 7px 14px 7px 7px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--heading, #1e2a3a);
+    cursor: pointer;
+  }
+  .formacion-empresa-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .formacion-empresa-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .formacion-empresa-btn .company-swatch { width: 20px; height: 20px; }
+  .formacion-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .formacion-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+    border: 1px solid var(--border);
+    background: var(--card, #fff);
+    border-radius: 12px;
+    padding: 16px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .formacion-card:hover:not(:disabled) { border-color: var(--accent); }
+  .formacion-card:disabled { opacity: 0.6; cursor: not-allowed; }
+  .formacion-card-title { font-weight: 700; color: var(--heading, #1e2a3a); font-size: 0.95rem; }
+  .formacion-card-sub { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+  .formacion-status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+  .formacion-status.is-error { color: var(--danger, #c0392b); }
+
   .compare-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .compare-toolbar label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
   .compare-toolbar select {
@@ -1372,6 +1416,10 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 2.5h7l3 3V17a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5z"/><path d="M12 2.5V6h3.5M7 9h6M7 12h6M7 15h3.5"/></svg>
     Propuestas
   </button>
+  <button class="tab-btn" data-tab="formaciones">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="3" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13v4"/></svg>
+    Formaciones
+  </button>
   <button class="tab-btn" data-tab="iaAssistant">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 17l3-3 3 3M7 8h.01M13 8h.01"/></svg>
     IA Assistant
@@ -2085,6 +2133,42 @@
         <span class="proposal-status" id="proposalStatus"></span>
       </div>
     </form>
+  </section>
+
+  <!-- ===== FORMACIONES ===== -->
+  <section id="formaciones" class="tab-content">
+    <h2 class="section-title">Formaciones</h2>
+    <p class="section-sub">Genera presentaciones PPTX de formación para el equipo de retención/ventas con IA: diseño corporativo UIC, argumentario y guion listos para usar.</p>
+
+    <h3 class="equip-section-title">Conoce a tu competencia</h3>
+    <p class="chart-sub">Un battlecard completo por empresa: quiénes son, qué ofrecen, puntos débiles, cómo rebatirlos, alianzas actuales y equipos que usan.</p>
+    <div class="formacion-empresa-grid" id="formacionEmpresaGrid"></div>
+
+    <h3 class="equip-section-title">Otras formaciones</h3>
+    <div class="formacion-grid">
+      <button type="button" class="formacion-card" data-formacion-tipo="tecnicas">
+        <span class="formacion-card-title">Técnicas maestras de retención</span>
+        <span class="formacion-card-sub">Empatía, escucha activa, reencuadre, gestión de objeciones, técnica del espejo y método LAER.</span>
+      </button>
+      <button type="button" class="formacion-card" data-formacion-tipo="objeciones">
+        <span class="formacion-card-title">Rebate cada motivo de baja</span>
+        <span class="formacion-card-sub">Una diapositiva por motivo, con script exacto de qué decir, cómo decirlo y qué ofrecer.</span>
+      </button>
+      <button type="button" class="formacion-card" data-formacion-tipo="normativa">
+        <span class="formacion-card-title">Normativa que te protege</span>
+        <span class="formacion-card-sub">Cómo usar la ley española a tu favor en una llamada de retención.</span>
+      </button>
+      <button type="button" class="formacion-card" data-formacion-tipo="comparativa">
+        <span class="formacion-card-title">Verisure vs competencia</span>
+        <span class="formacion-card-sub">Comparativa completa con los datos reales del Comparador e Inteligencia.</span>
+      </button>
+      <button type="button" class="formacion-card" data-formacion-tipo="casos">
+        <span class="formacion-card-title">Casos prácticos</span>
+        <span class="formacion-card-sub">Simulaciones de llamadas reales con los clientes más difíciles.</span>
+      </button>
+    </div>
+
+    <div class="formacion-status" id="formacionStatus"></div>
   </section>
 
   <!-- ===== IA ASSISTANT ===== -->
@@ -2960,6 +3044,7 @@
       document.getElementById('adminLink').hidden = false;
       mostrarLeyendasSuperAdmin();
       configurarComparadorSuperAdmin();
+      renderFormacionEmpresas(true);
     } else {
       // Solo super_admin recibe el desglose de alianzas pendientes (ver
       // apiAlianzasGet en el servidor); en el resto de roles esa tarjeta
@@ -4562,6 +4647,118 @@
       }
     });
   }
+
+  /* ---------- Formaciones (presentaciones PPTX generadas con IA) ---------- */
+  const formacionEmpresaGrid = document.getElementById('formacionEmpresaGrid');
+  const formacionStatus = document.getElementById('formacionStatus');
+  let formacionEnCurso = false;
+
+  function setFormacionStatus(mensaje, esError) {
+    if (!formacionStatus) return;
+    formacionStatus.textContent = mensaje || '';
+    formacionStatus.classList.toggle('is-error', !!esError);
+  }
+
+  function obtenerFilaComparadorPorEmpresa(empresa) {
+    const compareTable = document.getElementById('compareTable');
+    if (!compareTable) return null;
+    const tr = Array.from(compareTable.querySelectorAll('tbody tr')).find(row => {
+      const swatch = row.querySelector('[data-company]');
+      return swatch && swatch.dataset.company === empresa;
+    });
+    if (!tr) return null;
+    return {
+      precioMin: tr.dataset.precioMin ? Number(tr.dataset.precioMin) : null,
+      permanenciaMeses: tr.dataset.permanenciaMeses ? Number(tr.dataset.permanenciaMeses) : null,
+      valoracion: tr.dataset.valoracion ? Number(tr.dataset.valoracion) : null,
+    };
+  }
+
+  async function generarFormacionDescarga(tipo, extra) {
+    if (formacionEnCurso) return;
+    formacionEnCurso = true;
+    document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = true; });
+    setFormacionStatus('Generando formación con IA… puede tardar entre 30 y 90 segundos.', false);
+
+    try {
+      const respuesta = await fetch('/api/formaciones/generar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo, ...extra }),
+      });
+
+      if (respuesta.status === 401) {
+        window.location.href = '/';
+        return;
+      }
+
+      if (!respuesta.ok) {
+        let mensaje = 'No se ha podido generar la formación.';
+        try {
+          const datos = await respuesta.json();
+          if (datos && datos.error) mensaje = datos.error;
+        } catch (err) { /* respuesta no era JSON */ }
+        setFormacionStatus(mensaje, true);
+        return;
+      }
+
+      const blob = await respuesta.blob();
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'formacion-uic.pptx';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setFormacionStatus('Formación generada y descargada.', false);
+    } catch (err) {
+      setFormacionStatus('No se ha podido conectar con el servidor para generar la formación.', true);
+    } finally {
+      formacionEnCurso = false;
+      document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = false; });
+    }
+  }
+
+  // Los 8 botones de "Conoce a tu competencia" muestran solo el circulo de
+  // color corporativo para admin/retencion (mismo patron que el Comparador);
+  // el nombre en texto solo se añade cuando el rol es super_admin (ver
+  // llamada a renderFormacionEmpresas(true) en el bloque de sesion mas abajo).
+  function renderFormacionEmpresas(mostrarNombre) {
+    if (!formacionEmpresaGrid) return;
+    formacionEmpresaGrid.innerHTML = EQUIPOS_EMPRESA.map(e => `
+      <button type="button" class="formacion-empresa-btn" data-formacion-tipo="competencia" data-empresa="${escapeHtml(e.empresa)}" title="Conoce a tu competencia">
+        ${swatchHtml(e.empresa)}${mostrarNombre ? `<span>${escapeHtml(e.empresa)}</span>` : ''}
+      </button>`).join('');
+    formacionEmpresaGrid.querySelectorAll('[data-empresa]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const empresa = btn.dataset.empresa;
+        const equipo = EQUIPOS_EMPRESA.find(e => e.empresa === empresa) || null;
+        generarFormacionDescarga('competencia', {
+          empresa,
+          contexto: { filaComparador: obtenerFilaComparadorPorEmpresa(empresa), equipo },
+        });
+      });
+    });
+  }
+  renderFormacionEmpresas(false);
+
+  document.querySelectorAll('.formacion-card[data-formacion-tipo]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tipo = btn.dataset.formacionTipo;
+      if (tipo === 'objeciones') {
+        const motivos = Array.from(document.querySelectorAll('.chat-chip')).map(b => b.textContent.trim());
+        generarFormacionDescarga('objeciones', { contexto: { motivos } });
+      } else if (tipo === 'comparativa') {
+        const compareTable = document.getElementById('compareTable');
+        const filasComparador = compareTable ? extraerTablaParaExcel(compareTable).filas : [];
+        generarFormacionDescarga('comparativa', { contexto: { filasComparador, priceData: PRICE_DATA, marginData: MARGIN_DATA } });
+      } else {
+        generarFormacionDescarga(tipo, {});
+      }
+    });
+  });
 
   /* ---------- IA Assistant: chat (API real de Anthropic vía backend local) ---------- */
   const CHAT_API_URL = '/api/chat';
