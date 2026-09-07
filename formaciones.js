@@ -23,7 +23,14 @@ const db = require("./db");
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MODELO_FORMACIONES = "claude-opus-5";
-const MAX_TOKENS_FORMACION = 8000;
+// 15-20 diapositivas con titulo+puntos+notas por diapositiva es bastante mas
+// contenido que un informe de analisis avanzado por clausulas; con 8000 el
+// JSON se cortaba a mitad de generacion (stop_reason "max_tokens") y
+// JSON.parse fallaba con "No se pudo interpretar la respuesta del
+// asistente" aunque la llamada a la API fuese correcta. 16000 iguala el
+// presupuesto ya usado en analisis.js (MAX_TOKENS_ANALISIS_AVANZADO) para
+// generaciones estructuradas igual de largas.
+const MAX_TOKENS_FORMACION = 16000;
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
 
@@ -78,7 +85,7 @@ Aplicas también psicología del consumidor, programación neurolingüística (P
 Generas el contenido de una presentación de PowerPoint, diapositiva por diapositiva, siempre en español, con un tono profesional, cercano y motivador. Cada diapositiva debe aportar valor real y accionable, nunca relleno genérico. Nunca inventes datos concretos (precios, cifras, normativa) que contradigan los que se te faciliten en el mensaje.`;
 
 const INSTRUCCION_LONGITUD =
-  "Genera entre 15 y 20 diapositivas en total (incluida una diapositiva de título al principio y una de cierre al final). Varía el campo 'tipo' de cada diapositiva (usa 'cita' para intercalar 1-2 citas de los expertos mencionados, y 'comparativa' cuando aplique) para que la presentación no sea monótona. Usa siempre 'notas' para dar al formador un guion ampliado de qué decir en cada diapositiva.";
+  "Genera entre 15 y 20 diapositivas en total (incluida una diapositiva de título al principio y una de cierre al final). Varía el campo 'tipo' de cada diapositiva (usa 'cita' para intercalar 1-2 citas de los expertos mencionados, y 'comparativa' cuando aplique) para que la presentación no sea monótona. Sé conciso en cada diapositiva: 'puntos' con 3-5 bullets cortos (máximo una frase cada uno) y 'notas' con un guion breve de 2-4 frases, no un párrafo largo — es una presentación de alto impacto, no un documento denso.";
 
 const ESQUEMA_FORMACION = {
   type: "object",
@@ -155,10 +162,35 @@ async function generarSlidesConIA({ system, mensaje }) {
   const bloqueTexto = (datos.content || []).find((b) => b.type === "text");
   if (!bloqueTexto) throw new FormacionError("El asistente no ha devuelto una formación interpretable.");
 
+  // Si la respuesta se corta por limite de tokens, bloqueTexto.text es JSON
+  // incompleto y JSON.parse falla mas abajo: se detecta aqui explicitamente
+  // para dar un mensaje claro (en vez de "no se pudo interpretar") y para
+  // que quede registrado en el log del servidor cual fue la causa real.
+  if (datos.stop_reason === "max_tokens") {
+    console.error(
+      `Formaciones: respuesta de Anthropic truncada por max_tokens (${MAX_TOKENS_FORMACION}). Texto recibido: ${bloqueTexto.text.length} caracteres.`
+    );
+    throw new FormacionError(
+      "La formación generada era demasiado larga y se ha cortado antes de terminar. Inténtalo de nuevo; si se repite, prueba con una formación más corta."
+    );
+  }
+
+  // output_config.format:"json_schema" deberia garantizar JSON puro sin
+  // markdown, pero se limpia por si acaso el modelo lo envuelve en un bloque
+  // de codigo ```json ... ``` (visto ocasionalmente en otras integraciones):
+  // barato de comprobar y evita un falso "no se pudo interpretar".
+  let textoJSON = bloqueTexto.text.trim();
+  if (textoJSON.startsWith("```")) {
+    textoJSON = textoJSON.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  }
+
   let resultado;
   try {
-    resultado = JSON.parse(bloqueTexto.text);
+    resultado = JSON.parse(textoJSON);
   } catch (e) {
+    console.error(
+      `Formaciones: JSON.parse falló (${e.message}). stop_reason=${datos.stop_reason}. Fin del texto recibido: ${textoJSON.slice(-300)}`
+    );
     throw new FormacionError("No se pudo interpretar la respuesta del asistente.");
   }
   if (!Array.isArray(resultado.diapositivas)) resultado.diapositivas = [];
@@ -212,7 +244,7 @@ function promptObjeciones({ motivos }) {
 
 ${listaTexto}
 
-En cada diapositiva de motivo, los 'puntos' deben incluir el guion exacto en frases cortas y accionables: qué decir (puedes usar el formato "Di: ..." para las frases literales), cómo decirlo (tono, ritmo, actitud) y qué ofrecer como contrapartida.`,
+En cada diapositiva de motivo, los 'puntos' deben incluir el guion exacto en 3-5 bullets cortos y accionables (máximo una frase cada uno): qué decir (puedes usar el formato "Di: ..." para la frase literal), cómo decirlo (tono, ritmo, actitud) y qué ofrecer como contrapartida. Sé conciso: 'notas' con un guion breve de 2-3 frases, no un párrafo largo.`,
   };
 }
 
