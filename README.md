@@ -277,3 +277,25 @@ Todas las acciones importantes (login, logout, análisis de contrato,
 publicar alianza, cambio de rol) quedan registradas en la tabla SQLite
 `audit_log` (ver `db.js`) y son visibles en el **Panel de auditoría** de
 `admin.html`, solo para el rol **Super Admin**.
+
+## Formaciones: imágenes de fondo (Unsplash) e iconos
+
+La pestaña "Formaciones" genera presentaciones `.pptx` con IA (`formaciones.js`).
+Cada diapositiva puede llevar una foto de fondo real, obtenida de la API
+pública de Unsplash, y un icono (Heroicons, incrustado en el código, sin
+llamadas de red). Para las fotos de fondo:
+
+```
+setx UNSPLASH_ACCESS_KEY "tu-access-key-de-unsplash"
+```
+
+Consigue una clave gratuita creando una app en
+[unsplash.com/developers](https://unsplash.com/developers). En Render,
+defínela como variable de entorno del servicio (`UNSPLASH_ACCESS_KEY`), igual
+que `ANTHROPIC_API_KEY`. Sin ella, Formaciones sigue funcionando con
+normalidad (iconos y diseño corporativo incluidos) pero sin fotos de fondo.
+
+Las consultas a Unsplash usan un catálogo cerrado de 12 temas en inglés
+(la IA elige el que mejor encaje por diapositiva) para no agotar el límite
+del plan gratuito de Unsplash (50 peticiones/hora): las imágenes se cachean
+en memoria por tema mientras el proceso esté arrancado.

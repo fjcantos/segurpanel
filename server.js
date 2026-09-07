@@ -2389,6 +2389,12 @@ servidor.listen(PORT, () => {
     );
   }
 
+  if (!process.env.UNSPLASH_ACCESS_KEY) {
+    console.warn(
+      "AVISO: UNSPLASH_ACCESS_KEY no está configurada. Las presentaciones de Formaciones se generarán sin imágenes de fondo hasta que la definas."
+    );
+  }
+
   if (process.env.NODE_ENV === "production" && protocolo === "http") {
     console.warn(
       "AVISO: NODE_ENV=production sin HTTPS_CERT_FILE/HTTPS_KEY_FILE configurados. " +
