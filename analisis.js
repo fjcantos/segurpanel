@@ -738,7 +738,7 @@ function dibujarCabecera(doc, anchoUtil, titulo) {
     .fillColor(ROJO)
     .font("Helvetica-Bold")
     .fontSize(11)
-    .text("UIC · Unión de Instaladores y Consumidores", doc.page.margins.left + 150, doc.page.margins.top + 30, {
+    .text("UIC · Unidad de Inteligencia de Competencia", doc.page.margins.left + 150, doc.page.margins.top + 30, {
       width: anchoUtil - 150,
     });
 
