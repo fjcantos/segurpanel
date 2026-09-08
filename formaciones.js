@@ -31,6 +31,12 @@ const MODELO_FORMACIONES = "claude-opus-5";
 // presupuesto ya usado en analisis.js (MAX_TOKENS_ANALISIS_AVANZADO) para
 // generaciones estructuradas igual de largas.
 const MAX_TOKENS_FORMACION = 16000;
+// La formacion "completa" por compañia (25-30 diapositivas, con notas de
+// moderador de 4 campos en cada una: guion, preguntas, timing y consejo
+// pedagogico) es mas del doble de contenido estructurado que el resto de
+// tipos; con MAX_TOKENS_FORMACION se cortaba a mitad de los modulos finales
+// (roleplays/ejercicios). Se dobla el presupuesto solo para este tipo.
+const MAX_TOKENS_FORMACION_COMPLETA = 32000;
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
 
@@ -52,7 +58,7 @@ const EMPRESAS_COMPETENCIA = [
   "MPA/Prosegur",
 ];
 
-const TIPOS_VALIDOS = ["competencia", "tecnicas", "objeciones", "normativa", "comparativa", "casos"];
+const TIPOS_VALIDOS = ["competencia", "tecnicas", "objeciones", "normativa", "comparativa", "casos", "completa"];
 
 // Catalogo cerrado de temas de busqueda en Unsplash (en ingles, mejor
 // resultado en su buscador): la IA elige el que mejor encaje por
@@ -150,13 +156,16 @@ const ESQUEMA_FORMACION = {
       items: {
         type: "object",
         properties: {
-          tipo: { type: "string", enum: ["titulo", "contenido", "comparativa", "cita", "cierre"] },
+          tipo: {
+            type: "string",
+            enum: ["titulo", "contenido", "comparativa", "cita", "cierre", "roleplay", "ejercicio", "infografia"],
+          },
           titulo: { type: "string", description: "Título de la diapositiva, máximo 10 palabras." },
           puntos: {
             type: "array",
             items: { type: "string" },
             description:
-              "Puntos/bullets de la diapositiva (guion, argumentos, líneas de diálogo...). En diapositivas 'comparativa' puede ir vacío si se usa 'tabla'. En 'cita' el primer elemento es la cita textual.",
+              "Puntos/bullets de la diapositiva (guion, argumentos...). En diapositivas 'comparativa' puede ir vacío si se usa 'tabla'. En 'cita' el primer elemento es la cita textual. En 'roleplay' cada elemento es una línea de diálogo con el prefijo literal 'Cliente:' o 'Agente:'. En 'ejercicio' puede ir vacío (el contenido va en 'pregunta'/'respuesta'). En 'infografia' son EXACTAMENTE 5 elementos con el formato 'Título corto: explicación breve (máximo 12 palabras)'.",
           },
           tabla: {
             type: "array",
@@ -165,12 +174,24 @@ const ESQUEMA_FORMACION = {
               "Solo para diapositivas tipo 'comparativa': filas de una tabla, la primera fila es la cabecera. Todas las filas con el mismo número de columnas.",
           },
           autor: { type: "string", description: "Solo para diapositivas tipo 'cita': a quién se atribuye (p.ej. 'Zig Ziglar')." },
-          notas: { type: "string", description: "Notas del orador: guion ampliado o contexto adicional para quien presenta." },
+          pregunta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': enunciado del caso o dilema práctico." },
+          respuesta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': respuesta modelo/correcta, breve y accionable." },
+          notas: { type: "string", description: "Notas del orador: guion detallado de qué decir exactamente en esta diapositiva." },
+          notasPreguntas: {
+            type: "array",
+            items: { type: "string" },
+            description: "1-2 preguntas para lanzar al grupo durante esta diapositiva, para fomentar la participación.",
+          },
+          notasTiming: { type: "string", description: "Timing sugerido para esta diapositiva, p.ej. '3 minutos'." },
+          notasConsejo: {
+            type: "string",
+            description: "Consejo pedagógico breve para quien presenta (cómo dinamizarla, qué evitar, cómo reconducir al grupo).",
+          },
           tema: {
             type: "string",
             enum: TEMAS_UNSPLASH,
             description:
-              "Tema de la foto de fondo (en inglés, para buscar en Unsplash) que mejor ilustre esta diapositiva. No se usa en diapositivas tipo 'comparativa'.",
+              "Tema de la foto de fondo (en inglés, para buscar en Unsplash) que mejor ilustre esta diapositiva. No se usa en diapositivas tipo 'comparativa', 'ejercicio' ni 'infografia'.",
           },
           icono: {
             type: "string",
@@ -191,11 +212,12 @@ const ESQUEMA_FORMACION = {
    2. Llamada a la API de Anthropic (mismo patron que analizarConIA)
    ================================================================ */
 
-async function generarSlidesConIA({ system, mensaje }) {
+async function generarSlidesConIA({ system, mensaje, maxTokens }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new FormacionError("El servidor no tiene configurada la variable de entorno ANTHROPIC_API_KEY.");
   }
+  const presupuestoTokens = maxTokens || MAX_TOKENS_FORMACION;
 
   const respuesta = await fetch(ANTHROPIC_API_URL, {
     method: "POST",
@@ -206,7 +228,7 @@ async function generarSlidesConIA({ system, mensaje }) {
     },
     body: JSON.stringify({
       model: MODELO_FORMACIONES,
-      max_tokens: MAX_TOKENS_FORMACION,
+      max_tokens: presupuestoTokens,
       system,
       messages: [{ role: "user", content: mensaje }],
       output_config: {
@@ -232,7 +254,7 @@ async function generarSlidesConIA({ system, mensaje }) {
   // que quede registrado en el log del servidor cual fue la causa real.
   if (datos.stop_reason === "max_tokens") {
     console.error(
-      `Formaciones: respuesta de Anthropic truncada por max_tokens (${MAX_TOKENS_FORMACION}). Texto recibido: ${bloqueTexto.text.length} caracteres.`
+      `Formaciones: respuesta de Anthropic truncada por max_tokens (${presupuestoTokens}). Texto recibido: ${bloqueTexto.text.length} caracteres.`
     );
     throw new FormacionError(
       "La formación generada era demasiado larga y se ha cortado antes de terminar. Inténtalo de nuevo; si se repite, prueba con una formación más corta."
@@ -347,6 +369,48 @@ function promptCasos() {
   };
 }
 
+function promptFormacionCompleta({ empresa, filaComparador, equipo, alianzas }) {
+  const datosComparador = filaComparador
+    ? `Datos orientativos del Comparador de SegurPanel para ${empresa}: precio desde ${filaComparador.precioMin ?? "—"} €/mes, permanencia mínima ${filaComparador.permanenciaMeses ?? "—"} meses, valoración ${filaComparador.valoracion ?? "—"}/5.`
+    : `No hay datos del Comparador disponibles para ${empresa}.`;
+
+  const datosEquipo = equipo
+    ? `Equipos que utiliza ${empresa} según ficha técnica interna: marca ${equipo.marca || "no divulgada"}. Conectividad: ${equipo.conectividad || "—"}. Dispositivos: ${(equipo.equipos || []).map((e) => `${e.tipo}: ${e.desc}`).join("; ") || "—"}.`
+    : `No hay ficha de equipos disponible para ${empresa}.`;
+
+  const datosAlianzas =
+    alianzas && alianzas.length
+      ? `Alianzas/acuerdos publicados de ${empresa}: ${alianzas.map((a) => `${a.socio} (${a.sector}${a.tipoAcuerdo ? ", " + a.tipoAcuerdo : ""})`).join("; ")}.`
+      : `No hay alianzas publicadas conocidas de ${empresa} en este momento.`;
+
+  return {
+    system: PERSONA_FORMADOR,
+    maxTokens: MAX_TOKENS_FORMACION_COMPLETA,
+    mensaje: `Crea la formación interna COMPLETA para el equipo de retención/ventas de Verisure sobre "${empresa}", pensada para impartirse en sesión presencial u online con un formador y un grupo de agentes. Debe ser exhaustiva y 100% accionable, no un resumen.
+
+${datosComparador}
+${datosEquipo}
+${datosAlianzas}
+
+Usa estos datos como base real y no los contradigas; para todo lo demás (historia, posicionamiento de marca, debilidades operativas o comerciales, argumentario) apóyate en tu conocimiento experto del sector español de alarmas.
+
+Genera EXACTAMENTE entre 25 y 30 diapositivas en total, organizadas estrictamente en este orden:
+
+1. Una diapositiva tipo 'titulo' de portada, con "${empresa}" en el título o subtítulo.
+2. MÓDULO 1 — Quiénes son: 3-4 diapositivas tipo 'contenido' (historia y fundación, presencia territorial y volumen de mercado en España, posicionamiento de marca).
+3. MÓDULO 2 — Su oferta comercial: 3-4 diapositivas tipo 'contenido' o 'comparativa' (precios orientativos, gama de equipos/tecnología, condiciones de permanencia y cancelación).
+4. MÓDULO 3 — Sus puntos fuertes y débiles: 2-3 diapositivas tipo 'contenido' que separen con claridad fortalezas reales de debilidades explotables en una llamada.
+5. MÓDULO 4 — Cómo rebatirles en una llamada de retención: 3-4 diapositivas tipo 'contenido' con argumentario específico y frases concretas frente a esta empresa.
+6. MÓDULO 5 — RolePlays interactivos: EXACTAMENTE 3 escenarios distintos entre sí con un cliente difícil (por ejemplo: cliente que ya ha firmado con ${empresa}, cliente que solo compara precio y amenaza con irse, cliente enfadado que exige la baja inmediata). Cada escenario ocupa 2 diapositivas seguidas: primero una 'contenido' con el contexto del cliente, su actitud y el objetivo del roleplay; después una 'roleplay' con el diálogo completo en 'puntos', alternando líneas con el prefijo literal "Cliente:" y "Agente:", mostrando cómo el agente aplica correctamente técnicas de retención.
+7. MÓDULO 6 — Ejercicios prácticos con respuestas: 2-3 diapositivas tipo 'ejercicio', cada una con 'pregunta' (un caso o dilema realista sobre ${empresa}) y 'respuesta' (la respuesta modelo correcta, breve y accionable).
+8. Cierra con UNA última diapositiva tipo 'infografia': título "Ficha resumen: ${empresa}", y en 'puntos' EXACTAMENTE 5 elementos con el formato "Título corto: explicación breve (máximo 12 palabras)" con los 5 datos que un agente debe recordar de memoria sobre ${empresa} en mitad de una llamada. No incluyas 'notas' extensas en esta diapositiva (es una ficha para imprimir y repartir, no se presenta con guion oral).
+
+NOTAS DEL MODERADOR (obligatorias en TODAS las diapositivas salvo la 'infografia' final): el campo 'notas' debe ser un guion detallado de qué decir exactamente en esa diapositiva (frases que el formador pueda leer o parafrasear en voz alta, no un resumen esquemático). Añade además 'notasPreguntas' con 1-2 preguntas concretas para lanzar al grupo y fomentar el debate, 'notasTiming' con el tiempo sugerido para esa diapositiva (p.ej. "3 minutos"), y 'notasConsejo' con un consejo pedagógico breve y práctico (cómo dinamizarla, qué evitar, cómo reconducir si el grupo se dispersa o si sale un caso real distinto al planteado).
+
+Elige en cada diapositiva de 'contenido', 'roleplay' y 'cita' el valor de 'tema' (foto de fondo) y 'icono' que mejor la representen, variando entre diapositivas.`,
+  };
+}
+
 /* ================================================================
    4. Dispatcher: tipo -> prompt (+ contexto real de servidor cuando aplica)
    ================================================================ */
@@ -376,6 +440,15 @@ async function generarFormacion({ tipo, empresa, contexto }) {
       );
     case "casos":
       return generarSlidesConIA(promptCasos());
+    case "completa": {
+      if (!EMPRESAS_COMPETENCIA.includes(empresa)) {
+        throw new FormacionError("Empresa no válida.");
+      }
+      const alianzas = db.listarAlianzasPorEstado("published").filter((a) => a.empresaAlarma === empresa);
+      return generarSlidesConIA(
+        promptFormacionCompleta({ empresa, filaComparador: ctx.filaComparador, equipo: ctx.equipo, alianzas })
+      );
+    }
     default:
       throw new FormacionError("Tipo de formación no válido.");
   }
@@ -569,6 +642,26 @@ function anadirPie(slide, numero, total, colorTexto) {
   });
 }
 
+// Junta 'notas' (guion) con los 3 campos opcionales de la formacion
+// "completa" (preguntas al grupo, timing, consejo pedagogico) en un unico
+// texto para las notas del orador del .pptx. En los demas tipos de
+// formacion esos 3 campos vienen vacios y el resultado es igual a d.notas.
+function notasCompletas(d) {
+  const partes = [];
+  if (d.notas) partes.push(d.notas.trim());
+  if (d.notasPreguntas && d.notasPreguntas.length) {
+    partes.push("Preguntas para el grupo:\n" + d.notasPreguntas.map((p) => `- ${p}`).join("\n"));
+  }
+  if (d.notasTiming) partes.push(`Timing sugerido: ${d.notasTiming}`);
+  if (d.notasConsejo) partes.push(`Consejo pedagógico: ${d.notasConsejo}`);
+  return partes.join("\n\n");
+}
+
+function anadirNotas(slide, d) {
+  const texto = notasCompletas(d);
+  if (texto) slide.addNotes(texto);
+}
+
 function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, imagenFondo) {
   const slide = pptx.addSlide();
   if (imagenFondo) {
@@ -607,7 +700,7 @@ function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, image
       color: ROJO_UIC,
     });
   }
-  if (d.notas) slide.addNotes(d.notas);
+  anadirNotas(slide, d);
   pintarCreditoUnsplash(slide, imagenFondo, "D1D5DB");
   anadirPie(slide, numero, total, imagenFondo ? "D1D5DB" : GRIS_UIC);
 }
@@ -646,7 +739,7 @@ function diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo) {
   if (logoDataUri) {
     slide.addImage({ data: logoDataUri, x: 4.15, y: 4.3, w: 1.7, h: 0.96 });
   }
-  if (d.notas) slide.addNotes(d.notas);
+  anadirNotas(slide, d);
   pintarCreditoUnsplash(slide, imagenFondo, "FBD5D5");
 }
 
@@ -696,7 +789,7 @@ function diapositivaCita(pptx, d, numero, total, logoDataUri, imagenFondo) {
     color: colorAutor,
     align: "right",
   });
-  if (d.notas) slide.addNotes(d.notas);
+  anadirNotas(slide, d);
   pintarCreditoUnsplash(slide, imagenFondo, "D1D5DB");
   anadirPie(slide, numero, total, imagenFondo ? "D1D5DB" : GRIS_UIC);
 }
@@ -747,7 +840,7 @@ function diapositivaComparativa(pptx, d, numero, total, logoDataUri) {
       color: NEGRO_UIC,
     });
   }
-  if (d.notas) slide.addNotes(d.notas);
+  anadirNotas(slide, d);
   anadirPie(slide, numero, total);
 }
 
@@ -797,9 +890,154 @@ function diapositivaContenido(pptx, d, numero, total, logoDataUri, imagenFondo) 
       valign: "top",
     }
   );
-  if (d.notas) slide.addNotes(d.notas);
+  anadirNotas(slide, d);
   pintarCreditoUnsplash(slide, imagenFondo, "D1D5DB");
   anadirPie(slide, numero, total, modoFoto ? "D1D5DB" : GRIS_UIC);
+}
+
+// Diapositiva de dialogo simulado (Modulo 5, "completa"): mismo layout que
+// diapositivaContenido pero coloreando cada linea segun su prefijo literal
+// "Cliente:"/"Agente:" (ver promptFormacionCompleta), para que el dialogo se
+// lea como una conversacion real y no como una lista de bullets neutra.
+function diapositivaRoleplay(pptx, d, numero, total, logoDataUri, imagenFondo) {
+  const slide = pptx.addSlide();
+  const modoFoto = !!imagenFondo;
+  const colorTitulo = modoFoto ? BLANCO_UIC : ROJO_UIC;
+
+  if (modoFoto) {
+    pintarFondoConImagen(slide, imagenFondo, NEGRO_UIC, 75);
+    pintarPanelTexto(slide, 0.3, 0.95, 9.4, 4.05);
+  } else {
+    slide.background = { color: BLANCO_UIC };
+  }
+  anadirCabeceraComun(slide, logoDataUri);
+  dibujarIconoBadge(slide, d.icono || "chat-bubble-left-right", 0.4, modoFoto ? 1.1 : 0.28, 0.5, ROJO_UIC);
+
+  slide.addText(d.titulo, {
+    x: 1.05,
+    y: modoFoto ? 1.15 : 0.32,
+    w: 8.55,
+    h: 0.6,
+    fontFace: FUENTE_UIC,
+    fontSize: 22,
+    bold: true,
+    color: colorTitulo,
+  });
+  if (!modoFoto) {
+    slide.addShape("rect", { x: 0.42, y: 0.98, w: 1.1, h: 0.05, fill: { color: NEGRO_UIC }, line: { type: "none" } });
+  }
+
+  const lineas = d.puntos && d.puntos.length ? d.puntos : ["—"];
+  const colorCliente = modoFoto ? BLANCO_UIC : GRIS_UIC;
+  const colorAgente = modoFoto ? "FBD5D5" : ROJO_UIC;
+  slide.addText(
+    lineas.map((linea) => {
+      const esAgente = /^agente:/i.test(linea.trim());
+      return {
+        text: linea,
+        options: {
+          color: esAgente ? colorAgente : colorCliente,
+          bold: esAgente,
+          breakLine: true,
+          paraSpaceAfter: 9,
+        },
+      };
+    }),
+    {
+      x: 0.5,
+      y: modoFoto ? 1.9 : 1.25,
+      w: 9.0,
+      h: modoFoto ? 3.0 : 3.8,
+      fontFace: FUENTE_UIC,
+      fontSize: 13.5,
+      valign: "top",
+    }
+  );
+  anadirNotas(slide, d);
+  pintarCreditoUnsplash(slide, imagenFondo, "D1D5DB");
+  anadirPie(slide, numero, total, modoFoto ? "D1D5DB" : GRIS_UIC);
+}
+
+// Diapositiva de ejercicio con respuesta (Modulo 6, "completa"): pregunta
+// arriba, respuesta modelo destacada en un panel aparte debajo (para que el
+// formador pueda taparla/revelarla en pantalla si presenta en vivo). Sin
+// foto de fondo: aqui prima la legibilidad del enunciado y la respuesta.
+function diapositivaEjercicio(pptx, d, numero, total, logoDataUri) {
+  const slide = pptx.addSlide();
+  slide.background = { color: BLANCO_UIC };
+  anadirCabeceraComun(slide, logoDataUri);
+  dibujarIconoBadge(slide, d.icono || "light-bulb", 0.4, 0.28, 0.5, ROJO_UIC);
+  slide.addText(d.titulo, {
+    x: 1.05,
+    y: 0.32,
+    w: 8.55,
+    h: 0.55,
+    fontFace: FUENTE_UIC,
+    fontSize: 20,
+    bold: true,
+    color: ROJO_UIC,
+  });
+  slide.addShape("rect", { x: 0.42, y: 0.98, w: 1.1, h: 0.05, fill: { color: NEGRO_UIC }, line: { type: "none" } });
+
+  slide.addText("EJERCICIO", {
+    x: 0.5, y: 1.15, w: 9.0, h: 0.3, fontFace: FUENTE_UIC, fontSize: 11, bold: true, color: GRIS_UIC,
+  });
+  slide.addText(d.pregunta || (d.puntos && d.puntos[0]) || "—", {
+    x: 0.5, y: 1.45, w: 9.0, h: 1.4, fontFace: FUENTE_UIC, fontSize: 16, color: NEGRO_UIC, valign: "top",
+  });
+
+  slide.addShape("rect", { x: 0.5, y: 3.0, w: 9.0, h: 1.9, fill: { color: GRIS_CLARO_UIC }, line: { color: ROJO_UIC, width: 1 } });
+  slide.addText("RESPUESTA MODELO", {
+    x: 0.7, y: 3.15, w: 8.6, h: 0.3, fontFace: FUENTE_UIC, fontSize: 11, bold: true, color: ROJO_UIC,
+  });
+  slide.addText(d.respuesta || "—", {
+    x: 0.7, y: 3.45, w: 8.6, h: 1.3, fontFace: FUENTE_UIC, fontSize: 13.5, color: NEGRO_UIC, valign: "top",
+  });
+
+  anadirNotas(slide, d);
+  anadirPie(slide, numero, total);
+}
+
+// Infografia final (ultima diapositiva de "completa"): ficha de una sola
+// pagina pensada para imprimirse y repartirse, con los 5 puntos clave en
+// formato "Titulo: detalle" (ver promptFormacionCompleta) como tarjetas
+// numeradas. Sin foto de fondo ni panel semitransparente: debe imprimirse
+// nitida en blanco y negro si hace falta.
+function diapositivaInfografia(pptx, d, numero, total, logoDataUri) {
+  const slide = pptx.addSlide();
+  slide.background = { color: BLANCO_UIC };
+  slide.addShape("rect", { x: 0, y: 0, w: "100%", h: 0.9, fill: { color: ROJO_UIC }, line: { type: "none" } });
+  if (logoDataUri) slide.addImage({ data: logoDataUri, x: 8.55, y: 0.14, w: 1.1, h: 0.62 });
+  slide.addText(d.titulo, {
+    x: 0.4, y: 0.1, w: 7.9, h: 0.45, fontFace: FUENTE_UIC, fontSize: 20, bold: true, color: BLANCO_UIC,
+  });
+  slide.addText("Ficha imprimible · Reparte esta diapositiva al equipo", {
+    x: 0.4, y: 0.52, w: 7.9, h: 0.3, fontFace: FUENTE_UIC, fontSize: 11, italic: true, color: "FBD5D5",
+  });
+
+  const puntos = (d.puntos && d.puntos.length ? d.puntos : []).slice(0, 5);
+  const yInicio = 1.15;
+  const alturaFila = 0.85;
+  puntos.forEach((punto, i) => {
+    const y = yInicio + i * alturaFila;
+    const idx = punto.indexOf(":");
+    const tituloPunto = idx > -1 ? punto.slice(0, idx).trim() : `Punto ${i + 1}`;
+    const detalle = idx > -1 ? punto.slice(idx + 1).trim() : punto;
+
+    slide.addShape("ellipse", { x: 0.5, y: y + 0.05, w: 0.55, h: 0.55, fill: { color: ROJO_UIC }, line: { type: "none" } });
+    slide.addText(String(i + 1), {
+      x: 0.5, y: y + 0.05, w: 0.55, h: 0.55, align: "center", valign: "middle",
+      fontFace: FUENTE_UIC, fontSize: 20, bold: true, color: BLANCO_UIC,
+    });
+    slide.addText(tituloPunto, {
+      x: 1.25, y, w: 8.15, h: 0.32, fontFace: FUENTE_UIC, fontSize: 14, bold: true, color: NEGRO_UIC,
+    });
+    slide.addText(detalle, {
+      x: 1.25, y: y + 0.32, w: 8.15, h: 0.45, fontFace: FUENTE_UIC, fontSize: 12, color: GRIS_UIC, valign: "top",
+    });
+  });
+
+  anadirNotas(slide, d);
 }
 
 async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
@@ -836,6 +1074,15 @@ async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
         break;
       case "comparativa":
         diapositivaComparativa(pptx, d, numero, total, logoDataUri);
+        break;
+      case "roleplay":
+        diapositivaRoleplay(pptx, d, numero, total, logoDataUri, imagenFondo);
+        break;
+      case "ejercicio":
+        diapositivaEjercicio(pptx, d, numero, total, logoDataUri);
+        break;
+      case "infografia":
+        diapositivaInfografia(pptx, d, numero, total, logoDataUri);
         break;
       default:
         diapositivaContenido(pptx, d, numero, total, logoDataUri, imagenFondo);

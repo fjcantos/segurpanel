@@ -1337,7 +1337,7 @@ async function apiFormacionesGenerar(req, res) {
   if (!formaciones.TIPOS_VALIDOS.includes(tipo)) {
     return enviarJSON(res, 400, { error: "Tipo de formación no válido." });
   }
-  if (tipo === "competencia" && !formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
+  if ((tipo === "competencia" || tipo === "completa") && !formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
     return enviarJSON(res, 400, { error: "Empresa no válida." });
   }
   if (!contextoFormacionValido(cuerpo.contexto)) {

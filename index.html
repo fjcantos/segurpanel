@@ -2073,6 +2073,10 @@
     <p class="chart-sub">Un battlecard completo por empresa: quiénes son, qué ofrecen, puntos débiles, cómo rebatirlos, alianzas actuales y equipos que usan.</p>
     <div class="formacion-empresa-grid" id="formacionEmpresaGrid"></div>
 
+    <h3 class="equip-section-title">Formación Completa por Compañía</h3>
+    <p class="chart-sub">Curso completo de 25-30 diapositivas por empresa: quiénes son, su oferta comercial, puntos fuertes/débiles, cómo rebatirlos, 3 roleplays con cliente difícil, ejercicios prácticos con respuesta y una infografía final para imprimir. Notas de moderador en cada diapositiva (guion, preguntas al grupo, timing y consejo pedagógico).</p>
+    <div class="formacion-empresa-grid" id="formacionCompletaEmpresaGrid"></div>
+
     <h3 class="equip-section-title">Otras formaciones</h3>
     <div class="formacion-grid">
       <button type="button" class="formacion-card" data-formacion-tipo="tecnicas">
@@ -2974,6 +2978,7 @@
       mostrarLeyendasSuperAdmin();
       configurarComparadorSuperAdmin();
       renderFormacionEmpresas(true);
+      renderFormacionCompletaEmpresas(true);
     } else {
       // Solo super_admin recibe el desglose de alianzas pendientes (ver
       // apiAlianzasGet en el servidor); en el resto de roles esa tarjeta
@@ -4628,6 +4633,7 @@
 
   /* ---------- Formaciones (presentaciones PPTX generadas con IA) ---------- */
   const formacionEmpresaGrid = document.getElementById('formacionEmpresaGrid');
+  const formacionCompletaEmpresaGrid = document.getElementById('formacionCompletaEmpresaGrid');
   const formacionStatus = document.getElementById('formacionStatus');
   let formacionEnCurso = false;
 
@@ -4656,7 +4662,14 @@
     if (formacionEnCurso) return;
     formacionEnCurso = true;
     document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = true; });
-    setFormacionStatus('Generando formación con IA… puede tardar entre 30 y 90 segundos.', false);
+    // La formacion "completa" genera 25-30 diapositivas con notas de
+    // moderador de 4 campos cada una: tarda notablemente mas que el resto.
+    setFormacionStatus(
+      tipo === 'completa'
+        ? 'Generando formación completa con IA (25-30 diapositivas)… puede tardar entre 1 y 3 minutos.'
+        : 'Generando formación con IA… puede tardar entre 30 y 90 segundos.',
+      false
+    );
 
     try {
       const respuesta = await fetch('/api/formaciones/generar', {
@@ -4721,6 +4734,29 @@
     });
   }
   renderFormacionEmpresas(false);
+
+  // Igual que renderFormacionEmpresas pero para el curso completo (tipo
+  // "completa"): mismos 8 botones de color corporativo, mismo patron de
+  // ocultar el nombre salvo para super_admin (ver renderFormacionCompletaEmpresas(true)
+  // en el bloque de sesion mas abajo).
+  function renderFormacionCompletaEmpresas(mostrarNombre) {
+    if (!formacionCompletaEmpresaGrid) return;
+    formacionCompletaEmpresaGrid.innerHTML = EQUIPOS_EMPRESA.map(e => `
+      <button type="button" class="formacion-empresa-btn" data-formacion-tipo="completa" data-empresa="${escapeHtml(e.empresa)}" title="Formación Completa por Compañía">
+        ${swatchHtml(e.empresa)}${mostrarNombre ? `<span>${escapeHtml(e.empresa)}</span>` : ''}
+      </button>`).join('');
+    formacionCompletaEmpresaGrid.querySelectorAll('[data-empresa]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const empresa = btn.dataset.empresa;
+        const equipo = EQUIPOS_EMPRESA.find(e => e.empresa === empresa) || null;
+        generarFormacionDescarga('completa', {
+          empresa,
+          contexto: { filaComparador: obtenerFilaComparadorPorEmpresa(empresa), equipo },
+        });
+      });
+    });
+  }
+  renderFormacionCompletaEmpresas(false);
 
   document.querySelectorAll('.formacion-card[data-formacion-tipo]').forEach(btn => {
     btn.addEventListener('click', () => {
