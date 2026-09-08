@@ -37,6 +37,10 @@ const MAX_TOKENS_FORMACION = 16000;
 // tipos; con MAX_TOKENS_FORMACION se cortaba a mitad de los modulos finales
 // (roleplays/ejercicios). Se dobla el presupuesto solo para este tipo.
 const MAX_TOKENS_FORMACION_COMPLETA = 32000;
+// Timeout explicito para la llamada a Anthropic (ver generarSlidesConIA):
+// sin el, una generacion larga podia colgarse indefinidamente o fallar con
+// un "fetch failed" generico si la red cortaba la conexion antes de tiempo.
+const TIMEOUT_FORMACION_MS = 120000; // 120 segundos
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
 
@@ -219,26 +223,51 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
   }
   const presupuestoTokens = maxTokens || MAX_TOKENS_FORMACION;
 
-  const respuesta = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODELO_FORMACIONES,
-      max_tokens: presupuestoTokens,
-      system,
-      messages: [{ role: "user", content: mensaje }],
-      output_config: {
-        effort: "high",
-        format: { type: "json_schema", schema: ESQUEMA_FORMACION },
+  // fetch() (undici) no aplica ningun timeout propio a esta llamada: sin uno
+  // explicito, la formacion "completa" (25-30 diapositivas, el doble de
+  // max_tokens que el resto, ver MAX_TOKENS_FORMACION_COMPLETA) puede tardar
+  // varios minutos y acabar en un TypeError "fetch failed" generico si la
+  // red corta la conexion antes de que el modelo termine. Se limita
+  // explicitamente a TIMEOUT_FORMACION_MS y, si salta o si hay cualquier
+  // otro fallo de red, se traduce a un FormacionError con un mensaje que el
+  // usuario del panel pueda entender (ver catch mas abajo) en vez de dejar
+  // pasar "fetch failed" tal cual hasta el frontend.
+  let respuesta;
+  let datos;
+  try {
+    respuesta = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
       },
-    }),
-  });
+      body: JSON.stringify({
+        model: MODELO_FORMACIONES,
+        max_tokens: presupuestoTokens,
+        system,
+        messages: [{ role: "user", content: mensaje }],
+        output_config: {
+          effort: "high",
+          format: { type: "json_schema", schema: ESQUEMA_FORMACION },
+        },
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_FORMACION_MS),
+    });
+    datos = await respuesta.json();
+  } catch (e) {
+    const esTimeout = e.name === "TimeoutError" || e.name === "AbortError";
+    console.error(
+      `Formaciones: fallo de red llamando a Anthropic (timeout configurado: ${TIMEOUT_FORMACION_MS}ms). ${e.name}: ${e.message}` +
+        (e.cause ? ` Causa: ${e.cause}` : "")
+    );
+    throw new FormacionError(
+      esTimeout
+        ? `La generación ha tardado más de ${Math.round(TIMEOUT_FORMACION_MS / 1000)} segundos y se ha cancelado por tiempo de espera. Inténtalo de nuevo; si se repite, prueba con una formación más corta.`
+        : "No se ha podido contactar con la API de Anthropic (error de red). Inténtalo de nuevo en unos segundos."
+    );
+  }
 
-  const datos = await respuesta.json();
   if (!respuesta.ok) {
     const mensajeError =
       (datos && datos.error && datos.error.message) || `Error ${respuesta.status} al llamar a la API de Anthropic.`;
