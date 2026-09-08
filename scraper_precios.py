@@ -17,6 +17,11 @@ Comportamiento:
   - Busca, para cada empresa, noticias que mencionen palabras propias de
     promociones comerciales (oferta, descuento, meses gratis, sin
     permanencia, etc.).
+  - Descarta automáticamente las noticias cuyo titular no contenga además
+    alguna palabra propia de seguridad privada / alarmas (alarma, seguridad,
+    protección, instalación, monitorización, hogar, vigilancia, etc.), para
+    evitar falsos positivos por coincidencia de nombre (p.ej. "ADT" en una
+    crónica de fútbol).
   - Descarta automáticamente cualquier noticia cuya fecha de publicación
     (pubDate del RSS) tenga más de OFERTAS_DIAS_MAX días (30 por defecto)
     de antigüedad, o cuya fecha no se pueda interpretar: solo se consideran
@@ -103,6 +108,19 @@ PROMO_KEYWORDS = [
     "sin permanencia", "cuota gratis", "regalo", "bono",
 ]
 
+# Palabras que indican que la noticia trata realmente de seguridad privada /
+# alarmas, y no de una coincidencia de nombre (p.ej. "ADT" en una crónica de
+# fútbol). El titular debe contener al menos una de ellas, además de mencionar
+# la empresa, para considerarse una promoción relevante.
+RELEVANCIA_KEYWORDS = [
+    "alarma", "alarmas", "seguridad", "protección", "proteccion",
+    "instalación", "instalacion", "monitorización", "monitorizacion",
+    "monitoreo", "hogar", "empresa de seguridad", "seguridad privada",
+    "vigilancia", "videovigilancia", "domótica", "domotica",
+    "cámaras", "camaras", "sistema de seguridad", "central receptora",
+    "antirrobo", "anti-robo",
+]
+
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=es&gl=ES&ceid=ES:es"
 USER_AGENT = "Mozilla/5.0 (compatible; SegurPanelScraper/1.0; +https://segurpanel.local)"
 REQUEST_TIMEOUT = 15
@@ -123,6 +141,14 @@ NUM_OFERTAS_TEST = 3
 def contiene_promocion(texto):
     texto_low = texto.lower()
     return any(palabra in texto_low for palabra in PROMO_KEYWORDS)
+
+
+def es_relevante_seguridad(texto):
+    """True si el texto (normalmente el titular) contiene alguna palabra
+    propia de seguridad privada / alarmas. Descarta coincidencias de nombre
+    ajenas al sector, como "ADT" en una noticia de fútbol."""
+    texto_low = texto.lower()
+    return any(palabra in texto_low for palabra in RELEVANCIA_KEYWORDS)
 
 
 def generar_id_externo(*partes):
@@ -189,6 +215,8 @@ def buscar_ofertas_de_empresa(alarma):
             continue
         if not contiene_promocion(titulo):
             continue  # la noticia no menciona ninguna palabra de oferta/promoción
+        if not es_relevante_seguridad(titulo):
+            continue  # el titular no habla de seguridad/alarmas (coincidencia de nombre, ej. futbol)
         if not es_oferta_reciente(fecha_pub):
             continue  # descarta promociones de mas de OFERTAS_DIAS_MAX dias (o sin fecha fiable)
 
