@@ -18,6 +18,10 @@ usa la librería estándar de Python (urllib, xml.etree, json) para no
 depender de "pip install" en el dispositivo.
 
 Comportamiento:
+  - Descarta automáticamente cualquier noticia de Google News cuya fecha de
+    publicación (pubDate del RSS) tenga más de DIAS_MAX_NOTICIA días (7 por
+    defecto) de antigüedad, o cuya fecha no se pueda interpretar: solo
+    llegan a alianzas.json noticias recientes.
   - Guarda en disco (ALIANZAS_CACHE) los identificadores de todas las
     alianzas detectadas en ejecuciones anteriores.
   - En cada ejecución, descarta las que ya conocía y se queda solo con las
@@ -77,7 +81,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from hashlib import sha1
 
 # ---------------------------------------------------------------------------
@@ -157,6 +162,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; SegurPanelScraper/1.0; +https://segurpane
 REQUEST_TIMEOUT = 15
 REQUEST_DELAY_SEGUNDOS = 1.5  # pausa entre peticiones, por cortesia con los servidores consultados
 MAX_CACHE_ENTRADAS = 2000  # evita que el fichero de cache crezca sin limite
+DIAS_MAX_NOTICIA = 7  # descarta noticias de Google News mas antiguas que esto
 
 RUTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
 ALIANZAS_CACHE = os.environ.get("ALIANZAS_CACHE", os.path.join(RUTA_SCRIPT, "alianzas_cache.json"))
@@ -191,6 +197,28 @@ def detectar_tipo_acuerdo(texto):
 def generar_id_externo(*partes):
     base = "|".join(p.strip().lower() for p in partes if p)
     return sha1(base.encode("utf-8")).hexdigest()[:20]
+
+
+def es_noticia_reciente(fecha_pub, dias_max=DIAS_MAX_NOTICIA):
+    """True si `fecha_pub` (pubDate del RSS, p.ej. "Mon, 02 Jan 2006
+    15:04:05 GMT") cae dentro de los ultimos `dias_max` dias. Si la fecha
+    viene vacia o no se puede interpretar, se descarta la noticia por
+    precaucion: mejor perder alguna valida con formato raro que colar una
+    desactualizada en alianzas.json."""
+    if not fecha_pub:
+        return False
+    try:
+        fecha = parsedate_to_datetime(fecha_pub)
+    except (TypeError, ValueError):
+        return False
+    if fecha is None:
+        return False
+    if fecha.tzinfo is None:
+        fecha = fecha.replace(tzinfo=timezone.utc)
+    antiguedad = datetime.now(timezone.utc) - fecha
+    # Margen de 1 hora para relojes ligeramente desincronizados que
+    # coloquen la fecha de publicacion "en el futuro" por poco.
+    return -timedelta(hours=1) <= antiguedad <= timedelta(days=dias_max)
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +256,9 @@ def buscar_en_google_news(alarma):
 
         if not titulo or not enlace:
             continue
+
+        if not es_noticia_reciente(fecha_pub):
+            continue  # descarta noticias de mas de DIAS_MAX_NOTICIA dias (o sin fecha fiable)
 
         sector, socio = detectar_socio(titulo)
         if not sector:

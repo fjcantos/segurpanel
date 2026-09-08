@@ -231,6 +231,9 @@ ejecutarse a diario en una Raspberry Pi u otro equipo con cron:
   Orange, MásMóvil · Carrefour, Leroy Merlin, El Corte Inglés, MediaMarkt ·
   Mapfre, AXA, Allianz, Generali · idealista, Fotocasa, pisos.com · Endesa,
   Iberdrola, Naturgy, Repsol).
+- Descarta automáticamente cualquier noticia con más de **7 días** de
+  antigüedad (según el `pubDate` del RSS) o sin fecha interpretable: solo
+  llegan a `alianzas.json` (y de ahí a SegurPanel) noticias recientes.
 - Opcionalmente también revisa **webs oficiales / salas de prensa** que
   configures en el diccionario `SALAS_PRENSA` dentro del script (vacío por
   defecto: añade ahí las URLs reales que quieras vigilar).
@@ -264,6 +267,50 @@ SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
 Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/alianzas/sync`
 responde `503` y rechaza cualquier envío (evita dejar el endpoint abierto por
 descuido).
+
+## Ofertas: promociones vigentes por empresa de alarmas
+
+La pestaña **"Ofertas"** muestra, para cada empresa de alarmas, la
+promoción comercial vigente detectada más recientemente. Igual que en
+Alianzas, la empresa solo se identifica por su círculo de color corporativo
+(la leyenda con el nombre solo la ve el Super Admin).
+
+A diferencia de Alianzas, **no hay cola de moderación**: las promociones
+detectadas entran directamente y se muestran tal cual, porque no son
+noticias que requieran verificación editorial, sino un listado de
+referencia que siempre pide "confirmar vigencia" antes de usarlo con un
+cliente.
+
+### Scraper en la Raspberry Pi (`scraper_precios.py`)
+
+Script en Python (solo librería estándar), pensado para ejecutarse a diario
+en la misma Raspberry Pi que `scraper_alianzas.py`:
+
+- Busca en **Google News** (RSS público) menciones de cada empresa de
+  alarmas junto a palabras propias de promociones comerciales (oferta,
+  descuento, meses gratis, sin permanencia, etc.).
+- Descarta automáticamente cualquier promoción con más de **30 días**
+  (`OFERTAS_DIAS_MAX`) de antigüedad o sin fecha interpretable, para que
+  "Ofertas" solo muestre promociones actuales.
+- Envía lo detectado a SegurPanel vía `POST /api/ofertas/sync`, autenticado
+  con el **mismo secreto compartido** `SCRAPER_TOKEN` que usa
+  `scraper_alianzas.py`.
+
+**Configuración en la Raspberry Pi** (variables de entorno para el cron):
+
+```
+SEGURPANEL_OFERTAS_SYNC_URL=https://tu-app.onrender.com/api/ofertas/sync
+SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
+```
+
+**Cron a las 07:15 todos los días** (poco después de `scraper_alianzas.py`):
+
+```
+15 7 * * * SEGURPANEL_OFERTAS_SYNC_URL="https://tu-app.onrender.com/api/ofertas/sync" SEGURPANEL_SCRAPER_TOKEN="un-secreto-largo-y-aleatorio" /usr/bin/python3 /home/pi/segurpanel/scraper_precios.py >> /home/pi/segurpanel/scraper_precios.log 2>&1
+```
+
+Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/ofertas/sync`
+responde `503`, igual que `/api/alianzas/sync`.
 
 ## Backup automático y auditoría
 

@@ -1636,83 +1636,12 @@
   <!-- ===== OFERTAS ===== -->
   <section id="ofertas" class="tab-content">
     <h2 class="section-title">Últimas ofertas</h2>
-    <p class="section-sub">Promociones de referencia. <span id="offersUpdated"></span></p>
+    <p class="section-sub">Promociones detectadas a diario por el scraper de precios. <span id="offersUpdated"></span></p>
 
     <div class="compare-legend" id="offersLegend" hidden></div>
 
-    <div class="offer-grid">
-      <div class="offer-card" style="--accent-color:#CC0000">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Verisure" style="background:#CC0000"></span>
-          <span class="offer-badge">Instalación gratis</span>
-        </div>
-        <div class="offer-desc">Instalación bonificada y 2 meses de cuota gratis al contratar online.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #000000 50%, #CC0000 50%)">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Sector Alarm" style="background:linear-gradient(135deg, #000000 50%, #CC0000 50%)"></span>
-          <span class="offer-badge">2 meses gratis</span>
-        </div>
-        <div class="offer-desc">Cuota gratuita durante los 2 primeros meses al contratar online.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:#1B5E20">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Sicor" style="background:#1B5E20"></span>
-          <span class="offer-badge">Instalación desde 0€</span>
-        </div>
-        <div class="offer-desc">Instalación bonificada en contratos de 24 meses gestionados por instalador local.</div>
-        <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:#F57C00">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Segurma" style="background:#F57C00"></span>
-          <span class="offer-badge">1 mes gratis</span>
-        </div>
-        <div class="offer-desc">Primera mensualidad gratuita al dar de alta el sistema con central propia.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:#0D47A1">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="ADT" style="background:#0D47A1"></span>
-          <span class="offer-badge">-30% primer año</span>
-        </div>
-        <div class="offer-desc">30% de descuento en la cuota durante el primer año de contrato.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #FDD835 50%, #00796B 50%)">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Seguridad 3D" style="background:linear-gradient(135deg, #FDD835 50%, #00796B 50%)"></span>
-          <span class="offer-badge">Sin permanencia</span>
-        </div>
-        <div class="offer-desc">Contratación sin permanencia y cancelación gratuita en cualquier momento.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:#7B1C2B">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Grupo Control" style="background:#7B1C2B"></span>
-          <span class="offer-badge">Sin permanencia</span>
-        </div>
-        <div class="offer-desc">Primer año sin permanencia y cancelación gratuita en cualquier momento.</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:linear-gradient(90deg, #0D1B3E 50%, #F57C00 50%)">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="Trablisa" style="background:linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)"></span>
-          <span class="offer-badge">Kit incluido</span>
-        </div>
-        <div class="offer-desc">Kit de sensores adicional sin coste al firmar contrato de 24 meses.</div>
-        <div class="offer-meta">Disponibilidad según instalador local. Confirmar vigencia.</div>
-      </div>
-      <div class="offer-card" style="--accent-color:#FDD835">
-        <div class="offer-top">
-          <span class="company-swatch offer-swatch" data-company="MPA/Prosegur" style="background:#FDD835"></span>
-          <span class="offer-badge">Desde 19,90€/mes</span>
-        </div>
-        <div class="offer-desc">Cuota bonificada desde 19,90€/mes durante los primeros 6 meses (después ~29-39€/mes según equipo).</div>
-        <div class="offer-meta">Condiciones y permanencia aplicables. Confirmar vigencia.</div>
-      </div>
+    <div class="offer-grid" id="offerGrid">
+      <div class="empty-note">Cargando ofertas…</div>
     </div>
   </section>
 
@@ -3063,6 +2992,7 @@
     }
 
     cargarAlianzas();
+    cargarOfertas();
     cargarResumenInicio();
     registrarVisitaTab('inicio');
     configurarNotificacionesPush();
@@ -3124,6 +3054,7 @@
   tabButtons.forEach(btn => btn.addEventListener('click', () => {
     activateTab(btn.dataset.tab);
     if (btn.dataset.tab === 'alianzas') cargarAlianzas();
+    if (btn.dataset.tab === 'ofertas') cargarOfertas();
     if (btn.dataset.tab === 'estadisticas') { cargarEstadisticas(); iniciarPollingActividadTiempoReal(); }
     else { detenerPollingActividadTiempoReal(); }
     if (btn.dataset.tab === 'repositorio') cargarRepositorio();
@@ -3273,6 +3204,54 @@
     }
   }
 
+  /* ---------- Ofertas: promociones detectadas a diario por scraper_precios.py ---------- */
+
+  function tarjetaOferta(o) {
+    const fuenteTexto = o.fuente ? escapeHtml(o.fuente) : 'Fuente desconocida';
+    const fuenteHtml = o.url
+      ? `<a href="${escapeHtml(o.url)}" target="_blank" rel="noopener noreferrer">${fuenteTexto}</a>`
+      : fuenteTexto;
+    const color = COLORES_EMPRESA[o.empresa] || '#9aa5b1';
+    return `
+      <div class="offer-card" style="--accent-color:${color}">
+        <div class="offer-top">
+          ${swatchHtml(o.empresa, 'offer-swatch')}
+          <span class="offer-badge">Promoción detectada</span>
+        </div>
+        <div class="offer-desc">${escapeHtml(o.titulo || '')}</div>
+        <div class="offer-meta">Detectado: ${escapeHtml(o.fechaDeteccion || '—')} · Fuente: ${fuenteHtml} · Confirmar vigencia.</div>
+      </div>`;
+  }
+
+  async function cargarOfertas() {
+    const cont = document.getElementById('offerGrid');
+    if (!cont) return; // sesion aun no resuelta o markup no presente
+
+    let ok, datos;
+    try {
+      ({ ok, datos } = await llamarAPI('/api/ofertas'));
+    } catch (e) {
+      cont.innerHTML = '<div class="empty-note">No se ha podido conectar con el servidor.</div>';
+      return;
+    }
+    if (!ok) {
+      cont.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudieron cargar las ofertas.')}</div>`;
+      return;
+    }
+
+    const ofertas = datos.ofertas || [];
+    cont.innerHTML = ofertas.length
+      ? ofertas.map(tarjetaOferta).join('')
+      : '<div class="empty-note">Todavía no se ha detectado ninguna promoción vigente.</div>';
+
+    const spanActualizado = document.getElementById('offersUpdated');
+    if (spanActualizado) {
+      spanActualizado.textContent = datos.actualizado
+        ? 'Última actualización: ' + new Date(datos.actualizado).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+    }
+  }
+
   // Noticias del sector (Inicio): reutiliza las alianzas ya publicadas
   // (fuente: scraper de la Raspberry Pi) como feed de novedades, mostrando
   // las mas recientes primero sin repetir la logica de periodos.
@@ -3303,7 +3282,6 @@
 
   const todayStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   document.getElementById('statToday').textContent = todayStr;
-  document.getElementById('offersUpdated').textContent = 'Actualizado: ' + todayStr;
   document.getElementById('pricesUpdated').textContent = 'Datos revisados: ' + todayStr + '.';
 
   /* ---------- Analisis: subida al servidor, anonimizacion y PDF ---------- */

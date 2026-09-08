@@ -1985,6 +1985,88 @@ async function apiAlianzasSync(req, res) {
   enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
 }
 
+/* ================================================================
+   API: ofertas / promociones vigentes por empresa de alarmas
+   ================================================================ */
+//
+// Flujo: scraper_precios.py (Raspberry Pi) busca a diario promociones
+// vigentes en Google News y las envia a POST /api/ofertas/sync, protegido
+// por el mismo secreto compartido (SCRAPER_TOKEN) que /api/alianzas/sync.
+// A diferencia de alianzas no hay cola de moderacion: las promociones
+// entran directamente y la pestaña "Ofertas" muestra, por cada empresa, la
+// mas reciente detectada (ver db.listarUltimaOfertaPorEmpresa).
+
+const EMPRESAS_ALARMA_VALIDAS = new Set([
+  "Verisure",
+  "Sector Alarm",
+  "Sicor",
+  "Segurma",
+  "ADT",
+  "Seguridad 3D",
+  "Grupo Control",
+  "Trablisa",
+  "MPA/Prosegur",
+]);
+const MAX_OFERTAS_POR_SYNC = 200;
+
+async function apiOfertasGet(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  enviarJSON(res, 200, {
+    ofertas: db.listarUltimaOfertaPorEmpresa(),
+    actualizado: db.fechaUltimaOferta(),
+  });
+}
+
+function ofertaValida(o) {
+  return (
+    o &&
+    typeof o.externalId === "string" &&
+    o.externalId.trim() &&
+    typeof o.empresa === "string" &&
+    EMPRESAS_ALARMA_VALIDAS.has(o.empresa) &&
+    typeof o.titulo === "string" &&
+    o.titulo.trim()
+  );
+}
+
+async function apiOfertasSync(req, res) {
+  const tokenEsperado = process.env.SCRAPER_TOKEN;
+  if (!tokenEsperado) {
+    return enviarJSON(res, 503, {
+      error: "El servidor no tiene configurada la variable de entorno SCRAPER_TOKEN.",
+    });
+  }
+  const tokenRecibido = req.headers["x-scraper-token"];
+  if (tokenRecibido !== tokenEsperado) {
+    return enviarJSON(res, 401, { error: "Token de scraper inválido." });
+  }
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const lista = Array.isArray(cuerpo.ofertas) ? cuerpo.ofertas : [];
+  if (lista.length === 0) {
+    return enviarJSON(res, 200, { insertadas: 0, mensaje: "Sin ofertas que sincronizar." });
+  }
+  if (lista.length > MAX_OFERTAS_POR_SYNC) {
+    return enviarJSON(res, 400, { error: `Demasiadas ofertas en una sola sincronización (máximo ${MAX_OFERTAS_POR_SYNC}).` });
+  }
+
+  const validas = lista.filter(ofertaValida);
+  if (validas.length === 0) {
+    return enviarJSON(res, 400, { error: "Ninguna oferta del envío tiene un formato válido." });
+  }
+
+  const { count } = db.insertarOfertas(validas);
+  enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
+}
+
 // ---------------------------------------------------------------
 // POST /api/alianzas/nueva: variante de ingesta pensada para el scraper de
 // la Raspberry Pi tal y como esta escrito hoy: un array JSON con todas las
@@ -2325,6 +2407,9 @@ async function manejarPeticion(req, res) {
       if (id !== null) return await apiAlianzasResolver(req, res, id, "discarded");
     }
 
+    if (req.method === "GET" && ruta === "/api/ofertas") return await apiOfertasGet(req, res);
+    if (req.method === "POST" && ruta === "/api/ofertas/sync") return await apiOfertasSync(req, res);
+
     if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -2373,7 +2458,7 @@ servidor.listen(PORT, () => {
 
   if (!process.env.SCRAPER_TOKEN) {
     console.warn(
-      "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync (usado por scraper_alianzas.py en la Raspberry Pi) rechazará todas las peticiones hasta que la definas."
+      "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync y POST /api/ofertas/sync (usados por scraper_alianzas.py y scraper_precios.py en la Raspberry Pi) rechazarán todas las peticiones hasta que la definas."
     );
   }
 

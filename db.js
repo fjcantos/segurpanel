@@ -84,6 +84,18 @@ db.exec(`
     reviewed_by        INTEGER REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS ofertas (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    external_id        TEXT NOT NULL UNIQUE,
+    empresa            TEXT NOT NULL,
+    titulo             TEXT,
+    fuente             TEXT,
+    url                TEXT,
+    fecha_publicacion  TEXT,
+    fecha_deteccion    TEXT NOT NULL,
+    created_at         TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS contract_stats (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     provincia           TEXT,
@@ -133,6 +145,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
+  CREATE INDEX IF NOT EXISTS idx_ofertas_empresa ON ofertas(empresa);
   CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
@@ -379,6 +392,75 @@ function resolverAlianza(id, status, reviewedBy) {
 
 function fechaUltimaAlianza() {
   const fila = db.prepare("SELECT MAX(created_at) AS ultima FROM alianzas").get();
+  return (fila && fila.ultima) || null;
+}
+
+/* ---------- Ofertas (promociones vigentes por empresa de alarmas) ---------- */
+//
+// El scraper de la Raspberry Pi (scraper_precios.py) envia periodicamente
+// las promociones que detecta a POST /api/ofertas/sync. A diferencia de
+// alianzas no hay cola de moderacion: se guardan directamente y la pestaña
+// "Ofertas" muestra, por cada empresa, la promocion detectada mas reciente.
+// `external_id` es un hash estable generado por el scraper a partir de la
+// URL de la noticia, para no duplicar la misma promocion en sucesivas
+// ejecuciones diarias.
+
+function insertarOfertas(lista) {
+  const ahora = ahoraISO();
+  const insertar = db.prepare(
+    `INSERT OR IGNORE INTO ofertas
+      (external_id, empresa, titulo, fuente, url, fecha_publicacion, fecha_deteccion, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const filas = [];
+  for (const o of lista) {
+    const info = insertar.run(
+      o.externalId,
+      o.empresa,
+      o.titulo || null,
+      o.fuente || null,
+      o.url || null,
+      o.fechaPublicacion || null,
+      o.fechaDeteccion || ahora,
+      ahora
+    );
+    if (info.changes > 0) filas.push(o);
+  }
+  return { count: filas.length, filas };
+}
+
+function ofertaPublica(o) {
+  return {
+    id: o.id,
+    empresa: o.empresa,
+    titulo: o.titulo,
+    fuente: o.fuente,
+    url: o.url,
+    fechaPublicacion: o.fecha_publicacion,
+    fechaDeteccion: o.fecha_deteccion,
+  };
+}
+
+// Una fila por empresa: la promocion detectada mas reciente (por fecha de
+// deteccion; a igualdad de fecha, la de id mayor).
+function listarUltimaOfertaPorEmpresa() {
+  return db
+    .prepare(
+      `SELECT o.* FROM ofertas o
+       WHERE o.id = (
+         SELECT id FROM ofertas o2
+         WHERE o2.empresa = o.empresa
+         ORDER BY o2.fecha_deteccion DESC, o2.id DESC
+         LIMIT 1
+       )
+       ORDER BY o.empresa ASC`
+    )
+    .all()
+    .map(ofertaPublica);
+}
+
+function fechaUltimaOferta() {
+  const fila = db.prepare("SELECT MAX(created_at) AS ultima FROM ofertas").get();
   return (fila && fila.ultima) || null;
 }
 
@@ -673,6 +755,9 @@ module.exports = {
   buscarAlianzaPorId,
   resolverAlianza,
   fechaUltimaAlianza,
+  insertarOfertas,
+  listarUltimaOfertaPorEmpresa,
+  fechaUltimaOferta,
   registrarContratoAnalizado,
   contarContratosAnalizados,
   contarContratosAnalizadosHoy,
