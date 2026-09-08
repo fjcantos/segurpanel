@@ -7,13 +7,20 @@
 // construye el fichero binario final (aqui .pptx con pptxgenjs en vez de
 // .pdf con pdfkit) a partir de ese JSON.
 //
-// Los 6 tipos de formacion comparten UN UNICO schema de diapositivas
-// generico (ver ESQUEMA_FORMACION) para no mantener 6 esquemas casi
-// identicos; lo que cambia por tipo es el prompt (system + mensaje) y, en
-// "competencia" y "comparativa", el contexto real que ya tiene el cliente en
-// pantalla (datos del Comparador, ficha de equipos, alianzas publicadas...)
-// para que la IA no invente cifras que contradigan lo que ya se muestra en
-// el resto de la app.
+// Los 6 tipos de formacion "cortos" comparten UN UNICO schema de
+// diapositivas generico (ver ESQUEMA_FORMACION) para no mantener 6 esquemas
+// casi identicos; lo que cambia por tipo es el prompt (system + mensaje) y,
+// en "competencia" y "comparativa", el contexto real que ya tiene el cliente
+// en pantalla (datos del Comparador, ficha de equipos, alianzas
+// publicadas...) para que la IA no invente cifras que contradigan lo que ya
+// se muestra en el resto de la app.
+//
+// El tipo "completa" (curso completo de 15-20 diapositivas por compañia) es
+// distinto: en vez de una unica llamada larga a la IA, usa un flujo de
+// esquema + contenido por lotes con progreso (ver
+// generarFormacionCompletaConProgreso mas abajo) para que ninguna llamada
+// individual tarde tanto como para arriesgarse a un timeout, y para poder
+// informar de progreso al cliente mientras se genera.
 
 const fs = require("fs");
 const path = require("path");
@@ -31,16 +38,22 @@ const MODELO_FORMACIONES = "claude-opus-5";
 // presupuesto ya usado en analisis.js (MAX_TOKENS_ANALISIS_AVANZADO) para
 // generaciones estructuradas igual de largas.
 const MAX_TOKENS_FORMACION = 16000;
-// La formacion "completa" por compañia (25-30 diapositivas, con notas de
-// moderador de 4 campos en cada una: guion, preguntas, timing y consejo
-// pedagogico) es mas del doble de contenido estructurado que el resto de
-// tipos; con MAX_TOKENS_FORMACION se cortaba a mitad de los modulos finales
-// (roleplays/ejercicios). Se dobla el presupuesto solo para este tipo.
-const MAX_TOKENS_FORMACION_COMPLETA = 32000;
-// Timeout explicito para la llamada a Anthropic (ver generarSlidesConIA):
+// Timeout explicito para cada llamada a Anthropic (ver llamarAnthropicJSON):
 // sin el, una generacion larga podia colgarse indefinidamente o fallar con
 // un "fetch failed" generico si la red cortaba la conexion antes de tiempo.
 const TIMEOUT_FORMACION_MS = 120000; // 120 segundos
+
+// La formacion "completa" por compañia se genera en VARIAS llamadas mas
+// pequeñas en vez de una sola de 25-30 diapositivas: con una unica llamada
+// (probado en produccion) la generacion superaba los 120 segundos y acababa
+// en timeout. Primero una llamada ligera de "esquema" (solo tipo+titulo de
+// cada diapositiva, ver ESQUEMA_ESQUEMA_COMPLETA) y despues el contenido
+// completo repartido en NUM_LOTES_CONTENIDO_COMPLETA llamadas (ver
+// generarFormacionCompletaConProgreso), cada una mucho mas rapida y con
+// menos riesgo de truncarse por max_tokens.
+const MAX_TOKENS_ESQUEMA_COMPLETA = 3000;
+const MAX_TOKENS_BATCH_COMPLETA = 8000;
+const NUM_LOTES_CONTENIDO_COMPLETA = 3;
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
 
@@ -150,7 +163,75 @@ Generas el contenido de una presentación de PowerPoint, diapositiva por diaposi
 const INSTRUCCION_LONGITUD =
   "Genera entre 15 y 20 diapositivas en total (incluida una diapositiva de título al principio y una de cierre al final). Varía el campo 'tipo' de cada diapositiva (usa 'cita' para intercalar 1-2 citas de los expertos mencionados, y 'comparativa' cuando aplique) para que la presentación no sea monótona. Sé conciso en cada diapositiva: 'puntos' con 3-5 bullets cortos (máximo una frase cada uno) y 'notas' con un guion breve de 2-4 frases, no un párrafo largo — es una presentación de alto impacto, no un documento denso. En cada diapositiva (salvo las de tipo 'comparativa'), elige el valor de 'tema' cuyo significado en inglés mejor ilustre el contenido de esa diapositiva concreta (no repitas siempre el mismo) y el valor de 'icono' que mejor represente su idea principal.";
 
+// Item de diapositiva con el contenido completo. Compartido por
+// ESQUEMA_FORMACION (los 6 tipos "cortos", una unica llamada) y
+// ESQUEMA_CONTENIDO_BATCH (tipo "completa", contenido generado por lotes)
+// para no mantener dos copias casi identicas de este objeto tan largo.
+const DIAPOSITIVA_ITEM_SCHEMA = {
+  type: "object",
+  properties: {
+    tipo: {
+      type: "string",
+      enum: ["titulo", "contenido", "comparativa", "cita", "cierre", "roleplay", "ejercicio", "infografia"],
+    },
+    titulo: { type: "string", description: "Título de la diapositiva, máximo 10 palabras." },
+    puntos: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Puntos/bullets de la diapositiva (guion, argumentos...). En diapositivas 'comparativa' puede ir vacío si se usa 'tabla'. En 'cita' el primer elemento es la cita textual. En 'roleplay' cada elemento es una línea de diálogo con el prefijo literal 'Cliente:' o 'Agente:'. En 'ejercicio' puede ir vacío (el contenido va en 'pregunta'/'respuesta'). En 'infografia' son EXACTAMENTE 5 elementos con el formato 'Título corto: explicación breve (máximo 12 palabras)'.",
+    },
+    tabla: {
+      type: "array",
+      items: { type: "array", items: { type: "string" } },
+      description:
+        "Solo para diapositivas tipo 'comparativa': filas de una tabla, la primera fila es la cabecera. Todas las filas con el mismo número de columnas.",
+    },
+    autor: { type: "string", description: "Solo para diapositivas tipo 'cita': a quién se atribuye (p.ej. 'Zig Ziglar')." },
+    pregunta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': enunciado del caso o dilema práctico." },
+    respuesta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': respuesta modelo/correcta, breve y accionable." },
+    notas: { type: "string", description: "Notas del orador: guion detallado de qué decir exactamente en esta diapositiva." },
+    notasPreguntas: {
+      type: "array",
+      items: { type: "string" },
+      description: "1-2 preguntas para lanzar al grupo durante esta diapositiva, para fomentar la participación.",
+    },
+    notasTiming: { type: "string", description: "Timing sugerido para esta diapositiva, p.ej. '3 minutos'." },
+    notasConsejo: {
+      type: "string",
+      description: "Consejo pedagógico breve para quien presenta (cómo dinamizarla, qué evitar, cómo reconducir al grupo).",
+    },
+    tema: {
+      type: "string",
+      enum: TEMAS_UNSPLASH,
+      description:
+        "Tema de la foto de fondo (en inglés, para buscar en Unsplash) que mejor ilustre esta diapositiva. No se usa en diapositivas tipo 'comparativa', 'ejercicio' ni 'infografia'.",
+    },
+    icono: {
+      type: "string",
+      enum: Object.keys(ICONOS_SVG),
+      description: "Icono que mejor represente la idea principal de esta diapositiva.",
+    },
+  },
+  required: ["tipo", "titulo", "puntos"],
+  additionalProperties: false,
+};
+
 const ESQUEMA_FORMACION = {
+  type: "object",
+  properties: {
+    tituloPresentacion: { type: "string", description: "Título principal de la presentación, máximo 8 palabras." },
+    subtitulo: { type: "string", description: "Subtítulo breve, una frase." },
+    diapositivas: { type: "array", items: DIAPOSITIVA_ITEM_SCHEMA },
+  },
+  required: ["tituloPresentacion", "subtitulo", "diapositivas"],
+  additionalProperties: false,
+};
+
+// Esquema "completa", paso 1/2: solo tipo+titulo de cada diapositiva (sin
+// contenido), para decidir la estructura completa con una llamada pequeña y
+// rapida antes de generar el contenido real por lotes.
+const ESQUEMA_ESQUEMA_COMPLETA = {
   type: "object",
   properties: {
     tituloPresentacion: { type: "string", description: "Título principal de la presentación, máximo 8 palabras." },
@@ -165,45 +246,8 @@ const ESQUEMA_FORMACION = {
             enum: ["titulo", "contenido", "comparativa", "cita", "cierre", "roleplay", "ejercicio", "infografia"],
           },
           titulo: { type: "string", description: "Título de la diapositiva, máximo 10 palabras." },
-          puntos: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Puntos/bullets de la diapositiva (guion, argumentos...). En diapositivas 'comparativa' puede ir vacío si se usa 'tabla'. En 'cita' el primer elemento es la cita textual. En 'roleplay' cada elemento es una línea de diálogo con el prefijo literal 'Cliente:' o 'Agente:'. En 'ejercicio' puede ir vacío (el contenido va en 'pregunta'/'respuesta'). En 'infografia' son EXACTAMENTE 5 elementos con el formato 'Título corto: explicación breve (máximo 12 palabras)'.",
-          },
-          tabla: {
-            type: "array",
-            items: { type: "array", items: { type: "string" } },
-            description:
-              "Solo para diapositivas tipo 'comparativa': filas de una tabla, la primera fila es la cabecera. Todas las filas con el mismo número de columnas.",
-          },
-          autor: { type: "string", description: "Solo para diapositivas tipo 'cita': a quién se atribuye (p.ej. 'Zig Ziglar')." },
-          pregunta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': enunciado del caso o dilema práctico." },
-          respuesta: { type: "string", description: "Solo para diapositivas tipo 'ejercicio': respuesta modelo/correcta, breve y accionable." },
-          notas: { type: "string", description: "Notas del orador: guion detallado de qué decir exactamente en esta diapositiva." },
-          notasPreguntas: {
-            type: "array",
-            items: { type: "string" },
-            description: "1-2 preguntas para lanzar al grupo durante esta diapositiva, para fomentar la participación.",
-          },
-          notasTiming: { type: "string", description: "Timing sugerido para esta diapositiva, p.ej. '3 minutos'." },
-          notasConsejo: {
-            type: "string",
-            description: "Consejo pedagógico breve para quien presenta (cómo dinamizarla, qué evitar, cómo reconducir al grupo).",
-          },
-          tema: {
-            type: "string",
-            enum: TEMAS_UNSPLASH,
-            description:
-              "Tema de la foto de fondo (en inglés, para buscar en Unsplash) que mejor ilustre esta diapositiva. No se usa en diapositivas tipo 'comparativa', 'ejercicio' ni 'infografia'.",
-          },
-          icono: {
-            type: "string",
-            enum: Object.keys(ICONOS_SVG),
-            description: "Icono que mejor represente la idea principal de esta diapositiva.",
-          },
         },
-        required: ["tipo", "titulo", "puntos"],
+        required: ["tipo", "titulo"],
         additionalProperties: false,
       },
     },
@@ -212,11 +256,29 @@ const ESQUEMA_FORMACION = {
   additionalProperties: false,
 };
 
+// Esquema "completa", paso 2/2: contenido completo de un lote de
+// diapositivas (ver generarFormacionCompletaConProgreso). Mismo item que
+// ESQUEMA_FORMACION; aqui no hace falta tituloPresentacion/subtitulo porque
+// ya los fijo el esquema del paso 1.
+const ESQUEMA_CONTENIDO_BATCH = {
+  type: "object",
+  properties: {
+    diapositivas: { type: "array", items: DIAPOSITIVA_ITEM_SCHEMA },
+  },
+  required: ["diapositivas"],
+  additionalProperties: false,
+};
+
 /* ================================================================
    2. Llamada a la API de Anthropic (mismo patron que analizarConIA)
    ================================================================ */
 
-async function generarSlidesConIA({ system, mensaje, maxTokens }) {
+// Llamada generica a Anthropic con salida forzada a un JSON Schema
+// (reutilizada por generarSlidesConIA -los 6 tipos "cortos"- y por el flujo
+// de esquema+lotes del tipo "completa", ver mas abajo). Centraliza aqui el
+// timeout explicito y la traduccion de errores de red/formato a
+// FormacionError, para no repetir esta logica en cada punto de llamada.
+async function llamarAnthropicJSON({ system, mensaje, schema, maxTokens, etiquetaLog }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new FormacionError("El servidor no tiene configurada la variable de entorno ANTHROPIC_API_KEY.");
@@ -224,14 +286,13 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
   const presupuestoTokens = maxTokens || MAX_TOKENS_FORMACION;
 
   // fetch() (undici) no aplica ningun timeout propio a esta llamada: sin uno
-  // explicito, la formacion "completa" (25-30 diapositivas, el doble de
-  // max_tokens que el resto, ver MAX_TOKENS_FORMACION_COMPLETA) puede tardar
-  // varios minutos y acabar en un TypeError "fetch failed" generico si la
-  // red corta la conexion antes de que el modelo termine. Se limita
-  // explicitamente a TIMEOUT_FORMACION_MS y, si salta o si hay cualquier
-  // otro fallo de red, se traduce a un FormacionError con un mensaje que el
-  // usuario del panel pueda entender (ver catch mas abajo) en vez de dejar
-  // pasar "fetch failed" tal cual hasta el frontend.
+  // explicito, una generacion larga puede colgarse indefinidamente o fallar
+  // con un TypeError "fetch failed" generico si la red corta la conexion
+  // antes de tiempo. Se limita explicitamente a TIMEOUT_FORMACION_MS y, si
+  // salta o si hay cualquier otro fallo de red, se traduce a un
+  // FormacionError con un mensaje que el usuario del panel pueda entender
+  // (ver catch mas abajo) en vez de dejar pasar "fetch failed" tal cual
+  // hasta el frontend.
   let respuesta;
   let datos;
   try {
@@ -249,7 +310,7 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
         messages: [{ role: "user", content: mensaje }],
         output_config: {
           effort: "high",
-          format: { type: "json_schema", schema: ESQUEMA_FORMACION },
+          format: { type: "json_schema", schema },
         },
       }),
       signal: AbortSignal.timeout(TIMEOUT_FORMACION_MS),
@@ -258,7 +319,7 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
   } catch (e) {
     const esTimeout = e.name === "TimeoutError" || e.name === "AbortError";
     console.error(
-      `Formaciones: fallo de red llamando a Anthropic (timeout configurado: ${TIMEOUT_FORMACION_MS}ms). ${e.name}: ${e.message}` +
+      `Formaciones${etiquetaLog ? " (" + etiquetaLog + ")" : ""}: fallo de red llamando a Anthropic (timeout configurado: ${TIMEOUT_FORMACION_MS}ms). ${e.name}: ${e.message}` +
         (e.cause ? ` Causa: ${e.cause}` : "")
     );
     throw new FormacionError(
@@ -283,7 +344,7 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
   // que quede registrado en el log del servidor cual fue la causa real.
   if (datos.stop_reason === "max_tokens") {
     console.error(
-      `Formaciones: respuesta de Anthropic truncada por max_tokens (${presupuestoTokens}). Texto recibido: ${bloqueTexto.text.length} caracteres.`
+      `Formaciones${etiquetaLog ? " (" + etiquetaLog + ")" : ""}: respuesta de Anthropic truncada por max_tokens (${presupuestoTokens}). Texto recibido: ${bloqueTexto.text.length} caracteres.`
     );
     throw new FormacionError(
       "La formación generada era demasiado larga y se ha cortado antes de terminar. Inténtalo de nuevo; si se repite, prueba con una formación más corta."
@@ -299,15 +360,18 @@ async function generarSlidesConIA({ system, mensaje, maxTokens }) {
     textoJSON = textoJSON.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   }
 
-  let resultado;
   try {
-    resultado = JSON.parse(textoJSON);
+    return JSON.parse(textoJSON);
   } catch (e) {
     console.error(
-      `Formaciones: JSON.parse falló (${e.message}). stop_reason=${datos.stop_reason}. Fin del texto recibido: ${textoJSON.slice(-300)}`
+      `Formaciones${etiquetaLog ? " (" + etiquetaLog + ")" : ""}: JSON.parse falló (${e.message}). stop_reason=${datos.stop_reason}. Fin del texto recibido: ${textoJSON.slice(-300)}`
     );
     throw new FormacionError("No se pudo interpretar la respuesta del asistente.");
   }
+}
+
+async function generarSlidesConIA({ system, mensaje, maxTokens }) {
+  const resultado = await llamarAnthropicJSON({ system, mensaje, schema: ESQUEMA_FORMACION, maxTokens, etiquetaLog: "unica" });
   if (!Array.isArray(resultado.diapositivas)) resultado.diapositivas = [];
   return resultado;
 }
@@ -398,7 +462,12 @@ function promptCasos() {
   };
 }
 
-function promptFormacionCompleta({ empresa, filaComparador, equipo, alianzas }) {
+// Texto de contexto real (Comparador/equipos/alianzas) compartido por
+// promptContenidoBatchCompleta: se repite igual en cada lote porque cada
+// llamada a la IA es independiente (no ve las anteriores), y es barato de
+// repetir (unas pocas frases) frente al coste de perder precision en algun
+// lote.
+function datosContextoEmpresaTexto({ empresa, filaComparador, equipo, alianzas }) {
   const datosComparador = filaComparador
     ? `Datos orientativos del Comparador de SegurPanel para ${empresa}: precio desde ${filaComparador.precioMin ?? "—"} €/mes, permanencia mínima ${filaComparador.permanenciaMeses ?? "—"} meses, valoración ${filaComparador.valoracion ?? "—"}/5.`
     : `No hay datos del Comparador disponibles para ${empresa}.`;
@@ -412,31 +481,68 @@ function promptFormacionCompleta({ empresa, filaComparador, equipo, alianzas }) 
       ? `Alianzas/acuerdos publicados de ${empresa}: ${alianzas.map((a) => `${a.socio} (${a.sector}${a.tipoAcuerdo ? ", " + a.tipoAcuerdo : ""})`).join("; ")}.`
       : `No hay alianzas publicadas conocidas de ${empresa} en este momento.`;
 
+  return `${datosComparador}\n${datosEquipo}\n${datosAlianzas}`;
+}
+
+// Formacion "completa", paso 1/2: SOLO el esquema (tipo+titulo de cada
+// diapositiva). Llamada pequeña y rapida — no necesita los datos reales de
+// Comparador/equipos/alianzas, solo decide la estructura.
+function promptEsquemaCompleto({ empresa }) {
   return {
     system: PERSONA_FORMADOR,
-    maxTokens: MAX_TOKENS_FORMACION_COMPLETA,
-    mensaje: `Crea la formación interna COMPLETA para el equipo de retención/ventas de Verisure sobre "${empresa}", pensada para impartirse en sesión presencial u online con un formador y un grupo de agentes. Debe ser exhaustiva y 100% accionable, no un resumen.
+    maxTokens: MAX_TOKENS_ESQUEMA_COMPLETA,
+    mensaje: `Vas a preparar la formación interna completa para el equipo de retención/ventas de Verisure sobre "${empresa}". De momento genera SOLO el esquema: el título de la presentación, el subtítulo, y la lista de diapositivas (solo 'tipo' y 'titulo' de cada una, sin contenido todavía).
 
-${datosComparador}
-${datosEquipo}
-${datosAlianzas}
+Genera EXACTAMENTE 18 diapositivas en este orden exacto:
+1. Una diapositiva 'titulo' de portada, con "${empresa}" en el título o subtítulo.
+2-3. MÓDULO 1 — Quiénes son: 2 diapositivas 'contenido' (historia y fundación, presencia territorial y posicionamiento en España).
+4-5. MÓDULO 2 — Su oferta comercial: 2 diapositivas 'contenido' o 'comparativa' (precios, equipos/tecnología, permanencia y cancelación).
+6-7. MÓDULO 3 — Sus puntos fuertes y débiles: 2 diapositivas 'contenido'.
+8-9. MÓDULO 4 — Cómo rebatirles en una llamada de retención: 2 diapositivas 'contenido' con argumentario específico frente a esta empresa.
+10-15. MÓDULO 5 — RolePlays interactivos: EXACTAMENTE 3 escenarios distintos con un cliente difícil, cada uno con 2 diapositivas seguidas: una 'contenido' (contexto del cliente) y una 'roleplay' (diálogo completo).
+16-17. MÓDULO 6 — Ejercicios prácticos: 2 diapositivas 'ejercicio'.
+18. Una última diapositiva 'infografia': ficha resumen imprimible con título "Ficha resumen: ${empresa}".
 
-Usa estos datos como base real y no los contradigas; para todo lo demás (historia, posicionamiento de marca, debilidades operativas o comerciales, argumentario) apóyate en tu conocimiento experto del sector español de alarmas.
+Títulos claros, concretos y atractivos (máximo 10 palabras cada uno); el contenido detallado de cada diapositiva se generará en llamadas posteriores.`,
+  };
+}
 
-Genera EXACTAMENTE entre 25 y 30 diapositivas en total, organizadas estrictamente en este orden:
+// Formacion "completa", paso 2/2: contenido completo de UN lote de
+// diapositivas ya decididas en el esquema (ver
+// generarFormacionCompletaConProgreso). Cada lote es una llamada
+// independiente: se le pasa el esquema COMPLETO como referencia (para que
+// no repita argumentos de otras partes) y se le pide el contenido solo de
+// las diapositivas de su lote.
+function promptContenidoBatchCompleta({ empresa, datosContexto, stubsBatch, stubsTodas, indiceBatch, totalBatches }) {
+  const listaCompleta = stubsTodas.map((s, i) => `${i + 1}. [${s.tipo}] ${s.titulo}`).join("\n");
+  const listaBatch = stubsBatch.map((s, i) => `${i + 1}. [${s.tipo}] ${s.titulo}`).join("\n");
 
-1. Una diapositiva tipo 'titulo' de portada, con "${empresa}" en el título o subtítulo.
-2. MÓDULO 1 — Quiénes son: 3-4 diapositivas tipo 'contenido' (historia y fundación, presencia territorial y volumen de mercado en España, posicionamiento de marca).
-3. MÓDULO 2 — Su oferta comercial: 3-4 diapositivas tipo 'contenido' o 'comparativa' (precios orientativos, gama de equipos/tecnología, condiciones de permanencia y cancelación).
-4. MÓDULO 3 — Sus puntos fuertes y débiles: 2-3 diapositivas tipo 'contenido' que separen con claridad fortalezas reales de debilidades explotables en una llamada.
-5. MÓDULO 4 — Cómo rebatirles en una llamada de retención: 3-4 diapositivas tipo 'contenido' con argumentario específico y frases concretas frente a esta empresa.
-6. MÓDULO 5 — RolePlays interactivos: EXACTAMENTE 3 escenarios distintos entre sí con un cliente difícil (por ejemplo: cliente que ya ha firmado con ${empresa}, cliente que solo compara precio y amenaza con irse, cliente enfadado que exige la baja inmediata). Cada escenario ocupa 2 diapositivas seguidas: primero una 'contenido' con el contexto del cliente, su actitud y el objetivo del roleplay; después una 'roleplay' con el diálogo completo en 'puntos', alternando líneas con el prefijo literal "Cliente:" y "Agente:", mostrando cómo el agente aplica correctamente técnicas de retención.
-7. MÓDULO 6 — Ejercicios prácticos con respuestas: 2-3 diapositivas tipo 'ejercicio', cada una con 'pregunta' (un caso o dilema realista sobre ${empresa}) y 'respuesta' (la respuesta modelo correcta, breve y accionable).
-8. Cierra con UNA última diapositiva tipo 'infografia': título "Ficha resumen: ${empresa}", y en 'puntos' EXACTAMENTE 5 elementos con el formato "Título corto: explicación breve (máximo 12 palabras)" con los 5 datos que un agente debe recordar de memoria sobre ${empresa} en mitad de una llamada. No incluyas 'notas' extensas en esta diapositiva (es una ficha para imprimir y repartir, no se presenta con guion oral).
+  return {
+    system: PERSONA_FORMADOR,
+    maxTokens: MAX_TOKENS_BATCH_COMPLETA,
+    mensaje: `Estás generando la formación interna completa sobre "${empresa}" para el equipo de retención/ventas de Verisure, en varias llamadas (esta es la parte ${indiceBatch}/${totalBatches}). El esquema COMPLETO de toda la presentación, ya decidido, es:
 
-NOTAS DEL MODERADOR (obligatorias en TODAS las diapositivas salvo la 'infografia' final): el campo 'notas' debe ser un guion detallado de qué decir exactamente en esa diapositiva (frases que el formador pueda leer o parafrasear en voz alta, no un resumen esquemático). Añade además 'notasPreguntas' con 1-2 preguntas concretas para lanzar al grupo y fomentar el debate, 'notasTiming' con el tiempo sugerido para esa diapositiva (p.ej. "3 minutos"), y 'notasConsejo' con un consejo pedagógico breve y práctico (cómo dinamizarla, qué evitar, cómo reconducir si el grupo se dispersa o si sale un caso real distinto al planteado).
+${listaCompleta}
 
-Elige en cada diapositiva de 'contenido', 'roleplay' y 'cita' el valor de 'tema' (foto de fondo) y 'icono' que mejor la representen, variando entre diapositivas.`,
+${datosContexto}
+
+Usa estos datos como base real y no los contradigas; para todo lo demás (historia, posicionamiento de marca, debilidades, argumentario) apóyate en tu conocimiento experto del sector español de alarmas.
+
+Genera AHORA el contenido completo de SOLO estas ${stubsBatch.length} diapositivas de este lote, en este orden exacto, sin cambiar 'tipo' ni 'titulo':
+
+${listaBatch}
+
+No repitas argumentos ni datos ya cubiertos por otras diapositivas del esquema completo (evita solapar contenido de partes anteriores o posteriores).
+
+Reglas de contenido:
+- Si una diapositiva es 'roleplay': 'puntos' son líneas de diálogo alternando el prefijo literal "Cliente:" y "Agente:", mostrando cómo el agente aplica correctamente técnicas de retención.
+- Si una diapositiva es 'ejercicio': deja 'puntos' vacío y rellena 'pregunta' (caso o dilema realista sobre ${empresa}) y 'respuesta' (respuesta modelo correcta, breve y accionable).
+- Si una diapositiva es 'infografia': en 'puntos' pon EXACTAMENTE 5 elementos con el formato "Título corto: explicación breve (máximo 12 palabras)" con los datos que un agente debe recordar de memoria sobre ${empresa} en mitad de una llamada; no rellenes 'notas' ni el resto de campos de notas en esta diapositiva (es una ficha para imprimir, no se presenta con guion oral).
+- En el resto de diapositivas: 'puntos' con 3-5 bullets cortos y accionables.
+
+NOTAS DEL MODERADOR (obligatorias salvo en 'infografia'): 'notas' con un guion detallado de qué decir exactamente en esa diapositiva (frases que el formador pueda leer o parafrasear en voz alta, no un resumen esquemático); 'notasPreguntas' con 1-2 preguntas concretas para lanzar al grupo; 'notasTiming' con el tiempo sugerido (p.ej. "3 minutos"); 'notasConsejo' con un consejo pedagógico breve y práctico.
+
+Elige en cada diapositiva (salvo 'ejercicio' e 'infografia') el valor de 'tema' (foto de fondo) e 'icono' que mejor la representen, variando entre diapositivas.`,
   };
 }
 
@@ -469,18 +575,120 @@ async function generarFormacion({ tipo, empresa, contexto }) {
       );
     case "casos":
       return generarSlidesConIA(promptCasos());
-    case "completa": {
-      if (!EMPRESAS_COMPETENCIA.includes(empresa)) {
-        throw new FormacionError("Empresa no válida.");
-      }
-      const alianzas = db.listarAlianzasPorEstado("published").filter((a) => a.empresaAlarma === empresa);
-      return generarSlidesConIA(
-        promptFormacionCompleta({ empresa, filaComparador: ctx.filaComparador, equipo: ctx.equipo, alianzas })
-      );
-    }
+    case "completa":
+      return generarFormacionCompletaConProgreso({ empresa, contexto });
     default:
       throw new FormacionError("Tipo de formación no válido.");
   }
+}
+
+/* ================================================================
+   4b. Formacion "completa": esquema + contenido por lotes, con progreso
+   ================================================================ */
+
+function partirEnGrupos(array, numGrupos) {
+  const tam = Math.ceil(array.length / numGrupos);
+  const grupos = [];
+  for (let i = 0; i < array.length; i += tam) {
+    grupos.push({ offset: i, items: array.slice(i, i + tam) });
+  }
+  return grupos;
+}
+
+async function generarEsquemaCompleto({ empresa }) {
+  const resultado = await llamarAnthropicJSON({
+    ...promptEsquemaCompleto({ empresa }),
+    schema: ESQUEMA_ESQUEMA_COMPLETA,
+    etiquetaLog: "completa/esquema",
+  });
+  if (!Array.isArray(resultado.diapositivas)) resultado.diapositivas = [];
+  return resultado;
+}
+
+async function generarContenidoBatch({ empresa, datosContexto, stubsBatch, stubsTodas, indiceBatch, totalBatches }) {
+  const resultado = await llamarAnthropicJSON({
+    ...promptContenidoBatchCompleta({ empresa, datosContexto, stubsBatch, stubsTodas, indiceBatch, totalBatches }),
+    schema: ESQUEMA_CONTENIDO_BATCH,
+    etiquetaLog: `completa/lote ${indiceBatch}/${totalBatches}`,
+  });
+  if (!Array.isArray(resultado.diapositivas)) resultado.diapositivas = [];
+  return resultado;
+}
+
+// Orquesta la formacion "completa": 1 llamada de esquema + varias llamadas
+// de contenido en paralelo (ver NUM_LOTES_CONTENIDO_COMPLETA), reportando
+// progreso via onProgreso(porcentaje, mensaje) si se pasa uno (usado por el
+// endpoint asincrono de server.js para el polling de progreso del
+// cliente). Rango de progreso emitido aqui: 0-90 (el 90-100 restante es
+// construir el .pptx, responsabilidad de quien llama a esta funcion).
+async function generarFormacionCompletaConProgreso({ empresa, contexto, onProgreso }) {
+  if (!EMPRESAS_COMPETENCIA.includes(empresa)) {
+    throw new FormacionError("Empresa no válida.");
+  }
+  const ctx = contexto || {};
+  const emitir = (progreso, mensaje) => {
+    if (typeof onProgreso === "function") onProgreso(progreso, mensaje);
+  };
+
+  emitir(5, "Generando el esquema de la formación…");
+  const alianzas = db.listarAlianzasPorEstado("published").filter((a) => a.empresaAlarma === empresa);
+  const datosContexto = datosContextoEmpresaTexto({
+    empresa,
+    filaComparador: ctx.filaComparador,
+    equipo: ctx.equipo,
+    alianzas,
+  });
+
+  const esquema = await generarEsquemaCompleto({ empresa });
+  const stubs = esquema.diapositivas;
+  if (!stubs.length) {
+    throw new FormacionError("El asistente no ha devuelto ningún esquema de diapositivas.");
+  }
+
+  const grupos = partirEnGrupos(stubs, NUM_LOTES_CONTENIDO_COMPLETA);
+  const diapositivasFinal = new Array(stubs.length);
+
+  // Los lotes son llamadas independientes entre si (ninguna depende del
+  // resultado de otra, todas parten del mismo esquema ya fijado): se lanzan
+  // en paralelo para que el tiempo total sea el del lote mas lento, no la
+  // suma de los 3, y se reporta progreso a medida que cada uno termina (no
+  // hay forma de saber el progreso real DENTRO de una llamada a Anthropic).
+  emitir(15, `Generando contenido en ${grupos.length} partes…`);
+  let completados = 0;
+  await Promise.all(
+    grupos.map(async (grupo, i) => {
+      const resultadoBatch = await generarContenidoBatch({
+        empresa,
+        datosContexto,
+        stubsBatch: grupo.items,
+        stubsTodas: stubs,
+        indiceBatch: i + 1,
+        totalBatches: grupos.length,
+      });
+      resultadoBatch.diapositivas.forEach((contenido, j) => {
+        const idxGlobal = grupo.offset + j;
+        const stub = stubs[idxGlobal];
+        if (!stub) return; // el lote devolvio mas diapositivas de las esperadas: se ignoran las sobrantes
+        diapositivasFinal[idxGlobal] = { ...contenido, tipo: stub.tipo, titulo: stub.titulo };
+      });
+      completados += 1;
+      emitir(15 + Math.round((completados / grupos.length) * 75), `Generando contenido (${completados}/${grupos.length} partes)…`);
+    })
+  );
+
+  // Si algun lote ha devuelto menos diapositivas de las esperadas (nunca
+  // debe romper la generacion completa por un lote corto), se rellena el
+  // hueco con la diapositiva "vacia" del esquema en vez de dejar un
+  // elemento undefined que rompería construirPPTX.
+  for (let i = 0; i < stubs.length; i++) {
+    if (!diapositivasFinal[i]) diapositivasFinal[i] = { ...stubs[i], puntos: [] };
+  }
+
+  return {
+    tituloPresentacion: esquema.tituloPresentacion,
+    subtitulo: esquema.subtitulo,
+    diapositivas: diapositivasFinal,
+  };
 }
 
 /* ================================================================
@@ -926,8 +1134,9 @@ function diapositivaContenido(pptx, d, numero, total, logoDataUri, imagenFondo) 
 
 // Diapositiva de dialogo simulado (Modulo 5, "completa"): mismo layout que
 // diapositivaContenido pero coloreando cada linea segun su prefijo literal
-// "Cliente:"/"Agente:" (ver promptFormacionCompleta), para que el dialogo se
-// lea como una conversacion real y no como una lista de bullets neutra.
+// "Cliente:"/"Agente:" (ver promptContenidoBatchCompleta), para que el
+// dialogo se lea como una conversacion real y no como una lista de bullets
+// neutra.
 function diapositivaRoleplay(pptx, d, numero, total, logoDataUri, imagenFondo) {
   const slide = pptx.addSlide();
   const modoFoto = !!imagenFondo;
@@ -1029,7 +1238,7 @@ function diapositivaEjercicio(pptx, d, numero, total, logoDataUri) {
 
 // Infografia final (ultima diapositiva de "completa"): ficha de una sola
 // pagina pensada para imprimirse y repartirse, con los 5 puntos clave en
-// formato "Titulo: detalle" (ver promptFormacionCompleta) como tarjetas
+// formato "Titulo: detalle" (ver promptContenidoBatchCompleta) como tarjetas
 // numeradas. Sin foto de fondo ni panel semitransparente: debe imprimirse
 // nitida en blanco y negro si hace falta.
 function diapositivaInfografia(pptx, d, numero, total, logoDataUri) {
@@ -1123,6 +1332,7 @@ async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
 
 module.exports = {
   generarFormacion,
+  generarFormacionCompletaConProgreso,
   construirPPTX,
   FormacionError,
   TIPOS_VALIDOS,

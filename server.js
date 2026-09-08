@@ -1337,7 +1337,16 @@ async function apiFormacionesGenerar(req, res) {
   if (!formaciones.TIPOS_VALIDOS.includes(tipo)) {
     return enviarJSON(res, 400, { error: "Tipo de formación no válido." });
   }
-  if ((tipo === "competencia" || tipo === "completa") && !formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
+  // La formacion "completa" (18 diapositivas, esquema + varios lotes) se
+  // genera de forma asincrona con barra de progreso (ver mas abajo
+  // apiFormacionCompletaIniciar/Progreso/Descargar); este endpoint
+  // sincrono solo sirve a los 6 tipos "cortos" de una unica llamada.
+  if (tipo === "completa") {
+    return enviarJSON(res, 400, {
+      error: "La formación completa se genera de forma asíncrona: usa /api/formaciones/completa/iniciar.",
+    });
+  }
+  if (tipo === "competencia" && !formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
     return enviarJSON(res, 400, { error: "Empresa no válida." });
   }
   if (!contextoFormacionValido(cuerpo.contexto)) {
@@ -1363,6 +1372,132 @@ async function apiFormacionesGenerar(req, res) {
       res.end();
     }
   }
+}
+
+/* ================================================================
+   API: formacion "completa" por compañia (asincrona, con progreso)
+   ================================================================ */
+//
+// La formacion "completa" (18 diapositivas: esquema + contenido en varios
+// lotes en paralelo, ver generarFormacionCompletaConProgreso en
+// formaciones.js) puede tardar mas de lo razonable para un unico ciclo
+// request/response HTTP bloqueante. En vez de eso, este flujo arranca la
+// generacion en segundo plano y devuelve un jobId al instante; el cliente
+// hace polling del progreso (apiFormacionCompletaProgreso) y descarga el
+// .pptx cuando esta listo (apiFormacionCompletaDescargar). Almacen en
+// memoria (Map): un unico proceso Node, no hace falta persistir jobs entre
+// reinicios del servidor.
+
+const TRABAJOS_FORMACION_COMPLETA = new Map();
+const TTL_TRABAJO_FORMACION_MS = 30 * 60 * 1000; // 30 minutos: limpia jobs abandonados (nunca descargados)
+
+function limpiarTrabajosFormacionCaducados() {
+  const ahora = Date.now();
+  for (const [id, trabajo] of TRABAJOS_FORMACION_COMPLETA) {
+    if (ahora - trabajo.creado > TTL_TRABAJO_FORMACION_MS) TRABAJOS_FORMACION_COMPLETA.delete(id);
+  }
+}
+
+async function apiFormacionCompletaIniciar(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+  if (!formaciones.EMPRESAS_COMPETENCIA.includes(cuerpo.empresa)) {
+    return enviarJSON(res, 400, { error: "Empresa no válida." });
+  }
+  if (!contextoFormacionValido(cuerpo.contexto)) {
+    return enviarJSON(res, 400, { error: "Contexto inválido." });
+  }
+
+  limpiarTrabajosFormacionCaducados();
+  const jobId = crypto.randomUUID();
+  const trabajo = {
+    userId: sesion.usuario.id,
+    estado: "procesando",
+    progreso: 0,
+    mensaje: "Iniciando…",
+    buffer: null,
+    error: null,
+    creado: Date.now(),
+  };
+  TRABAJOS_FORMACION_COMPLETA.set(jobId, trabajo);
+
+  // Fire-and-forget: este POST responde de inmediato con el jobId; la
+  // generacion sigue en segundo plano y el cliente hace polling del
+  // progreso (ver apiFormacionCompletaProgreso mas abajo).
+  (async () => {
+    try {
+      const slides = await formaciones.generarFormacionCompletaConProgreso({
+        empresa: cuerpo.empresa,
+        contexto: cuerpo.contexto,
+        onProgreso: (progreso, mensaje) => {
+          trabajo.progreso = progreso;
+          trabajo.mensaje = mensaje;
+        },
+      });
+      trabajo.progreso = 92;
+      trabajo.mensaje = "Maquetando la presentación…";
+      const buffer = await formaciones.construirPPTX(slides);
+      trabajo.buffer = buffer;
+      trabajo.progreso = 100;
+      trabajo.mensaje = "Formación generada.";
+      trabajo.estado = "listo";
+    } catch (e) {
+      console.error("Error generando la formación completa:", e);
+      trabajo.estado = "error";
+      trabajo.error = e instanceof formaciones.FormacionError ? e.message : "No se pudo generar la formación: " + e.message;
+    }
+  })();
+
+  enviarJSON(res, 200, { jobId });
+}
+
+// Comun a progreso/descarga: valida sesion y que el job exista Y pertenezca
+// al usuario que lo pidio (nunca debe poder consultarse/descargarse el job
+// de otra persona por jobId adivinado). Responde el error y devuelve null
+// si no procede continuar.
+function obtenerTrabajoFormacionDeSesion(req, res, jobId) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return null;
+  const trabajo = jobId ? TRABAJOS_FORMACION_COMPLETA.get(jobId) : null;
+  if (!trabajo || trabajo.userId !== sesion.usuario.id) {
+    enviarJSON(res, 404, { error: "Formación no encontrada." });
+    return null;
+  }
+  return trabajo;
+}
+
+async function apiFormacionCompletaProgreso(req, res, searchParams) {
+  const trabajo = obtenerTrabajoFormacionDeSesion(req, res, searchParams.get("id"));
+  if (!trabajo) return;
+  enviarJSON(res, 200, {
+    estado: trabajo.estado,
+    progreso: trabajo.progreso,
+    mensaje: trabajo.mensaje,
+    error: trabajo.error,
+  });
+}
+
+async function apiFormacionCompletaDescargar(req, res, searchParams) {
+  const jobId = searchParams.get("id") || "";
+  const trabajo = obtenerTrabajoFormacionDeSesion(req, res, jobId);
+  if (!trabajo) return;
+  if (trabajo.estado !== "listo" || !trabajo.buffer) {
+    return enviarJSON(res, 409, { error: "La formación todavía no está lista." });
+  }
+  res.writeHead(200, {
+    "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "Content-Disposition": 'attachment; filename="formacion-uic.pptx"',
+    "Cache-Control": "no-store",
+  });
+  res.end(trabajo.buffer);
+  TRABAJOS_FORMACION_COMPLETA.delete(jobId);
 }
 
 /* ================================================================
@@ -2383,6 +2518,9 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/analisis-avanzado") return await apiAnalisisAvanzado(req, res);
     if (req.method === "POST" && ruta === "/api/propuestas/generar") return await apiPropuestasGenerar(req, res);
     if (req.method === "POST" && ruta === "/api/formaciones/generar") return await apiFormacionesGenerar(req, res);
+    if (req.method === "POST" && ruta === "/api/formaciones/completa/iniciar") return await apiFormacionCompletaIniciar(req, res);
+    if (req.method === "GET" && ruta === "/api/formaciones/completa/progreso") return await apiFormacionCompletaProgreso(req, res, url.searchParams);
+    if (req.method === "GET" && ruta === "/api/formaciones/completa/descargar") return await apiFormacionCompletaDescargar(req, res, url.searchParams);
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);

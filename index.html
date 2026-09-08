@@ -653,6 +653,22 @@
   .formacion-card-sub { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
   .formacion-status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
   .formacion-status.is-error { color: var(--danger, #c0392b); }
+  .formacion-progress {
+    width: 100%;
+    max-width: 420px;
+    height: 8px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 4px 0 14px;
+  }
+  .formacion-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
 
   .compare-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .compare-toolbar label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
@@ -2074,8 +2090,11 @@
     <div class="formacion-empresa-grid" id="formacionEmpresaGrid"></div>
 
     <h3 class="equip-section-title">Formación Completa por Compañía</h3>
-    <p class="chart-sub">Curso completo de 25-30 diapositivas por empresa: quiénes son, su oferta comercial, puntos fuertes/débiles, cómo rebatirlos, 3 roleplays con cliente difícil, ejercicios prácticos con respuesta y una infografía final para imprimir. Notas de moderador en cada diapositiva (guion, preguntas al grupo, timing y consejo pedagógico).</p>
+    <p class="chart-sub">Curso completo de 18 diapositivas por empresa: quiénes son, su oferta comercial, puntos fuertes/débiles, cómo rebatirlos, 3 roleplays con cliente difícil, ejercicios prácticos con respuesta y una infografía final para imprimir. Notas de moderador en cada diapositiva (guion, preguntas al grupo, timing y consejo pedagógico). Se genera en varios pasos con barra de progreso.</p>
     <div class="formacion-empresa-grid" id="formacionCompletaEmpresaGrid"></div>
+    <div class="formacion-progress" id="formacionProgress" hidden>
+      <div class="formacion-progress-bar" id="formacionProgressBar"></div>
+    </div>
 
     <h3 class="equip-section-title">Otras formaciones</h3>
     <div class="formacion-grid">
@@ -4635,12 +4654,26 @@
   const formacionEmpresaGrid = document.getElementById('formacionEmpresaGrid');
   const formacionCompletaEmpresaGrid = document.getElementById('formacionCompletaEmpresaGrid');
   const formacionStatus = document.getElementById('formacionStatus');
+  const formacionProgress = document.getElementById('formacionProgress');
+  const formacionProgressBar = document.getElementById('formacionProgressBar');
   let formacionEnCurso = false;
 
   function setFormacionStatus(mensaje, esError) {
     if (!formacionStatus) return;
     formacionStatus.textContent = mensaje || '';
     formacionStatus.classList.toggle('is-error', !!esError);
+  }
+
+  function setFormacionProgreso(pct) {
+    if (!formacionProgress || !formacionProgressBar) return;
+    formacionProgress.hidden = false;
+    formacionProgressBar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+  }
+
+  function ocultarFormacionProgreso() {
+    if (!formacionProgress || !formacionProgressBar) return;
+    formacionProgress.hidden = true;
+    formacionProgressBar.style.width = '0%';
   }
 
   function obtenerFilaComparadorPorEmpresa(empresa) {
@@ -4662,14 +4695,7 @@
     if (formacionEnCurso) return;
     formacionEnCurso = true;
     document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = true; });
-    // La formacion "completa" genera 25-30 diapositivas con notas de
-    // moderador de 4 campos cada una: tarda notablemente mas que el resto.
-    setFormacionStatus(
-      tipo === 'completa'
-        ? 'Generando formación completa con IA (25-30 diapositivas)… puede tardar entre 1 y 3 minutos.'
-        : 'Generando formación con IA… puede tardar entre 30 y 90 segundos.',
-      false
-    );
+    setFormacionStatus('Generando formación con IA… puede tardar entre 30 y 90 segundos.', false);
 
     try {
       const respuesta = await fetch('/api/formaciones/generar', {
@@ -4712,6 +4738,106 @@
     }
   }
 
+  // La formacion "completa" (18 diapositivas: esquema + contenido en varios
+  // lotes en el servidor, ver formaciones.js) se genera de forma asincrona
+  // con barra de progreso: iniciar -> polling de progreso -> descargar,
+  // en vez del POST unico y bloqueante de generarFormacionDescarga. Tiempo
+  // maximo de espera en el cliente: FORMACION_COMPLETA_TIMEOUT_MS.
+  const FORMACION_COMPLETA_TIMEOUT_MS = 180000; // 180 segundos
+  const FORMACION_COMPLETA_POLL_MS = 2000;
+
+  function esperar(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function generarFormacionCompletaDescarga(empresa, contexto) {
+    if (formacionEnCurso) return;
+    formacionEnCurso = true;
+    document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = true; });
+    setFormacionStatus('Generando el esquema de la formación completa…', false);
+    setFormacionProgreso(0);
+
+    try {
+      const respuestaInicio = await fetch('/api/formaciones/completa/iniciar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresa, contexto }),
+      });
+
+      if (respuestaInicio.status === 401) {
+        window.location.href = '/';
+        return;
+      }
+      if (!respuestaInicio.ok) {
+        let mensaje = 'No se ha podido iniciar la generación de la formación.';
+        try {
+          const datos = await respuestaInicio.json();
+          if (datos && datos.error) mensaje = datos.error;
+        } catch (err) { /* respuesta no era JSON */ }
+        setFormacionStatus(mensaje, true);
+        return;
+      }
+
+      const { jobId } = await respuestaInicio.json();
+      const inicio = Date.now();
+
+      for (;;) {
+        if (Date.now() - inicio > FORMACION_COMPLETA_TIMEOUT_MS) {
+          setFormacionStatus('La generación ha tardado demasiado y se ha cancelado en el navegador. Inténtalo de nuevo.', true);
+          return;
+        }
+        await esperar(FORMACION_COMPLETA_POLL_MS);
+
+        const respuestaProgreso = await fetch(`/api/formaciones/completa/progreso?id=${encodeURIComponent(jobId)}`, {
+          credentials: 'same-origin',
+        });
+        if (respuestaProgreso.status === 401) {
+          window.location.href = '/';
+          return;
+        }
+        if (!respuestaProgreso.ok) {
+          setFormacionStatus('No se ha podido consultar el progreso de la formación.', true);
+          return;
+        }
+
+        const progreso = await respuestaProgreso.json();
+        setFormacionProgreso(progreso.progreso);
+        if (progreso.estado === 'error') {
+          setFormacionStatus(progreso.error || 'No se ha podido generar la formación.', true);
+          return;
+        }
+        setFormacionStatus(progreso.mensaje || 'Generando…', false);
+        if (progreso.estado === 'listo') break;
+      }
+
+      const respuestaDescarga = await fetch(`/api/formaciones/completa/descargar?id=${encodeURIComponent(jobId)}`, {
+        credentials: 'same-origin',
+      });
+      if (!respuestaDescarga.ok) {
+        setFormacionStatus('La formación se generó pero no se ha podido descargar.', true);
+        return;
+      }
+
+      const blob = await respuestaDescarga.blob();
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'formacion-uic.pptx';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setFormacionStatus('Formación generada y descargada.', false);
+    } catch (err) {
+      setFormacionStatus('No se ha podido conectar con el servidor para generar la formación.', true);
+    } finally {
+      formacionEnCurso = false;
+      document.querySelectorAll('[data-formacion-tipo]').forEach(b => { b.disabled = false; });
+      ocultarFormacionProgreso();
+    }
+  }
+
   // Los 8 botones de "Conoce a tu competencia" muestran solo el circulo de
   // color corporativo para admin/retencion (mismo patron que el Comparador);
   // el nombre en texto solo se añade cuando el rol es super_admin (ver
@@ -4749,10 +4875,7 @@
       btn.addEventListener('click', () => {
         const empresa = btn.dataset.empresa;
         const equipo = EQUIPOS_EMPRESA.find(e => e.empresa === empresa) || null;
-        generarFormacionDescarga('completa', {
-          empresa,
-          contexto: { filaComparador: obtenerFilaComparadorPorEmpresa(empresa), equipo },
-        });
+        generarFormacionCompletaDescarga(empresa, { filaComparador: obtenerFilaComparadorPorEmpresa(empresa), equipo });
       });
     });
   }
