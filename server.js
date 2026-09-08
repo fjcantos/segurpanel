@@ -1337,7 +1337,7 @@ async function apiFormacionesGenerar(req, res) {
   if (!formaciones.TIPOS_VALIDOS.includes(tipo)) {
     return enviarJSON(res, 400, { error: "Tipo de formación no válido." });
   }
-  // La formacion "completa" (18 diapositivas, esquema + varios lotes) se
+  // La formacion "completa" (15 diapositivas, esquema + varios lotes) se
   // genera de forma asincrona con barra de progreso (ver mas abajo
   // apiFormacionCompletaIniciar/Progreso/Descargar); este endpoint
   // sincrono solo sirve a los 6 tipos "cortos" de una unica llamada.
@@ -1378,7 +1378,7 @@ async function apiFormacionesGenerar(req, res) {
    API: formacion "completa" por compañia (asincrona, con progreso)
    ================================================================ */
 //
-// La formacion "completa" (18 diapositivas: esquema + contenido en varios
+// La formacion "completa" (15 diapositivas: esquema + contenido en varios
 // lotes en paralelo, ver generarFormacionCompletaConProgreso en
 // formaciones.js) puede tardar mas de lo razonable para un unico ciclo
 // request/response HTTP bloqueante. En vez de eso, este flujo arranca la
@@ -1498,6 +1498,77 @@ async function apiFormacionCompletaDescargar(req, res, searchParams) {
   });
   res.end(trabajo.buffer);
   TRABAJOS_FORMACION_COMPLETA.delete(jobId);
+}
+
+/* ================================================================
+   API: "Crear Infografía" (subir un .pptx, resumen de 1 diapositiva)
+   ================================================================ */
+//
+// El usuario sube una presentacion .pptx ya existente; formaciones.js la
+// lee con JSZip (ver generarInfografiaDesdePptx) y la IA la resume en una
+// unica diapositiva imprimible con el diseño corporativo UIC. Mismo patron
+// de subida que apiAnalisis (multer en memoria, un unico fichero).
+
+const MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+const uploadInfografia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (file.mimetype === MIME_PPTX || ext === ".pptx") {
+      cb(null, true);
+    } else {
+      cb(new Error("Formato no admitido. Sube una presentación PowerPoint (.pptx)."));
+    }
+  },
+}).single("file");
+
+function ejecutarMulterInfografia(req, res) {
+  return new Promise((resolve, reject) => {
+    uploadInfografia(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+async function apiFormacionInfografia(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  try {
+    await ejecutarMulterInfografia(req, res);
+  } catch (e) {
+    const mensaje =
+      e.code === "LIMIT_FILE_SIZE"
+        ? "El archivo supera el tamaño máximo permitido (25 MB)."
+        : e.message || "No se pudo procesar el archivo.";
+    return enviarJSON(res, 400, { error: mensaje });
+  }
+
+  if (!req.file) {
+    return enviarJSON(res, 400, { error: "No se ha recibido ningún archivo." });
+  }
+
+  try {
+    const buffer = await formaciones.generarInfografiaDesdePptx({
+      buffer: req.file.buffer,
+      nombreArchivo: req.file.originalname,
+    });
+
+    res.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "Content-Disposition": 'attachment; filename="infografia-uic.pptx"',
+      "Cache-Control": "no-store",
+    });
+    res.end(buffer);
+  } catch (e) {
+    console.error("Error generando la infografía:", e);
+    if (!res.headersSent) {
+      if (e instanceof formaciones.FormacionError) return enviarJSON(res, 502, { error: e.message });
+      enviarJSON(res, 500, { error: "No se pudo generar la infografía: " + e.message });
+    } else {
+      res.end();
+    }
+  }
 }
 
 /* ================================================================
@@ -2521,6 +2592,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/formaciones/completa/iniciar") return await apiFormacionCompletaIniciar(req, res);
     if (req.method === "GET" && ruta === "/api/formaciones/completa/progreso") return await apiFormacionCompletaProgreso(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/formaciones/completa/descargar") return await apiFormacionCompletaDescargar(req, res, url.searchParams);
+    if (req.method === "POST" && ruta === "/api/formaciones/infografia") return await apiFormacionInfografia(req, res);
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);

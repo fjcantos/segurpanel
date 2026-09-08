@@ -15,17 +15,18 @@
 // publicadas...) para que la IA no invente cifras que contradigan lo que ya
 // se muestra en el resto de la app.
 //
-// El tipo "completa" (curso completo de 15-20 diapositivas por compañia) es
-// distinto: en vez de una unica llamada larga a la IA, usa un flujo de
-// esquema + contenido por lotes con progreso (ver
-// generarFormacionCompletaConProgreso mas abajo) para que ninguna llamada
-// individual tarde tanto como para arriesgarse a un timeout, y para poder
-// informar de progreso al cliente mientras se genera.
+// El tipo "completa" (curso completo de EXACTAMENTE 15 diapositivas por
+// compañia, sin fotos de fondo de Unsplash) es distinto: en vez de una unica
+// llamada larga a la IA, usa un flujo de esquema + contenido por lotes con
+// progreso (ver generarFormacionCompletaConProgreso mas abajo) para que
+// ninguna llamada individual tarde tanto como para arriesgarse a un
+// timeout, y para poder informar de progreso al cliente mientras se genera.
 
 const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
 const sharp = require("sharp");
+const JSZip = require("jszip");
 const db = require("./db");
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -43,12 +44,13 @@ const MAX_TOKENS_FORMACION = 16000;
 // un "fetch failed" generico si la red cortaba la conexion antes de tiempo.
 const TIMEOUT_FORMACION_MS = 120000; // 120 segundos
 
-// La formacion "completa" por compañia se genera en VARIAS llamadas mas
-// pequeñas en vez de una sola de 25-30 diapositivas: con una unica llamada
-// (probado en produccion) la generacion superaba los 120 segundos y acababa
-// en timeout. Primero una llamada ligera de "esquema" (solo tipo+titulo de
-// cada diapositiva, ver ESQUEMA_ESQUEMA_COMPLETA) y despues el contenido
-// completo repartido en NUM_LOTES_CONTENIDO_COMPLETA llamadas (ver
+// La formacion "completa" por compañia (EXACTAMENTE 15 diapositivas, sin
+// fotos de fondo de Unsplash) se genera en VARIAS llamadas mas pequeñas en
+// vez de una sola: con una unica llamada larga (probado en produccion, 25-30
+// diapositivas) la generacion superaba los 120 segundos y acababa en
+// timeout. Primero una llamada ligera de "esquema" (solo tipo+titulo de cada
+// diapositiva, ver ESQUEMA_ESQUEMA_COMPLETA) y despues el contenido completo
+// repartido en NUM_LOTES_CONTENIDO_COMPLETA llamadas (ver
 // generarFormacionCompletaConProgreso), cada una mucho mas rapida y con
 // menos riesgo de truncarse por max_tokens.
 const MAX_TOKENS_ESQUEMA_COMPLETA = 3000;
@@ -256,14 +258,26 @@ const ESQUEMA_ESQUEMA_COMPLETA = {
   additionalProperties: false,
 };
 
+// Variante de DIAPOSITIVA_ITEM_SCHEMA sin el campo 'tema' (foto de fondo de
+// Unsplash): la formacion "completa" no usa imagenes de fondo (ver
+// ESQUEMA_CONTENIDO_BATCH). Al no estar 'tema' entre las propiedades
+// aceptadas (additionalProperties:false), el modelo nunca lo rellena y
+// construirPPTX nunca llega a pedir una imagen a Unsplash para estas
+// diapositivas.
+const DIAPOSITIVA_ITEM_SCHEMA_SIN_TEMA = (() => {
+  const clon = structuredClone(DIAPOSITIVA_ITEM_SCHEMA);
+  delete clon.properties.tema;
+  return clon;
+})();
+
 // Esquema "completa", paso 2/2: contenido completo de un lote de
 // diapositivas (ver generarFormacionCompletaConProgreso). Mismo item que
-// ESQUEMA_FORMACION; aqui no hace falta tituloPresentacion/subtitulo porque
-// ya los fijo el esquema del paso 1.
+// ESQUEMA_FORMACION salvo 'tema' (sin imagenes de fondo); aqui no hace falta
+// tituloPresentacion/subtitulo porque ya los fijo el esquema del paso 1.
 const ESQUEMA_CONTENIDO_BATCH = {
   type: "object",
   properties: {
-    diapositivas: { type: "array", items: DIAPOSITIVA_ITEM_SCHEMA },
+    diapositivas: { type: "array", items: DIAPOSITIVA_ITEM_SCHEMA_SIN_TEMA },
   },
   required: ["diapositivas"],
   additionalProperties: false,
@@ -493,15 +507,15 @@ function promptEsquemaCompleto({ empresa }) {
     maxTokens: MAX_TOKENS_ESQUEMA_COMPLETA,
     mensaje: `Vas a preparar la formación interna completa para el equipo de retención/ventas de Verisure sobre "${empresa}". De momento genera SOLO el esquema: el título de la presentación, el subtítulo, y la lista de diapositivas (solo 'tipo' y 'titulo' de cada una, sin contenido todavía).
 
-Genera EXACTAMENTE 18 diapositivas en este orden exacto:
+Genera EXACTAMENTE 15 diapositivas en este orden exacto:
 1. Una diapositiva 'titulo' de portada, con "${empresa}" en el título o subtítulo.
 2-3. MÓDULO 1 — Quiénes son: 2 diapositivas 'contenido' (historia y fundación, presencia territorial y posicionamiento en España).
 4-5. MÓDULO 2 — Su oferta comercial: 2 diapositivas 'contenido' o 'comparativa' (precios, equipos/tecnología, permanencia y cancelación).
 6-7. MÓDULO 3 — Sus puntos fuertes y débiles: 2 diapositivas 'contenido'.
 8-9. MÓDULO 4 — Cómo rebatirles en una llamada de retención: 2 diapositivas 'contenido' con argumentario específico frente a esta empresa.
-10-15. MÓDULO 5 — RolePlays interactivos: EXACTAMENTE 3 escenarios distintos con un cliente difícil, cada uno con 2 diapositivas seguidas: una 'contenido' (contexto del cliente) y una 'roleplay' (diálogo completo).
-16-17. MÓDULO 6 — Ejercicios prácticos: 2 diapositivas 'ejercicio'.
-18. Una última diapositiva 'infografia': ficha resumen imprimible con título "Ficha resumen: ${empresa}".
+10-12. MÓDULO 5 — RolePlays interactivos: EXACTAMENTE 3 diapositivas 'roleplay', una por cada escenario con un cliente difícil (distintos entre sí), con el contexto del cliente y el diálogo completo juntos en la misma diapositiva.
+13-14. MÓDULO 6 — Ejercicios prácticos: 2 diapositivas 'ejercicio'.
+15. Una última diapositiva 'infografia': ficha resumen imprimible con título "Ficha resumen: ${empresa}".
 
 Títulos claros, concretos y atractivos (máximo 10 palabras cada uno); el contenido detallado de cada diapositiva se generará en llamadas posteriores.`,
   };
@@ -535,14 +549,14 @@ ${listaBatch}
 No repitas argumentos ni datos ya cubiertos por otras diapositivas del esquema completo (evita solapar contenido de partes anteriores o posteriores).
 
 Reglas de contenido:
-- Si una diapositiva es 'roleplay': 'puntos' son líneas de diálogo alternando el prefijo literal "Cliente:" y "Agente:", mostrando cómo el agente aplica correctamente técnicas de retención.
+- Si una diapositiva es 'roleplay': el PRIMER elemento de 'puntos' empieza por "Contexto:" y resume en una frase quién es el cliente, su actitud y el objetivo del roleplay; a continuación, el resto de elementos son líneas de diálogo alternando el prefijo literal "Cliente:" y "Agente:", mostrando cómo el agente aplica correctamente técnicas de retención.
 - Si una diapositiva es 'ejercicio': deja 'puntos' vacío y rellena 'pregunta' (caso o dilema realista sobre ${empresa}) y 'respuesta' (respuesta modelo correcta, breve y accionable).
 - Si una diapositiva es 'infografia': en 'puntos' pon EXACTAMENTE 5 elementos con el formato "Título corto: explicación breve (máximo 12 palabras)" con los datos que un agente debe recordar de memoria sobre ${empresa} en mitad de una llamada; no rellenes 'notas' ni el resto de campos de notas en esta diapositiva (es una ficha para imprimir, no se presenta con guion oral).
 - En el resto de diapositivas: 'puntos' con 3-5 bullets cortos y accionables.
 
 NOTAS DEL MODERADOR (obligatorias salvo en 'infografia'): 'notas' con un guion detallado de qué decir exactamente en esa diapositiva (frases que el formador pueda leer o parafrasear en voz alta, no un resumen esquemático); 'notasPreguntas' con 1-2 preguntas concretas para lanzar al grupo; 'notasTiming' con el tiempo sugerido (p.ej. "3 minutos"); 'notasConsejo' con un consejo pedagógico breve y práctico.
 
-Elige en cada diapositiva (salvo 'ejercicio' e 'infografia') el valor de 'tema' (foto de fondo) e 'icono' que mejor la representen, variando entre diapositivas.`,
+Elige en cada diapositiva (salvo 'ejercicio' e 'infografia') el valor de 'icono' que mejor la represente, variando entre diapositivas. Esta formación NO lleva fotos de fondo: no hay campo 'tema' disponible.`,
   };
 }
 
@@ -1168,16 +1182,20 @@ function diapositivaRoleplay(pptx, d, numero, total, logoDataUri, imagenFondo) {
   const lineas = d.puntos && d.puntos.length ? d.puntos : ["—"];
   const colorCliente = modoFoto ? BLANCO_UIC : GRIS_UIC;
   const colorAgente = modoFoto ? "FBD5D5" : ROJO_UIC;
+  const colorContexto = modoFoto ? "D1D5DB" : GRIS_UIC;
   slide.addText(
     lineas.map((linea) => {
-      const esAgente = /^agente:/i.test(linea.trim());
+      const texto = linea.trim();
+      const esAgente = /^agente:/i.test(texto);
+      const esContexto = /^contexto:/i.test(texto);
       return {
         text: linea,
         options: {
-          color: esAgente ? colorAgente : colorCliente,
+          color: esContexto ? colorContexto : esAgente ? colorAgente : colorCliente,
           bold: esAgente,
+          italic: esContexto,
           breakLine: true,
-          paraSpaceAfter: 9,
+          paraSpaceAfter: esContexto ? 14 : 9,
         },
       };
     }),
@@ -1330,9 +1348,193 @@ async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
   return pptx.write({ outputType: "nodebuffer" });
 }
 
+/* ================================================================
+   6. "Crear Infografía": resumen de 1 diapositiva a partir de un .pptx
+      subido por el usuario
+   ================================================================ */
+//
+// Distinto de todo lo anterior: aqui el usuario sube una presentacion ya
+// existente (de cualquier origen, no generada por SegurPanel) y la IA la
+// resume en UNA sola diapositiva imprimible con el diseño corporativo UIC.
+// No hay libreria de parsing de .pptx entre las dependencias del proyecto;
+// un .pptx es un ZIP (formato OOXML) y JSZip (ya usado para leer .odt en
+// analisis.js) es suficiente para extraer el texto de cada diapositiva con
+// una regex simple sobre el XML, sin añadir una dependencia nueva.
+
+// Tope defensivo de caracteres de texto extraido enviados a la IA: una
+// presentacion de decenas de diapositivas con mucho texto podria disparar
+// el coste/tiempo de la llamada sin necesidad, cuando el resumen solo
+// necesita los puntos clave, no el documento entero palabra por palabra.
+const LIMITE_CARACTERES_INFOGRAFIA = 40000;
+const MAX_TOKENS_INFOGRAFIA_RESUMEN = 2000;
+
+const ESQUEMA_INFOGRAFIA_RESUMEN = {
+  type: "object",
+  properties: {
+    titulo: { type: "string", description: "Título de la infografía (de qué trata la presentación original), máximo 8 palabras." },
+    subtitulo: { type: "string", description: "Subtítulo o contexto breve, una frase." },
+    puntos: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          titulo: { type: "string", description: "Título corto del punto clave, máximo 5 palabras." },
+          texto: { type: "string", description: "Explicación breve de ese punto, máximo 15 palabras." },
+          icono: {
+            type: "string",
+            enum: Object.keys(ICONOS_SVG),
+            description: "Icono que mejor representa este punto.",
+          },
+        },
+        required: ["titulo", "texto", "icono"],
+        additionalProperties: false,
+      },
+      description: "EXACTAMENTE 5 puntos clave, ordenados por importancia.",
+    },
+  },
+  required: ["titulo", "subtitulo", "puntos"],
+  additionalProperties: false,
+};
+
+function decodificarEntidadesXml(texto) {
+  return texto
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// El texto de un .pptx vive en ppt/slides/slideN.xml dentro del zip, en
+// elementos <a:t> (texto de DrawingML) agrupados en parrafos <a:p>. Se
+// concatenan los <a:t> de cada parrafo y se separan los parrafos con salto
+// de linea para conservar algo de estructura (titulo en su propia linea,
+// cada bullet en la suya), igual que extraerTextoOdt en analisis.js hace
+// con el XML de OpenDocument.
+async function extraerTextoDePptx(buffer) {
+  let zip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch (e) {
+    throw new FormacionError("El archivo no es un .pptx válido: no se ha podido leer como ZIP.");
+  }
+
+  const nombresSlide = Object.keys(zip.files)
+    .filter((nombre) => /^ppt\/slides\/slide\d+\.xml$/.test(nombre))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/slide(\d+)\.xml$/)[1], 10);
+      const numB = parseInt(b.match(/slide(\d+)\.xml$/)[1], 10);
+      return numA - numB;
+    });
+
+  if (!nombresSlide.length) {
+    throw new FormacionError("El archivo .pptx no contiene diapositivas legibles: puede estar dañado o no ser una presentación válida.");
+  }
+
+  const diapositivas = [];
+  for (const nombre of nombresSlide) {
+    const xml = await zip.file(nombre).async("string");
+    const parrafos = xml.match(/<a:p\b[\s\S]*?<\/a:p>/g) || [];
+    const lineas = parrafos
+      .map((p) => {
+        const textos = [...p.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => decodificarEntidadesXml(m[1]));
+        return textos.join("").trim();
+      })
+      .filter(Boolean);
+    if (lineas.length) {
+      diapositivas.push({ numero: diapositivas.length + 1, texto: lineas.join("\n") });
+    }
+  }
+
+  if (!diapositivas.length) {
+    throw new FormacionError(
+      "No se ha podido extraer texto de la presentación: puede que las diapositivas no contengan texto (solo imágenes)."
+    );
+  }
+  return diapositivas;
+}
+
+function formatearTextoPptxParaPrompt(diapositivas) {
+  return diapositivas.map((d) => `--- Diapositiva ${d.numero} ---\n${d.texto}`).join("\n\n");
+}
+
+function promptInfografiaResumen({ nombreArchivo, textoPptx }) {
+  return {
+    system: PERSONA_FORMADOR,
+    maxTokens: MAX_TOKENS_INFOGRAFIA_RESUMEN,
+    mensaje: `Te paso el contenido de texto completo de una presentación PowerPoint ya existente${nombreArchivo ? ` ("${nombreArchivo}")` : ""}, diapositiva a diapositiva:
+
+${textoPptx}
+
+Analiza todo el contenido anterior y genera una ÚNICA infografía resumen de una sola diapositiva, pensada para imprimir y repartir al equipo, con los 5 puntos clave más importantes de toda la presentación (los que alguien debería recordar de memoria). Cada punto lleva un título corto, una explicación breve y el icono que mejor lo represente. El título y el subtítulo de la infografía deben resumir de qué trata la presentación original.`,
+  };
+}
+
+// Mismo estilo visual que diapositivaInfografia (ficha final de la
+// formacion "completa": cabecera roja, sin foto de fondo, pensada para
+// imprimirse), pero con un icono por punto en vez de un numero, porque aqui
+// el usuario pidio explicitamente iconos.
+function diapositivaInfografiaResumen(pptx, { titulo, subtitulo, puntos }, logoDataUri) {
+  const slide = pptx.addSlide();
+  slide.background = { color: BLANCO_UIC };
+  slide.addShape("rect", { x: 0, y: 0, w: "100%", h: 0.9, fill: { color: ROJO_UIC }, line: { type: "none" } });
+  if (logoDataUri) slide.addImage({ data: logoDataUri, x: 8.55, y: 0.14, w: 1.1, h: 0.62 });
+  slide.addText(titulo || "Ficha resumen", {
+    x: 0.4, y: 0.1, w: 7.9, h: 0.45, fontFace: FUENTE_UIC, fontSize: 20, bold: true, color: BLANCO_UIC,
+  });
+  slide.addText(subtitulo || "Ficha imprimible · Reparte esta diapositiva al equipo", {
+    x: 0.4, y: 0.52, w: 7.9, h: 0.3, fontFace: FUENTE_UIC, fontSize: 11, italic: true, color: "FBD5D5",
+  });
+
+  const items = (puntos || []).slice(0, 5);
+  const yInicio = 1.15;
+  const alturaFila = 0.85;
+  items.forEach((punto, i) => {
+    const y = yInicio + i * alturaFila;
+    dibujarIconoBadge(slide, punto.icono, 0.45, y + 0.02, 0.55, ROJO_UIC);
+    slide.addText(punto.titulo || `Punto ${i + 1}`, {
+      x: 1.25, y, w: 8.15, h: 0.32, fontFace: FUENTE_UIC, fontSize: 14, bold: true, color: NEGRO_UIC,
+    });
+    slide.addText(punto.texto || "", {
+      x: 1.25, y: y + 0.32, w: 8.15, h: 0.45, fontFace: FUENTE_UIC, fontSize: 12, color: GRIS_UIC, valign: "top",
+    });
+  });
+}
+
+async function construirInfografiaResumenPPTX({ titulo, subtitulo, puntos }) {
+  const pptx = new pptxgen();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = titulo || "Infografía · SegurPanel UIC";
+  pptx.author = "SegurPanel";
+  pptx.company = "UIC";
+
+  const logoDataUri = await obtenerLogoDataUri();
+  diapositivaInfografiaResumen(pptx, { titulo, subtitulo, puntos }, logoDataUri);
+
+  return pptx.write({ outputType: "nodebuffer" });
+}
+
+async function generarInfografiaDesdePptx({ buffer, nombreArchivo }) {
+  const diapositivasExtraidas = await extraerTextoDePptx(buffer);
+  const textoCompleto = formatearTextoPptxParaPrompt(diapositivasExtraidas);
+  const textoPptx =
+    textoCompleto.length > LIMITE_CARACTERES_INFOGRAFIA
+      ? textoCompleto.slice(0, LIMITE_CARACTERES_INFOGRAFIA) + "\n\n[... contenido recortado por longitud ...]"
+      : textoCompleto;
+
+  const datos = await llamarAnthropicJSON({
+    ...promptInfografiaResumen({ nombreArchivo, textoPptx }),
+    schema: ESQUEMA_INFOGRAFIA_RESUMEN,
+    etiquetaLog: "infografia-resumen",
+  });
+
+  return construirInfografiaResumenPPTX(datos);
+}
+
 module.exports = {
   generarFormacion,
   generarFormacionCompletaConProgreso,
+  generarInfografiaDesdePptx,
   construirPPTX,
   FormacionError,
   TIPOS_VALIDOS,

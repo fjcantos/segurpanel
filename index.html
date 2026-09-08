@@ -651,8 +651,9 @@
   .formacion-card:disabled { opacity: 0.6; cursor: not-allowed; }
   .formacion-card-title { font-weight: 700; color: var(--heading, #1e2a3a); font-size: 0.95rem; }
   .formacion-card-sub { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
-  .formacion-status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+  .formacion-status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; margin-top: 8px; }
   .formacion-status.is-error { color: var(--danger, #c0392b); }
+  #infografiaUploadBtn { display: inline-block; }
   .formacion-progress {
     width: 100%;
     max-width: 420px;
@@ -2090,7 +2091,7 @@
     <div class="formacion-empresa-grid" id="formacionEmpresaGrid"></div>
 
     <h3 class="equip-section-title">Formación Completa por Compañía</h3>
-    <p class="chart-sub">Curso completo de 18 diapositivas por empresa: quiénes son, su oferta comercial, puntos fuertes/débiles, cómo rebatirlos, 3 roleplays con cliente difícil, ejercicios prácticos con respuesta y una infografía final para imprimir. Notas de moderador en cada diapositiva (guion, preguntas al grupo, timing y consejo pedagógico). Se genera en varios pasos con barra de progreso.</p>
+    <p class="chart-sub">Curso completo de 15 diapositivas por empresa: quiénes son, su oferta comercial, puntos fuertes/débiles, cómo rebatirlos, 3 roleplays con cliente difícil, ejercicios prácticos con respuesta y una infografía final para imprimir. Notas de moderador en cada diapositiva (guion, preguntas al grupo, timing y consejo pedagógico). Se genera en varios pasos con barra de progreso.</p>
     <div class="formacion-empresa-grid" id="formacionCompletaEmpresaGrid"></div>
     <div class="formacion-progress" id="formacionProgress" hidden>
       <div class="formacion-progress-bar" id="formacionProgressBar"></div>
@@ -2121,6 +2122,12 @@
     </div>
 
     <div class="formacion-status" id="formacionStatus"></div>
+
+    <h3 class="equip-section-title">Crear Infografía</h3>
+    <p class="chart-sub">Sube una presentación PPTX ya existente y la IA la resume automáticamente en 1 diapositiva con los puntos clave, iconos y diseño corporativo UIC, lista para imprimir y repartir.</p>
+    <input type="file" id="infografiaFileInput" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+    <button type="button" class="btn-publish" id="infografiaUploadBtn">Subir PPTX y generar infografía</button>
+    <div class="formacion-status" id="infografiaStatus"></div>
   </section>
 
   <!-- ===== IA ASSISTANT ===== -->
@@ -4738,7 +4745,7 @@
     }
   }
 
-  // La formacion "completa" (18 diapositivas: esquema + contenido en varios
+  // La formacion "completa" (15 diapositivas: esquema + contenido en varios
   // lotes en el servidor, ver formaciones.js) se genera de forma asincrona
   // con barra de progreso: iniciar -> polling de progreso -> descargar,
   // en vez del POST unico y bloqueante de generarFormacionDescarga. Tiempo
@@ -4896,6 +4903,74 @@
       }
     });
   });
+
+  /* ---------- Formaciones: Crear Infografía (subir .pptx -> resumen 1 diapositiva) ---------- */
+  const infografiaFileInput = document.getElementById('infografiaFileInput');
+  const infografiaUploadBtn = document.getElementById('infografiaUploadBtn');
+  const infografiaStatus = document.getElementById('infografiaStatus');
+  let infografiaEnCurso = false;
+
+  function setInfografiaStatus(mensaje, esError) {
+    if (!infografiaStatus) return;
+    infografiaStatus.textContent = mensaje || '';
+    infografiaStatus.classList.toggle('is-error', !!esError);
+  }
+
+  if (infografiaUploadBtn && infografiaFileInput) {
+    infografiaUploadBtn.addEventListener('click', () => {
+      if (infografiaEnCurso) return;
+      infografiaFileInput.value = '';
+      infografiaFileInput.click();
+    });
+
+    infografiaFileInput.addEventListener('change', async () => {
+      const archivo = infografiaFileInput.files && infografiaFileInput.files[0];
+      if (!archivo || infografiaEnCurso) return;
+      infografiaEnCurso = true;
+      infografiaUploadBtn.disabled = true;
+      setInfografiaStatus('Leyendo la presentación y generando la infografía con IA…', false);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', archivo);
+        const respuesta = await fetch('/api/formaciones/infografia', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData,
+        });
+
+        if (respuesta.status === 401) {
+          window.location.href = '/';
+          return;
+        }
+        if (!respuesta.ok) {
+          let mensaje = 'No se ha podido generar la infografía.';
+          try {
+            const datos = await respuesta.json();
+            if (datos && datos.error) mensaje = datos.error;
+          } catch (err) { /* respuesta no era JSON */ }
+          setInfografiaStatus(mensaje, true);
+          return;
+        }
+
+        const blob = await respuesta.blob();
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = 'infografia-uic.pptx';
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        setInfografiaStatus('Infografía generada y descargada.', false);
+      } catch (err) {
+        setInfografiaStatus('No se ha podido conectar con el servidor para generar la infografía.', true);
+      } finally {
+        infografiaEnCurso = false;
+        infografiaUploadBtn.disabled = false;
+      }
+    });
+  }
 
   /* ---------- IA Assistant: chat (API real de Anthropic vía backend local) ---------- */
   const CHAT_API_URL = '/api/chat';
