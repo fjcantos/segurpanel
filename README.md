@@ -1,348 +1,202 @@
-# segurpanel
-SegurPanel - App portátil para alarmas
+# SegurPanel
 
-## IA Assistant y Análisis Avanzado (API real de Anthropic)
+**SegurPanel** es una PWA (Progressive Web App) interna para el equipo de
+retención y ventas de **UIC**, especializada en el sector de alarmas y
+seguridad privada en España. Centraliza en una sola herramienta la
+comparativa de competencia, el análisis legal de contratos con IA, material
+de formación, generación de propuestas comerciales y un asistente de IA
+experto en retención de clientes — todo con autenticación, control de roles
+y auditoría.
 
-El chat de la pestaña "IA Assistant" (modelo `claude-haiku-4-5-20251001`) y el
-análisis legal cláusula por cláusula de la pestaña "Análisis Avanzado"
-(modelo `claude-opus-5`) están conectados a la API real de Anthropic a través
-de un pequeño servidor local (`server.js`) que mantiene la clave de API fuera
-del navegador. El Análisis Avanzado se dispara automáticamente al subir un
-contrato en la pestaña "Análisis": el asistente actúa como un abogado experto
-en contratos de seguridad privada y derecho del consumidor español, y genera
-un informe PDF UIC con el detalle de cada cláusula (explicación en lenguaje
-sencillo, base legal aplicable y nivel de riesgo).
+Para el detalle de cada pestaña y funcionalidad, ver [DOCUMENTACION.md](DOCUMENTACION.md).
+Para el diagrama de arquitectura del sistema completo (Render, Raspberry Pi,
+GitHub, APIs externas), ver [ARQUITECTURA.md](ARQUITECTURA.md).
 
-**1. Configura tu clave de API** (una sola vez; la clave nunca se guarda en
-este repositorio ni se envía al navegador):
+## Índice
+
+- [Descripción](#descripción)
+- [Tecnologías](#tecnologías)
+- [Estructura de carpetas](#estructura-de-carpetas)
+- [Instalación local](#instalación-local)
+- [Variables de entorno](#variables-de-entorno)
+- [Despliegue en Render](#despliegue-en-render)
+- [Documentación adicional](#documentación-adicional)
+
+## Descripción
+
+SegurPanel exige inicio de sesión (solo correos `@verisure.es`) y ofrece,
+según el rol del usuario, 13 pestañas funcionales:
+
+| Área | Pestañas |
+| --- | --- |
+| Comparativa de mercado | Inicio, Comparador, Ofertas, Alianzas, Equipos, Inteligencia |
+| Análisis de contratos con IA | Análisis, Análisis Avanzado, Repositorio |
+| Gestión interna | Estadísticas |
+| Generación de contenido con IA | Generador de Propuestas, Formaciones |
+| Asistencia | IA Assistant |
+
+Incluye además un panel de administración (`/admin`) para gestionar usuarios,
+solicitudes de acceso y auditoría, y dos scrapers en Python pensados para
+ejecutarse por cron en una Raspberry Pi, que alimentan las pestañas Alianzas
+y Ofertas con datos actualizados a diario.
+
+Ver [DOCUMENTACION.md](DOCUMENTACION.md) para el detalle completo de cada
+pestaña.
+
+## Tecnologías
+
+**Backend**
+- [Node.js](https://nodejs.org/) ≥ 22.5 (recomendado 24) — servidor HTTP
+  hecho a mano con el módulo nativo `http`/`https` (sin framework tipo
+  Express).
+- [`node:sqlite`](https://nodejs.org/api/sqlite.html) — base de datos SQLite
+  incorporada en Node; no requiere instalar ni compilar un motor aparte.
+- `bcryptjs` — hash de contraseñas (JS puro, sin compilación nativa).
+- `jsonwebtoken` — sesiones firmadas (JWT, HS256).
+- `multer` — subida de archivos (contratos, PPTX).
+- `pdfkit` / `exceljs` / `pptxgenjs` / `jszip` — generación de informes PDF,
+  exportación a Excel y presentaciones PPTX.
+- `pdf-parse`, `mammoth`, `word-extractor`, `node-tesseract-ocr` — extracción
+  de texto de contratos en PDF, Word, OpenDocument e imágenes escaneadas
+  (OCR).
+- `sharp` — procesado de imágenes (iconos PWA, infografías).
+- `web-push` / `nodemailer` — notificaciones push y correo.
+
+**Frontend**
+- HTML, CSS y JavaScript "vanilla" (sin framework ni bundler): `index.html`,
+  `login.html`, `admin.html`.
+- PWA instalable: `manifest.json` + `sw.js` (service worker con caché para
+  uso sin conexión).
+
+**IA / APIs externas**
+- [API de Anthropic (Claude)](https://www.anthropic.com/) — chat del IA
+  Assistant (`claude-haiku-4-5-20251001`), Análisis Avanzado, Generador de
+  Propuestas y Formaciones (`claude-opus-5`). La clave de API nunca se envía
+  al navegador: todas las llamadas pasan por `server.js`.
+- [Unsplash API](https://unsplash.com/developers) — fotos de fondo reales
+  para las diapositivas de Formaciones (opcional).
+- [Google News RSS](https://news.google.com/) — fuente de los scrapers de
+  Alianzas y Ofertas.
+
+**Automatización**
+- Python 3 (solo librería estándar) — `scraper_alianzas.py` y
+  `scraper_precios.py`, pensados para ejecutarse por cron en una Raspberry
+  Pi u otro equipo siempre encendido.
+
+## Estructura de carpetas
 
 ```
+segurpanel/
+├── server.js              Servidor HTTP: autenticación, todas las rutas /api/*,
+│                           estáticos de la PWA, proxy a la API de Anthropic
+├── db.js                  Capa de datos (node:sqlite): usuarios, sesiones,
+│                           alianzas, ofertas, repositorio, auditoría...
+├── auth.js                Contraseñas, JWT, cookies de sesión, roles,
+│                           bloqueo por intentos fallidos
+├── analisis.js             Extracción de texto y anonimización de contratos,
+│                           detección de empresa/provincia/tipo, informe PDF
+├── formaciones.js          Generación de presentaciones PPTX con IA (battlecards,
+│                           formación completa por compañía, infografías)
+├── backup.js               Copia diaria de la base de datos (últimos 7 días)
+├── email.js                Envío de correos (nodemailer)
+├── push.js                 Notificaciones push (web-push)
+├── index.html              App principal (todas las pestañas, una vez logueado)
+├── login.html               Pantalla de login + solicitud de acceso
+├── admin.html               Panel de gestión de usuarios y auditoría (Super Admin)
+├── manifest.json            Manifiesto PWA (nombre, iconos, accesos directos)
+├── sw.js                    Service worker (caché sin conexión)
+├── assets/                  Logo original de UIC (fuente de los iconos)
+├── icons/                   Iconos PNG generados para la PWA
+├── tools/
+│   └── generate-icons.js    Regenera icons/ a partir de assets/LOGO_UIC_limpio.png
+├── scraper_alianzas.py      Scraper de alianzas (Raspberry Pi, cron diario)
+├── scraper_precios.py       Scraper de ofertas/precios (Raspberry Pi, cron diario)
+├── data/                    SQLite, secreto JWT y backups (NO se sube a git)
+├── package.json
+└── .gitignore
+```
+
+## Instalación local
+
+**Requisitos:** Node.js 22.5 o superior (recomendado 24, que ya no requiere
+flag experimental para `node:sqlite`).
+
+```bash
+git clone <url-del-repositorio>
+cd segurpanel
+npm install
+```
+
+Configura la clave de la API de Anthropic (obligatoria para que funcionen el
+IA Assistant, el Análisis Avanzado, el Generador de Propuestas y
+Formaciones):
+
+```bash
 setx ANTHROPIC_API_KEY "sk-ant-tu-clave-aqui"
 ```
 
-Abre una terminal nueva después de ejecutar `setx` para que la variable esté
-disponible.
+Abre una terminal nueva tras ejecutar `setx` para que la variable esté
+disponible, y arranca el servidor:
 
-**2. Arranca el servidor:**
-
-```
-node server.js
-```
-
-o, equivalentemente:
-
-```
+```bash
 npm start
 ```
 
-**3. Abre la app** en `http://localhost:3000/` (no abras `index.html`
-directamente con doble clic: el chat necesita hablar con `server.js`).
-
-Si `ANTHROPIC_API_KEY` no está configurada, la app sigue funcionando pero el
-chat y el Análisis Avanzado mostrarán un aviso pidiendo que la configures.
-
-## Autenticación y gestión de usuarios
-
-SegurPanel exige iniciar sesión antes de ver nada de la app. Solo se admiten
-correos **@verisure.es**.
-
-Archivos que lo implementan:
-
-| Archivo | Función |
-| --- | --- |
-| `db.js` | Acceso a SQLite (`node:sqlite`, incorporado en Node — no requiere instalar ni compilar nada aparte). Tablas `users`, `access_requests`, `sessions`. |
-| `auth.js` | Contraseñas (`bcryptjs`), sesiones JWT (`jsonwebtoken`), cookies, reglas de dominio/rol, bloqueo por intentos fallidos. |
-| `login.html` | Pantalla de login + solicitud de acceso + cambio de contraseña obligatorio. |
-| `admin.html` | Panel de gestión de usuarios (solo Super Admin). |
-| `data/` (o `DATA_DIR`) | Base de datos y secretos locales. **No se sube a git** (ver `.gitignore`). |
-
-### Persistencia de datos en Render (o cualquier PaaS de filesystem efímero)
-
-Por defecto, la base de datos SQLite, el secreto JWT y el aviso del Super
-Admin inicial se guardan en `./data`, dentro del propio directorio del
-proyecto. En Render (y plataformas similares) ese directorio **se recrea en
-cada despliegue**, así que sin más configuración perderías usuarios, sesiones
-y solicitudes cada vez que despliegues.
-
-Para evitarlo:
-
-1. Monta un **disco persistente** en Render con punto de montaje `/data`.
-2. Define la variable de entorno `DATA_DIR=/data`.
-
-Con `DATA_DIR` definida, `db.js` y `auth.js` guardan ahí `segurpanel.db`,
-`.jwt-secret` y `SUPER_ADMIN_INICIAL.txt`, y esos datos sobreviven a
-despliegues y reinicios. Sin `DATA_DIR`, todo sigue funcionando igual que
-antes usando `./data` local (uso en desarrollo).
-
-### Primer arranque: Super Admin inicial
-
-Al arrancar el servidor por primera vez (no existe todavía
-`segurpanel.db` en `data/` o en `DATA_DIR`) se crea automáticamente la cuenta
-**Super Admin** (`fjose.cantos@verisure.es`) con una **clave temporal
-aleatoria**, que se imprime una sola vez por consola y se guarda en
-`SUPER_ADMIN_INICIAL.txt` (dentro de `data/` o de `DATA_DIR`):
-
-```
-============================================================
- Super Admin inicial creado
- Correo:         fjose.cantos@verisure.es
- Clave temporal: xxxxxxxxxxxx
- ...
-============================================================
-```
-
-Inicia sesión con esa clave temporal; la app te obligará a cambiarla antes de
-dejarte entrar. Borra `SUPER_ADMIN_INICIAL.txt` después de usarla.
-
-### Solicitud de acceso y aprobación
-
-1. Cualquiera con un correo @verisure.es puede pedir acceso desde la pantalla
-   de login (**"¿No tienes acceso? Solicítalo aquí"**).
-2. El Super Admin ve la solicitud en `/admin`, elige un **rol** y aprueba: la
-   app genera una **clave temporal** (o puedes escribir una a mano) que debes
-   compartir con la persona por un canal seguro.
-3. Esa persona inicia sesión con la clave temporal y la app le obliga a
-   cambiarla en el primer acceso (mínimo 10 caracteres, con letra y número).
-
-### Roles
-
-| Rol | Acceso |
-| --- | --- |
-| **Super Admin** | Todo + gestión de usuarios (`/admin`): aprobar/rechazar solicitudes, cambiar roles, dar de alta/baja, asignar claves temporales. |
-| **Admin** | Todo lo mismo que Super Admin **excepto** `/admin` (gestión de usuarios). |
-| **Retención** | No tiene acceso a las pestañas de Análisis / Análisis Avanzado. El resto de pestañas, en **solo lectura** (los controles aparecen bloqueados con un aviso). Sí puede usar el IA Assistant. |
-
-`/admin` solo es accesible para Super Admin; cualquier otra sesión que
-intente entrar es redirigida a `/`.
-
-### Sesiones y seguridad
-
-- **Sesiones JWT** firmadas (HS256) guardadas en una cookie `httpOnly`,
-  `SameSite=Lax` (y `Secure` automáticamente si la conexión es HTTPS). Cada
-  sesión también se registra en la tabla `sessions` de SQLite para poder
-  **revocarla** (logout, desactivar usuario, resetear contraseña) aunque el
-  JWT en sí siga sin caducar.
-- **Contraseñas con bcrypt** (`bcryptjs`, implementación en JS puro — sin
-  compilar nada nativo).
-- **Bloqueo por fuerza bruta**: 5 intentos fallidos bloquean la cuenta 15
-  minutos.
-- El secreto JWT se toma de la variable de entorno `JWT_SECRET`; si no está
-  definida, se genera uno aleatorio la primera vez y se guarda en
-  `data/.jwt-secret` para que las sesiones sobrevivan a reinicios del
-  servidor. **En producción, define `JWT_SECRET` explícitamente.**
-
-### HTTPS en producción
-
-En local, `http://localhost` es válido (los navegadores tratan `localhost`
-como contexto seguro). En producción **debes** servir SegurPanel por HTTPS:
-
-- Opción A — certificados propios: define `HTTPS_CERT_FILE` y
-  `HTTPS_KEY_FILE` (rutas a los ficheros `.pem`) y `server.js` levantará un
-  servidor HTTPS directamente.
-- Opción B (recomendada) — un proxy inverso (Nginx, Caddy, Cloudflare
-  Tunnel...) que termine TLS delante de `node server.js`.
-
-Si arrancas con `NODE_ENV=production` sin ninguna de las dos opciones
-configuradas, el servidor lo avisa por consola al arrancar.
-
-## App instalable (PWA) para móvil y tablet
-
-SegurPanel es una **Progressive Web App**: se instala en la pantalla de inicio
-del móvil o la tablet y, una vez visitada, **abre y funciona sin conexión**.
-
-Archivos que lo hacen posible:
-
-| Archivo | Función |
-| --- | --- |
-| `manifest.json` | Nombre, descripción, colores UIC (azul oscuro `#0b2545`), iconos y accesos directos. |
-| `sw.js` | Service worker: cachea la app para el modo sin conexión. |
-| `assets/LOGO_UIC_limpio.png` | Logo original (sello UIC). Fuente de todos los iconos. |
-| `icons/` | Iconos PNG generados a partir del logo (32, 180, 192, 512 px, más las variantes *maskable* de Android en 192 y 512 con fondo navy). |
-| `tools/generate-icons.js` | Regenera los iconos a partir del logo (`npm run icons`). Decodifica/recodifica PNG a mano — no necesita dependencias. |
-
-### Cómo instalarla
-
-1. Arranca el servidor (`npm start`) y abre la app en el móvil.
-2. **Android / Chrome / Edge:** aparece automáticamente el botón verde
-   **«Instalar app»** en la parte inferior. También sirve el menú
-   *⋮ → Instalar aplicación*.
-3. **iPhone / iPad (Safari):** Safari no permite el diálogo automático, así que
-   la app muestra un aviso con los pasos: **Compartir → Añadir a pantalla de
-   inicio**.
-
-Una vez instalada, el botón deja de aparecer.
-
-### Importante: probarla desde el móvil
-
-Los service workers solo funcionan en un **contexto seguro**: `localhost` o
-`https://`. Si abres la app desde el móvil por la IP local
-(`http://192.168.x.x:3000`), la app se verá bien pero **no se registrará el
-service worker ni se ofrecerá la instalación**.
-
-Para probarla en un móvil real, expón el servidor por HTTPS con un túnel:
-
-```
-npm start
-npx localtunnel --port 3000
-```
-
-y abre en el móvil la URL `https://...` que te devuelva.
-
-### Modo sin conexión
-
-- La interfaz, las pestañas, el comparador, ofertas, equipos y normativa
-  funcionan **sin conexión**.
-- El **IA Assistant necesita internet** (habla con la API de Anthropic a través
-  de `server.js`); sin conexión avisa explícitamente en el chat.
-
-Al modificar `index.html` o los iconos, sube `VERSION` en `sw.js` para que los
-navegadores descarten la caché antigua.
-
-## Alianzas: detección de acuerdos entre empresas de alarmas y otros sectores
-
-La pestaña **"Alianzas"** muestra acuerdos y colaboraciones detectados entre
-las empresas de alarmas comparadas en la app y compañías de otros sectores
-(móviles, grandes superficies, seguros, inmobiliarias, suministros de luz/gas/
-agua). Igual que en el Comparador y en Ofertas, la empresa de alarmas solo se
-identifica por su **círculo de color corporativo**; el nombre solo aparece en
-la leyenda privada, visible únicamente para el rol **Super Admin**.
-
-### Flujo de moderación (pendiente → publicado)
-
-1. `scraper_alianzas.py` (ver más abajo) detecta acuerdos y los envía a
-   `POST /api/alianzas/sync`.
-2. Cada alianza nueva entra en SQLite con estado `pending`. Solo el
-   **Super Admin** la ve, en la sección "Pendientes de revisar" de la pestaña
-   Alianzas, junto con un **punto rojo** en la propia pestaña.
-3. El Super Admin decide, alianza por alianza:
-   - **Publicar**: pasa a `published` y todos los roles la ven.
-   - **Descartar**: pasa a `discarded` y desaparece definitivamente (no
-     vuelve a proponerse aunque el scraper la detecte de nuevo).
-4. El resto de roles (Admin, Retención) solo ven las alianzas ya publicadas;
-   nunca ven el contenido pendiente ni el punto de notificación.
-
-### Scraper en la Raspberry Pi (`scraper_alianzas.py`)
-
-Script en Python (solo librería estándar, sin `pip install`) pensado para
-ejecutarse a diario en una Raspberry Pi u otro equipo con cron:
-
-- Busca en **Google News** (RSS público) menciones conjuntas de cada empresa
-  de alarmas con compañías de los sectores vigilados (Movistar, Vodafone,
-  Orange, MásMóvil · Carrefour, Leroy Merlin, El Corte Inglés, MediaMarkt ·
-  Mapfre, AXA, Allianz, Generali · idealista, Fotocasa, pisos.com · Endesa,
-  Iberdrola, Naturgy, Repsol).
-- Descarta automáticamente cualquier noticia con más de **7 días** de
-  antigüedad (según el `pubDate` del RSS) o sin fecha interpretable: solo
-  llegan a `alianzas.json` (y de ahí a SegurPanel) noticias recientes.
-- Opcionalmente también revisa **webs oficiales / salas de prensa** que
-  configures en el diccionario `SALAS_PRENSA` dentro del script (vacío por
-  defecto: añade ahí las URLs reales que quieras vigilar).
-- Guarda en un fichero de cache local (`alianzas_cache.json`, junto al
-  script) lo que ya detectó en ejecuciones anteriores, para enviar solo lo
-  que cambia de un día a otro.
-- Si hay alianzas nuevas, las envía a SegurPanel vía `POST
-  /api/alianzas/sync`, autenticado con un secreto compartido (no con sesión
-  de usuario, porque quien llama no es un navegador).
-
-**Configuración en el servidor (SegurPanel):**
-
-```
-setx SCRAPER_TOKEN "un-secreto-largo-y-aleatorio"
-```
-
-**Configuración en la Raspberry Pi** (variables de entorno para el cron, con
-el mismo valor de `SCRAPER_TOKEN`):
-
-```
-SEGURPANEL_SYNC_URL=https://tu-app.onrender.com/api/alianzas/sync
-SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
-```
-
-**Cron a las 07:00 todos los días** (`crontab -e`):
-
-```
-0 7 * * * SEGURPANEL_SYNC_URL="https://tu-app.onrender.com/api/alianzas/sync" SEGURPANEL_SCRAPER_TOKEN="un-secreto-largo-y-aleatorio" /usr/bin/python3 /home/pi/segurpanel/scraper_alianzas.py >> /home/pi/segurpanel/scraper_alianzas.log 2>&1
-```
-
-Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/alianzas/sync`
-responde `503` y rechaza cualquier envío (evita dejar el endpoint abierto por
-descuido).
-
-## Ofertas: promociones vigentes por empresa de alarmas
-
-La pestaña **"Ofertas"** muestra, para cada empresa de alarmas, la
-promoción comercial vigente detectada más recientemente. Igual que en
-Alianzas, la empresa solo se identifica por su círculo de color corporativo
-(la leyenda con el nombre solo la ve el Super Admin).
-
-A diferencia de Alianzas, **no hay cola de moderación**: las promociones
-detectadas entran directamente y se muestran tal cual, porque no son
-noticias que requieran verificación editorial, sino un listado de
-referencia que siempre pide "confirmar vigencia" antes de usarlo con un
-cliente.
-
-### Scraper en la Raspberry Pi (`scraper_precios.py`)
-
-Script en Python (solo librería estándar), pensado para ejecutarse a diario
-en la misma Raspberry Pi que `scraper_alianzas.py`:
-
-- Busca en **Google News** (RSS público) menciones de cada empresa de
-  alarmas junto a palabras propias de promociones comerciales (oferta,
-  descuento, meses gratis, sin permanencia, etc.).
-- Descarta automáticamente cualquier promoción con más de **30 días**
-  (`OFERTAS_DIAS_MAX`) de antigüedad o sin fecha interpretable, para que
-  "Ofertas" solo muestre promociones actuales.
-- Envía lo detectado a SegurPanel vía `POST /api/ofertas/sync`, autenticado
-  con el **mismo secreto compartido** `SCRAPER_TOKEN` que usa
-  `scraper_alianzas.py`.
-
-**Configuración en la Raspberry Pi** (variables de entorno para el cron):
-
-```
-SEGURPANEL_OFERTAS_SYNC_URL=https://tu-app.onrender.com/api/ofertas/sync
-SEGURPANEL_SCRAPER_TOKEN=un-secreto-largo-y-aleatorio
-```
-
-**Cron a las 07:15 todos los días** (poco después de `scraper_alianzas.py`):
-
-```
-15 7 * * * SEGURPANEL_OFERTAS_SYNC_URL="https://tu-app.onrender.com/api/ofertas/sync" SEGURPANEL_SCRAPER_TOKEN="un-secreto-largo-y-aleatorio" /usr/bin/python3 /home/pi/segurpanel/scraper_precios.py >> /home/pi/segurpanel/scraper_precios.log 2>&1
-```
-
-Sin `SCRAPER_TOKEN` definida en el servidor, `POST /api/ofertas/sync`
-responde `503`, igual que `/api/alianzas/sync`.
-
-## Backup automático y auditoría
-
-`backup.js` copia `segurpanel.db` cada día a las **02:00** (hora local del
-servidor) a `DATA_DIR/backups/` (o `./data/backups/` en local), con la fecha
-en el nombre, y mantiene solo los **últimos 7**. No usa ninguna dependencia
-de cron externa: `server.js` arma un `setInterval` de 60s al arrancar que
-comprueba la hora actual.
-
-Todas las acciones importantes (login, logout, análisis de contrato,
-publicar alianza, cambio de rol) quedan registradas en la tabla SQLite
-`audit_log` (ver `db.js`) y son visibles en el **Panel de auditoría** de
-`admin.html`, solo para el rol **Super Admin**.
-
-## Formaciones: imágenes de fondo (Unsplash) e iconos
-
-La pestaña "Formaciones" genera presentaciones `.pptx` con IA (`formaciones.js`).
-Cada diapositiva puede llevar una foto de fondo real, obtenida de la API
-pública de Unsplash, y un icono (Heroicons, incrustado en el código, sin
-llamadas de red). Para las fotos de fondo:
-
-```
-setx UNSPLASH_ACCESS_KEY "tu-access-key-de-unsplash"
-```
-
-Consigue una clave gratuita creando una app en
-[unsplash.com/developers](https://unsplash.com/developers). En Render,
-defínela como variable de entorno del servicio (`UNSPLASH_ACCESS_KEY`), igual
-que `ANTHROPIC_API_KEY`. Sin ella, Formaciones sigue funcionando con
-normalidad (iconos y diseño corporativo incluidos) pero sin fotos de fondo.
-
-Las consultas a Unsplash usan un catálogo cerrado de 12 temas en inglés
-(la IA elige el que mejor encaje por diapositiva) para no agotar el límite
-del plan gratuito de Unsplash (50 peticiones/hora): las imágenes se cachean
-en memoria por tema mientras el proceso esté arrancado.
+Abre `http://localhost:3000/` en el navegador (no abras `index.html`
+directamente con doble clic: la app necesita hablar con `server.js`).
+
+En el primer arranque se crea automáticamente una cuenta **Super Admin**
+(`fjose.cantos@verisure.es`) con una clave temporal que se imprime una sola
+vez por consola — ver detalle en [DOCUMENTACION.md](DOCUMENTACION.md#autenticación-y-roles).
+
+## Variables de entorno
+
+| Variable | Obligatoria | Descripción |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Sí, para las funciones de IA | Clave de la API de Anthropic. Sin ella, la app funciona pero el IA Assistant, el Análisis Avanzado, Propuestas y Formaciones muestran un aviso pidiendo que se configure. |
+| `PORT` | No (por defecto `3000`) | Puerto HTTP del servidor. Render lo define automáticamente. |
+| `DATA_DIR` | Recomendada en producción | Directorio persistente para `segurpanel.db`, el secreto JWT y los backups. Sin ella se usa `./data` local, que en plataformas de filesystem efímero (Render) se pierde en cada despliegue. |
+| `JWT_SECRET` | Recomendada en producción | Secreto para firmar las sesiones JWT (HS256). Si no se define, se genera uno aleatorio la primera vez y se guarda en `DATA_DIR/.jwt-secret`. |
+| `SCRAPER_TOKEN` | Necesaria si se usan los scrapers | Secreto compartido que autentica las peticiones de `scraper_alianzas.py` y `scraper_precios.py` a `POST /api/alianzas/sync` y `POST /api/ofertas/sync`. Sin ella, ambos endpoints responden `503`. |
+| `UNSPLASH_ACCESS_KEY` | No | Clave de la API de Unsplash para las fotos de fondo de las diapositivas de Formaciones. Sin ella, Formaciones sigue funcionando (iconos y diseño corporativo) pero sin fotos. |
+| `HTTPS_CERT_FILE` / `HTTPS_KEY_FILE` | No | Rutas a certificados `.pem` propios. Si se definen, `server.js` levanta HTTPS directamente en vez de HTTP (alternativa a usar un proxy inverso). |
+| `NODE_ENV` | No | Si se define como `production` sin HTTPS configurado (ni certificados propios ni proxy detectable), el servidor avisa por consola al arrancar. |
+
+## Despliegue en Render
+
+1. **Crea un Web Service** en [Render](https://render.com/) y conéctalo a
+   este repositorio de GitHub (rama `main`).
+2. **Build Command:** `npm install`
+   **Start Command:** `npm start` (equivalente a `node server.js`)
+3. **Runtime:** Node ≥ 22.5. Fija la versión en la configuración del
+   servicio si Render no la detecta automáticamente por defecto.
+4. **Disco persistente:** monta un disco en `/data` (Render → tu servicio →
+   *Disks* → *Add Disk*, mount path `/data`). Sin esto, la base de datos y
+   las sesiones se pierden en cada despliegue, porque el filesystem del
+   contenedor es efímero.
+5. **Variables de entorno** (Render → tu servicio → *Environment*):
+   - `ANTHROPIC_API_KEY` — obligatoria.
+   - `DATA_DIR=/data` — para usar el disco persistente del paso 4.
+   - `JWT_SECRET` — un secreto largo y aleatorio.
+   - `SCRAPER_TOKEN` — si vas a conectar los scrapers de la Raspberry Pi.
+   - `UNSPLASH_ACCESS_KEY` — opcional.
+   - `NODE_ENV=production`.
+6. **HTTPS:** Render ya sirve el servicio por HTTPS de forma automática
+   (termina TLS en su propio proxy delante de tu contenedor), así que no
+   hace falta configurar `HTTPS_CERT_FILE`/`HTTPS_KEY_FILE`.
+7. **Despliegue automático:** cada `git push` a `main` dispara un nuevo
+   despliegue en Render (auto-deploy activado por defecto al conectar el
+   repositorio).
+8. Tras el primer despliegue, revisa los logs de Render para recoger la
+   clave temporal del Super Admin inicial (se imprime una sola vez).
+
+Más detalle sobre cómo encajan Render, GitHub, la Raspberry Pi y las APIs
+externas en [ARQUITECTURA.md](ARQUITECTURA.md).
+
+## Documentación adicional
+
+- **[DOCUMENTACION.md](DOCUMENTACION.md)** — descripción funcional de cada
+  pestaña, autenticación y roles, PWA, scrapers de Alianzas y Ofertas,
+  backups y auditoría.
+- **[ARQUITECTURA.md](ARQUITECTURA.md)** — diagrama y explicación de la
+  arquitectura del sistema completo.
