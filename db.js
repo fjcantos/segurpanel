@@ -39,6 +39,7 @@ db.exec(`
     must_change_password  INTEGER NOT NULL DEFAULT 1,
     failed_attempts        INTEGER NOT NULL DEFAULT 0,
     locked_until          TEXT,
+    can_install_app       INTEGER NOT NULL DEFAULT 0,
     created_at            TEXT NOT NULL,
     updated_at            TEXT NOT NULL,
     approved_by           INTEGER REFERENCES users(id),
@@ -169,6 +170,9 @@ if (!columnaExiste("contract_stats", "tipo")) {
 if (!columnaExiste("contract_stats", "texto_anonimizado")) {
   db.exec("ALTER TABLE contract_stats ADD COLUMN texto_anonimizado TEXT");
 }
+if (!columnaExiste("users", "can_install_app")) {
+  db.exec("ALTER TABLE users ADD COLUMN can_install_app INTEGER NOT NULL DEFAULT 0");
+}
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
 
@@ -190,13 +194,13 @@ function listarUsuarios() {
   return db.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
 }
 
-function crearUsuario({ email, name, passwordHash, role, status, mustChangePassword, approvedBy }) {
+function crearUsuario({ email, name, passwordHash, role, status, mustChangePassword, approvedBy, canInstallApp }) {
   const ahora = ahoraISO();
   const info = db
     .prepare(
       `INSERT INTO users
-        (email, name, password_hash, role, status, must_change_password, created_at, updated_at, approved_by, approved_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (email, name, password_hash, role, status, must_change_password, can_install_app, created_at, updated_at, approved_by, approved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       email.toLowerCase(),
@@ -205,6 +209,7 @@ function crearUsuario({ email, name, passwordHash, role, status, mustChangePassw
       role,
       status,
       mustChangePassword ? 1 : 0,
+      canInstallApp ? 1 : 0,
       ahora,
       ahora,
       approvedBy || null,
@@ -227,6 +232,14 @@ function actualizarRol(userId, role) {
 
 function actualizarEstado(userId, status) {
   db.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(status, ahoraISO(), userId);
+}
+
+function actualizarPuedeInstalarApp(userId, canInstallApp) {
+  db.prepare("UPDATE users SET can_install_app = ?, updated_at = ? WHERE id = ?").run(
+    canInstallApp ? 1 : 0,
+    ahoraISO(),
+    userId
+  );
 }
 
 function registrarIntentoFallido(userId) {
@@ -369,6 +382,12 @@ function alianzaPublica(a) {
     url: a.url,
     fechaPublicacion: a.fecha_publicacion,
     fechaDeteccion: a.fecha_deteccion,
+    // Fecha en la que un super_admin publico esta alianza (la hizo visible
+    // como "noticia" en Inicio para todos los roles); distinta de
+    // fecha_publicacion (fecha del articulo original detectado por el
+    // scraper). Ver tambien borrarAlianzasPublicadasCaducadas: usa esta
+    // misma fecha para el borrado automatico a los 7 dias.
+    publicadaEn: a.reviewed_at,
     status: a.status,
   };
 }
@@ -393,6 +412,32 @@ function resolverAlianza(id, status, reviewedBy) {
 function fechaUltimaAlianza() {
   const fila = db.prepare("SELECT MAX(created_at) AS ultima FROM alianzas").get();
   return (fila && fila.ultima) || null;
+}
+
+// Las "noticias del sector" de Inicio son las alianzas publicadas: dejan de
+// mostrarse pasados 7 dias desde que un super_admin las publico, borrandolas
+// definitivamente en vez de solo ocultarlas. Se llama en cada GET
+// /api/alianzas (ver server.js) para no depender de un cron aparte.
+function borrarAlianzasPublicadasCaducadas() {
+  const limite = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const info = db
+    .prepare("DELETE FROM alianzas WHERE status = 'published' AND reviewed_at < ?")
+    .run(limite);
+  return info.changes;
+}
+
+// Borrado manual e inmediato de una alianza/noticia concreta (boton
+// "Eliminar" de Inicio, solo super_admin), sin esperar a los 7 dias.
+function eliminarAlianza(id) {
+  const info = db.prepare("DELETE FROM alianzas WHERE id = ?").run(id);
+  return info.changes;
+}
+
+// Usado por "Resetear datos" de la pestana Alianzas (solo super_admin):
+// borra pendientes, publicadas y descartadas de un golpe.
+function borrarAlianzas() {
+  const info = db.prepare("DELETE FROM alianzas").run();
+  return info.changes;
 }
 
 /* ---------- Ofertas (promociones vigentes por empresa de alarmas) ---------- */
@@ -639,6 +684,13 @@ function alternarVigilanciaEmpresa({ empresa, vigilada, userId }) {
   return db.prepare("SELECT * FROM company_notes WHERE empresa = ?").get(empresa);
 }
 
+// Usado por "Resetear datos" de la pestana Comparador (solo super_admin):
+// borra todas las notas internas y marcas de vigilancia por empresa.
+function borrarNotasEmpresas() {
+  const info = db.prepare("DELETE FROM company_notes").run();
+  return info.changes;
+}
+
 /* ---------- Actividad en tiempo real (Estadisticas) ---------- */
 //
 // Combina la ultima pestana visitada (tab_visits) con la ultima accion de
@@ -738,6 +790,7 @@ module.exports = {
   actualizarPassword,
   actualizarRol,
   actualizarEstado,
+  actualizarPuedeInstalarApp,
   registrarIntentoFallido,
   limpiarIntentosFallidos,
   crearSolicitudAcceso,
@@ -755,6 +808,9 @@ module.exports = {
   buscarAlianzaPorId,
   resolverAlianza,
   fechaUltimaAlianza,
+  borrarAlianzasPublicadasCaducadas,
+  eliminarAlianza,
+  borrarAlianzas,
   insertarOfertas,
   listarUltimaOfertaPorEmpresa,
   fechaUltimaOferta,
@@ -776,6 +832,7 @@ module.exports = {
   listarNotasEmpresas,
   guardarNotaEmpresa,
   alternarVigilanciaEmpresa,
+  borrarNotasEmpresas,
   actividadTiempoReal,
   registrarAuditoria,
   listarAuditoria,

@@ -164,6 +164,7 @@ function usuarioPublico(u) {
     role: u.role,
     status: u.status,
     mustChangePassword: !!u.must_change_password,
+    canInstallApp: !!u.can_install_app,
     createdAt: u.created_at,
     approvedAt: u.approved_at,
   };
@@ -457,11 +458,14 @@ async function apiAdminApproveRequest(req, res, id) {
   const errorPolitica = auth.validarPolitica(tempPassword);
   if (errorPolitica) return enviarJSON(res, 400, { error: errorPolitica });
 
+  const canInstallApp = !!cuerpo.canInstallApp;
+
   let usuario;
   if (usuarioExistente) {
     db.actualizarRol(usuarioExistente.id, role);
     db.actualizarPassword(usuarioExistente.id, auth.hashearPassword(tempPassword), { mustChangePassword: true });
     db.actualizarEstado(usuarioExistente.id, "active");
+    db.actualizarPuedeInstalarApp(usuarioExistente.id, canInstallApp);
     usuario = db.buscarUsuarioPorId(usuarioExistente.id);
   } else {
     usuario = db.crearUsuario({
@@ -472,6 +476,7 @@ async function apiAdminApproveRequest(req, res, id) {
       status: "active",
       mustChangePassword: true,
       approvedBy: sesion.usuario.id,
+      canInstallApp,
     });
   }
   db.resolverSolicitud(id, "approved", sesion.usuario.id);
@@ -562,6 +567,28 @@ async function apiAdminSetStatus(req, res, id) {
   enviarJSON(res, 200, { usuario: usuarioPublico(db.buscarUsuarioPorId(id)) });
 }
 
+// Marca si un usuario puede ver e instalar la PWA (boton flotante "Instalar
+// app"). Solo el Super Admin puede concederlo/revocarlo, tanto al aprobar
+// una solicitud de acceso (ver apiAdminApproveRequest) como despues, en
+// cualquier momento, desde el panel de gestion de usuarios.
+async function apiAdminSetInstallApp(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const objetivo = db.buscarUsuarioPorId(id);
+  if (!objetivo) return enviarJSON(res, 404, { error: "Usuario no encontrado." });
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  db.actualizarPuedeInstalarApp(id, !!cuerpo.canInstallApp);
+  enviarJSON(res, 200, { usuario: usuarioPublico(db.buscarUsuarioPorId(id)) });
+}
+
 async function apiAdminResetPassword(req, res, id) {
   const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
@@ -619,6 +646,68 @@ async function apiAdminResetDatosPrueba(req, res) {
     eliminados,
     mensaje: `Datos de prueba eliminados: ${eliminados} contrato(s) borrado(s) del Repositorio, Estadísticas y el mapa de provincias.`,
   });
+}
+
+// Reseteo por pestaña (boton "Resetear datos" visible solo para super_admin
+// en Comparador, Alianzas, Análisis, Repositorio y Estadísticas). A
+// diferencia de apiAdminResetDatosPrueba (panel de Admin, borra siempre
+// contract_stats entero) este endpoint se llama desde dentro de cada
+// pestaña de la app y solo toca los datos de ESA pestaña:
+//   - comparador: notas internas y marcas de "vigilar" por empresa.
+//   - alianzas: alianzas pendientes, publicadas y descartadas (incluye las
+//     noticias del sector mostradas en Inicio, que reutilizan las publicadas).
+//   - contratos: Análisis, Repositorio y Estadísticas comparten la misma
+//     tabla (contract_stats), asi que las tres pestañas borran lo mismo.
+// Misma exigencia que el reseteo global: confirmar con la contraseña actual
+// de quien ejecuta la accion.
+const AMBITOS_RESET_TAB = new Set(["comparador", "alianzas", "contratos"]);
+
+async function apiAdminResetTabData(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const tab = typeof cuerpo.tab === "string" ? cuerpo.tab : "";
+  if (!AMBITOS_RESET_TAB.has(tab)) {
+    return enviarJSON(res, 400, { error: "Ámbito de reseteo inválido." });
+  }
+
+  const password = typeof cuerpo.password === "string" ? cuerpo.password : "";
+  if (!auth.verificarPassword(password, sesion.usuario.password_hash)) {
+    return enviarJSON(res, 401, {
+      error: "Contraseña incorrecta.",
+      code: "CREDENCIALES_INVALIDAS",
+    });
+  }
+
+  let eliminados = 0;
+  let mensaje = "";
+  if (tab === "comparador") {
+    eliminados = db.borrarNotasEmpresas();
+    mensaje = `Datos eliminados: ${eliminados} nota(s)/marca(s) de vigilancia del Comparador.`;
+  } else if (tab === "alianzas") {
+    eliminados = db.borrarAlianzas();
+    mensaje = `Datos eliminados: ${eliminados} alianza(s) borrada(s) (pendientes, publicadas y descartadas).`;
+  } else if (tab === "contratos") {
+    eliminados = db.borrarContractStats();
+    mensaje = `Datos eliminados: ${eliminados} contrato(s) borrado(s) de Análisis, Repositorio y Estadísticas.`;
+  }
+
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "reset_datos_tab",
+    detail: { tab, eliminados },
+    ip: obtenerIP(req),
+  });
+
+  enviarJSON(res, 200, { ok: true, eliminados, mensaje });
 }
 
 /* ================================================================
@@ -2101,6 +2190,11 @@ async function apiAlianzasGet(req, res) {
   const sesion = exigirSesion(req, res);
   if (!sesion) return;
 
+  // Las noticias del sector (alianzas publicadas, ver Inicio) caducan a los
+  // 7 dias de publicarse: se borran aqui mismo, en cada carga, para no
+  // depender de un cron aparte (ver borrarAlianzasPublicadasCaducadas).
+  db.borrarAlianzasPublicadasCaducadas();
+
   const ahora = new Date();
   const respuesta = {
     publicadas: agruparAlianzasPorPeriodo(db.listarAlianzasPorEstado("published"), ahora),
@@ -2137,6 +2231,28 @@ async function apiAlianzasResolver(req, res, id, status) {
       ip: obtenerIP(req),
     });
   }
+  enviarJSON(res, 200, { ok: true });
+}
+
+// Borrado manual e inmediato de una noticia/alianza publicada (boton
+// "Eliminar" en Inicio > Noticias del sector, solo super_admin), sin
+// esperar al borrado automatico a los 7 dias (ver
+// borrarAlianzasPublicadasCaducadas en apiAlianzasGet).
+async function apiAlianzasEliminar(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const alianza = db.buscarAlianzaPorId(id);
+  if (!alianza) return enviarJSON(res, 404, { error: "Alianza no encontrada." });
+
+  db.eliminarAlianza(id);
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "eliminar_alianza",
+    detail: { empresaAlarma: alianza.empresa_alarma, socio: alianza.socio },
+    ip: obtenerIP(req),
+  });
   enviarJSON(res, 200, { ok: true });
 }
 
@@ -2527,9 +2643,11 @@ const idAprobarSolicitud = RUTA_CON_ID("/api/admin/requests", "/approve");
 const idRechazarSolicitud = RUTA_CON_ID("/api/admin/requests", "/reject");
 const idRolUsuario = RUTA_CON_ID("/api/admin/users", "/role");
 const idEstadoUsuario = RUTA_CON_ID("/api/admin/users", "/status");
+const idInstallAppUsuario = RUTA_CON_ID("/api/admin/users", "/install-app");
 const idResetPasswordUsuario = RUTA_CON_ID("/api/admin/users", "/reset-password");
 const idPublicarAlianza = RUTA_CON_ID("/api/alianzas", "/publicar");
 const idDescartarAlianza = RUTA_CON_ID("/api/alianzas", "/descartar");
+const idEliminarAlianza = RUTA_CON_ID("/api/alianzas", "/eliminar");
 const idDetalleRepositorio = RUTA_CON_ID("/api/repositorio", "");
 const idClasificarRepositorio = RUTA_CON_ID("/api/repositorio", "/tipo");
 
@@ -2578,10 +2696,13 @@ async function manejarPeticion(req, res) {
       if (id !== null) return await apiAdminSetRole(req, res, id);
       id = idEstadoUsuario(ruta);
       if (id !== null) return await apiAdminSetStatus(req, res, id);
+      id = idInstallAppUsuario(ruta);
+      if (id !== null) return await apiAdminSetInstallApp(req, res, id);
       id = idResetPasswordUsuario(ruta);
       if (id !== null) return await apiAdminResetPassword(req, res, id);
     }
     if (req.method === "POST" && ruta === "/api/admin/reset-test-data") return await apiAdminResetDatosPrueba(req, res);
+    if (req.method === "POST" && ruta === "/api/admin/reset-tab-data") return await apiAdminResetTabData(req, res);
 
     if (req.method === "POST" && ruta === "/api/chat") return await manejarChat(req, res);
     if (req.method === "POST" && ruta === "/api/analisis") return await apiAnalisis(req, res);
@@ -2615,6 +2736,8 @@ async function manejarPeticion(req, res) {
       if (id !== null) return await apiAlianzasResolver(req, res, id, "published");
       id = idDescartarAlianza(ruta);
       if (id !== null) return await apiAlianzasResolver(req, res, id, "discarded");
+      id = idEliminarAlianza(ruta);
+      if (id !== null) return await apiAlianzasEliminar(req, res, id);
     }
 
     if (req.method === "GET" && ruta === "/api/ofertas") return await apiOfertasGet(req, res);

@@ -585,6 +585,59 @@
   .btn-export:hover:not(:disabled) { background: var(--accent); color: #fff; }
   .btn-export:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  /* ---------- Boton "Resetear datos" por pestana (solo super_admin) ---------- */
+  .btn-reset-tab {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--danger); background: var(--danger-bg); color: var(--danger);
+    border-radius: 999px; padding: 8px 16px; font-size: 0.82rem; font-weight: 700;
+    font-family: inherit; cursor: pointer; margin-bottom: 16px; margin-left: 8px;
+  }
+  .btn-reset-tab:hover:not(:disabled) { background: var(--danger); color: #fff; }
+  .btn-reset-tab:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .reset-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: none; align-items: center; justify-content: center; z-index: 500; padding: 20px;
+  }
+  .reset-modal-overlay.show { display: flex; }
+  .reset-modal {
+    background: var(--card); border-radius: 14px; padding: 24px; max-width: 380px; width: 100%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.45); color: var(--text);
+  }
+  .reset-modal h3 { margin: 0 0 8px; color: var(--danger); font-size: 1.05rem; }
+  .reset-modal p { margin: 0 0 14px; font-size: 0.85rem; color: var(--muted); line-height: 1.4; }
+  .reset-modal label { display: block; font-size: 0.78rem; font-weight: 600; margin: 10px 0 5px; }
+  .reset-modal input {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px;
+    font-size: 0.88rem; font-family: inherit; background: var(--bg); color: var(--text);
+  }
+  .reset-modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .reset-modal-actions button {
+    flex: 1; border-radius: 8px; padding: 9px 12px; font-size: 0.84rem; font-weight: 700;
+    font-family: inherit; cursor: pointer; border: none;
+  }
+  .reset-modal-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .reset-modal-cancel { background: var(--fill-subtle); color: var(--text); }
+  .reset-modal-cancel:hover:not(:disabled) { background: var(--fill-subtle-2); }
+  .reset-modal-confirm { background: var(--danger); color: #fff; }
+  .reset-modal-confirm:hover:not(:disabled) { opacity: 0.9; }
+  .reset-modal-error {
+    display: none; background: var(--danger-bg); color: var(--danger); border-radius: 8px;
+    padding: 8px 10px; font-size: 0.8rem; margin-top: 10px;
+  }
+  .reset-modal-error.show { display: block; }
+
+  /* ---------- Noticias del sector (Inicio): fecha y borrado manual ---------- */
+  .news-item-date { font-size: 0.74rem; color: var(--muted); }
+  .news-item-delete {
+    border: none; background: var(--danger-bg); color: var(--danger); border-radius: 999px;
+    padding: 4px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+    font-family: inherit; margin-left: 8px; flex-shrink: 0;
+  }
+  .news-item-delete:hover:not(:disabled) { background: var(--danger); color: #fff; }
+  .news-item-delete:disabled { opacity: 0.6; cursor: not-allowed; }
+  .news-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+
   .proposal-form {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1544,6 +1597,7 @@
     <p class="mobile-hint">Desliza la tabla en horizontal para ver todas las columnas.</p>
 
     <button type="button" class="btn-export" id="btnExportComparador">⬇ Exportar a Excel</button>
+    <button type="button" class="btn-reset-tab" data-reset-tab="comparador" hidden>🗑 Resetear datos</button>
 
     <div class="compare-toolbar">
       <label for="ordenComparador">Ordenar por</label>
@@ -1666,6 +1720,8 @@
   <section id="alianzas" class="tab-content">
     <h2 class="section-title">Alianzas y colaboraciones</h2>
     <p class="section-sub">Acuerdos detectados entre empresas de alarmas y otros sectores (móviles, grandes superficies, seguros, inmobiliarias, suministros). <span id="alianzasUpdated"></span></p>
+
+    <button type="button" class="btn-reset-tab" data-reset-tab="alianzas" hidden>🗑 Resetear datos</button>
 
     <div class="compare-legend" id="alianzasLegend" hidden></div>
 
@@ -1815,6 +1871,8 @@
     <h2 class="section-title">Análisis de contratos</h2>
     <p class="section-sub">Sube uno o varios contratos a la vez (PDF, Word, OpenDocument, texto plano o fotos/escaneos JPG o PNG · máx. 20 archivos, 20 MB cada uno). Cada archivo se procesa en el servidor: los datos sensibles (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y nombres de empresa) se anonimizan automáticamente antes de generar el informe, y se detecta automáticamente si el contrato es de Hogar o de Negocio para guardarlo ya clasificado en el Repositorio; solo si no hay certeza se te pedirá indicarlo tú. Tanto con un solo archivo como con varios, cada uno descarga su PDF y pasa además automáticamente por el análisis legal avanzado en la pestaña «Análisis Avanzado»; con varios archivos se procesan uno por uno y al terminar se descarga un ZIP con todos los informes.</p>
 
+    <button type="button" class="btn-reset-tab" data-reset-tab="contratos" hidden>🗑 Resetear datos</button>
+
     <div class="dropzone" id="dropzone">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       <div class="dropzone-title">Suelta uno o varios archivos aquí o haz clic para seleccionarlos</div>
@@ -1897,6 +1955,7 @@
     <p class="section-sub">Panel interno de actividad del equipo: contratos analizados, distribución geográfica por compañía detectada, cláusulas más frecuentes y uso de la aplicación. No incluye ningún dato personal de clientes.</p>
 
     <button type="button" class="btn-export" id="btnExportEstadisticas">⬇ Exportar a Excel</button>
+    <button type="button" class="btn-reset-tab" data-reset-tab="contratos" hidden>🗑 Resetear datos</button>
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -1974,6 +2033,7 @@
     <div class="compare-legend" id="repoLegend" hidden></div>
 
     <button type="button" class="btn-export" id="btnExportRepositorio">⬇ Exportar a Excel</button>
+    <button type="button" class="btn-reset-tab" data-reset-tab="contratos" hidden>🗑 Resetear datos</button>
 
     <div class="repo-filters">
       <div class="repo-filter-group">
@@ -2199,6 +2259,21 @@
   <button class="ios-close" id="iosHintClose" type="button" aria-label="Cerrar aviso">&times;</button>
 </div>
 
+<!-- ===== Modal "Resetear datos" por pestana (solo super_admin) ===== -->
+<div class="reset-modal-overlay" id="resetTabModal">
+  <div class="reset-modal">
+    <h3 id="resetTabTitulo">Resetear datos</h3>
+    <p id="resetTabTexto"></p>
+    <label for="resetTabPassword">Confirma tu contraseña</label>
+    <input type="password" id="resetTabPassword" autocomplete="current-password">
+    <div class="reset-modal-error" id="resetTabError"></div>
+    <div class="reset-modal-actions">
+      <button type="button" class="reset-modal-cancel" id="resetTabCancelar">Cancelar</button>
+      <button type="button" class="reset-modal-confirm" id="resetTabConfirmar">Borrar datos</button>
+    </div>
+  </div>
+</div>
+
 <script>
   /* ================================================================
      Tema claro/oscuro: se aplica antes del render en <head> (evita el
@@ -2242,6 +2317,10 @@
 
   const ETIQUETAS_ROL = { super_admin: 'Super Admin', admin: 'Admin', retencion: 'Retención' };
   let rolActual = null;
+  // Solo true si el super_admin ha marcado "Puede instalar la app" para este
+  // usuario (panel de gestion de usuarios); controla el boton flotante
+  // "Instalar app" y el aviso de iOS (ver actualizarDisponibilidadInstalarApp).
+  let puedeInstalarApp = false;
 
   // Pestañas ocultas para el rol Retención (analisis financiero/tecnico
   // de contratos, fuera de su ambito). Se eliminan del DOM por completo
@@ -2469,6 +2548,92 @@
         });
       });
     });
+  }
+
+  /* ---------- Resetear datos por pestana (solo super_admin) ----------
+     Un mismo boton/modal reutilizado en Comparador, Alianzas, Análisis,
+     Repositorio y Estadísticas (ver data-reset-tab en el HTML de cada
+     pestaña): Análisis, Repositorio y Estadísticas comparten los mismos
+     datos en el servidor (contract_stats), así que las tres usan el ámbito
+     "contratos" y borran lo mismo. Exige confirmar con la contraseña actual
+     (ver /api/admin/reset-tab-data en el servidor). */
+  const RESET_TAB_CONFIG = {
+    comparador: {
+      titulo: 'Resetear datos: Comparador',
+      texto: 'Vas a borrar todas las notas internas y marcas de vigilancia guardadas sobre las empresas del Comparador. Esta acción no se puede deshacer.',
+    },
+    alianzas: {
+      titulo: 'Resetear datos: Alianzas',
+      texto: 'Vas a borrar TODAS las alianzas (pendientes, publicadas y descartadas), incluidas las noticias del sector que se muestran en Inicio. Esta acción no se puede deshacer.',
+    },
+    contratos: {
+      titulo: 'Resetear datos: Análisis / Repositorio / Estadísticas',
+      texto: 'Análisis, Repositorio y Estadísticas comparten los mismos contratos analizados: vas a borrarlos todos, junto con el mapa de provincias. Esta acción no se puede deshacer.',
+    },
+  };
+  let resetTabEnCurso = null;
+
+  function abrirModalResetTab(tab) {
+    const cfg = RESET_TAB_CONFIG[tab];
+    if (!cfg) return;
+    resetTabEnCurso = tab;
+    document.getElementById('resetTabTitulo').textContent = cfg.titulo;
+    document.getElementById('resetTabTexto').textContent = cfg.texto;
+    document.getElementById('resetTabPassword').value = '';
+    document.getElementById('resetTabError').classList.remove('show');
+    document.getElementById('resetTabModal').classList.add('show');
+    document.getElementById('resetTabPassword').focus();
+  }
+
+  document.querySelectorAll('[data-reset-tab]').forEach(btn => {
+    btn.addEventListener('click', () => abrirModalResetTab(btn.dataset.resetTab));
+  });
+  document.getElementById('resetTabCancelar').addEventListener('click', () => {
+    document.getElementById('resetTabModal').classList.remove('show');
+  });
+
+  document.getElementById('resetTabConfirmar').addEventListener('click', async () => {
+    const password = document.getElementById('resetTabPassword').value;
+    const errorEl = document.getElementById('resetTabError');
+    errorEl.classList.remove('show');
+    if (!password) {
+      errorEl.textContent = 'Introduce tu contraseña para confirmar.';
+      errorEl.classList.add('show');
+      return;
+    }
+    const boton = document.getElementById('resetTabConfirmar');
+    boton.disabled = true;
+    try {
+      const { ok, status, datos } = await llamarAPI('/api/admin/reset-tab-data', {
+        method: 'POST',
+        body: JSON.stringify({ tab: resetTabEnCurso, password }),
+      });
+      if (!ok) {
+        errorEl.textContent = status === 401 ? 'Contraseña incorrecta.' : ((datos && datos.error) || 'No se pudieron borrar los datos.');
+        errorEl.classList.add('show');
+        return;
+      }
+      document.getElementById('resetTabModal').classList.remove('show');
+      refrescarTrasResetTab(resetTabEnCurso);
+      alert((datos && datos.mensaje) || 'Datos eliminados correctamente.');
+    } catch (e) {
+      errorEl.textContent = 'No se pudo conectar con el servidor.';
+      errorEl.classList.add('show');
+    } finally {
+      boton.disabled = false;
+    }
+  });
+
+  function refrescarTrasResetTab(tab) {
+    if (tab === 'comparador') {
+      document.querySelectorAll('#compareTable .watch-btn.is-watched').forEach(b => b.classList.remove('is-watched'));
+      document.querySelectorAll('#compareTable .company-note-input').forEach(t => { t.value = ''; });
+    } else if (tab === 'alianzas') {
+      cargarAlianzas();
+    } else if (tab === 'contratos') {
+      cargarEstadisticas();
+      cargarRepositorio();
+    }
   }
 
   // Orden del Comparador (Precio/Permanencia/Valoración): reordena las filas
@@ -2999,12 +3164,16 @@
     pintarBienvenidaInicio(usuario);
     actualizarBotonPush();
 
+    puedeInstalarApp = !!usuario.canInstallApp;
+    actualizarDisponibilidadInstalarApp();
+
     if (usuario.role === 'super_admin') {
       document.getElementById('adminLink').hidden = false;
       mostrarLeyendasSuperAdmin();
       configurarComparadorSuperAdmin();
       renderFormacionEmpresas(true);
       renderFormacionCompletaEmpresas(true);
+      document.querySelectorAll('[data-reset-tab]').forEach((btn) => { btn.hidden = false; });
     } else {
       // Solo super_admin recibe el desglose de alianzas pendientes (ver
       // apiAlianzasGet en el servidor); en el resto de roles esa tarjeta
@@ -3285,7 +3454,10 @@
 
   // Noticias del sector (Inicio): reutiliza las alianzas ya publicadas
   // (fuente: scraper de la Raspberry Pi) como feed de novedades, mostrando
-  // las mas recientes primero sin repetir la logica de periodos.
+  // las mas recientes primero sin repetir la logica de periodos. Se borran
+  // solas a los 7 dias de publicarse (ver borrarAlianzasPublicadasCaducadas
+  // en el servidor); el super_admin puede adelantarse con el boton
+  // "Eliminar" de cada noticia.
   function renderNoticiasSector(publicadas) {
     const cont = document.getElementById('newsFeed');
     if (!cont) return;
@@ -3299,16 +3471,42 @@
       const fuenteHtml = a.url
         ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer">${fuenteTexto}</a>`
         : fuenteTexto;
+      const fechaPublicacion = a.publicadaEn
+        ? new Date(a.publicadaEn).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+        : (a.fechaDeteccion || '—');
+      const botonEliminar = rolActual === 'super_admin'
+        ? `<button type="button" class="news-item-delete" data-eliminar-noticia="${a.id}">Eliminar</button>`
+        : '';
       return `
         <div class="news-item">
           ${swatchHtml(a.empresaAlarma)}
           <div class="news-item-body">
-            <div class="news-item-title">${escapeHtml(a.empresaAlarma || '')} · ${escapeHtml(a.socio || '')}</div>
+            <div class="news-item-top">
+              <div class="news-item-title">${escapeHtml(a.empresaAlarma || '')} · ${escapeHtml(a.socio || '')}</div>
+              ${botonEliminar}
+            </div>
             <div class="news-item-desc">${escapeHtml(a.tipoAcuerdo || 'Acuerdo detectado')}${a.titular ? ' — ' + escapeHtml(a.titular) : ''}</div>
-            <div class="news-item-meta">${escapeHtml(a.fechaDeteccion || '—')} · ${fuenteHtml}</div>
+            <div class="news-item-meta"><span class="news-item-date">Publicado: ${escapeHtml(fechaPublicacion)}</span> · ${fuenteHtml}</div>
           </div>
         </div>`;
     }).join('');
+
+    cont.querySelectorAll('[data-eliminar-noticia]').forEach((btn) => {
+      btn.addEventListener('click', () => eliminarNoticiaSector(btn.dataset.eliminarNoticia, btn));
+    });
+  }
+
+  async function eliminarNoticiaSector(id, btn) {
+    if (!confirm('¿Eliminar esta noticia? No podrás recuperarla.')) return;
+    btn.disabled = true;
+    try {
+      const { ok, datos } = await llamarAPI(`/api/alianzas/${id}/eliminar`, { method: 'POST', body: JSON.stringify({}) });
+      if (!ok) { alert((datos && datos.error) || 'No se pudo eliminar la noticia.'); btn.disabled = false; return; }
+      cargarAlianzas();
+    } catch (e) {
+      alert('No se pudo conectar con el servidor.');
+      btn.disabled = false;
+    }
   }
 
   const todayStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -5114,7 +5312,12 @@
     });
   }
 
-  /* ---------- Boton "Instalar app" ---------- */
+  /* ---------- Boton "Instalar app" ----------
+     Solo visible para usuarios con el checkbox "Puede instalar la app"
+     marcado por un super_admin (panel de gestion de usuarios). Sin ese
+     permiso (puedeInstalarApp, ver iniciarSesionUI) ni el boton flotante ni
+     el aviso de iOS deben mostrarse nunca, aunque el navegador dispare
+     beforeinstallprompt. */
   const installBtn = document.getElementById('installBtn');
   const iosHint = document.getElementById('iosHint');
   let promptInstalacion = null;
@@ -5123,21 +5326,42 @@
     window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true;
 
+  // iOS/Safari no dispara beforeinstallprompt: se explican los pasos manuales.
+  const CLAVE_AVISO_IOS = 'segurpanel:avisoInstalacionIOS';
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const esSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
+
+  // Se llama tanto al resolver la sesion (ya se conoce puedeInstalarApp)
+  // como al recibir beforeinstallprompt: cualquiera de los dos puede llegar
+  // primero, y ambos deben reevaluar si procede mostrar algo.
+  function actualizarDisponibilidadInstalarApp() {
+    if (!puedeInstalarApp) {
+      installBtn.classList.remove('show');
+      iosHint.classList.remove('show');
+      return;
+    }
+    if (promptInstalacion && !yaInstalada()) installBtn.classList.add('show');
+    if (esIOS && esSafari && !yaInstalada() && !localStorage.getItem(CLAVE_AVISO_IOS)) {
+      setTimeout(() => { if (puedeInstalarApp) iosHint.classList.add('show'); }, 2500);
+    }
+  }
+
   // Chrome/Edge/Android: se captura el evento y se ofrece el dialogo nativo.
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     promptInstalacion = e;
-    if (!yaInstalada()) installBtn.classList.add('show');
+    actualizarDisponibilidadInstalarApp();
   });
 
   installBtn.addEventListener('click', async () => {
-    if (!promptInstalacion) return;
+    if (!promptInstalacion || !puedeInstalarApp) return;
     installBtn.classList.remove('show');
     promptInstalacion.prompt();
     const { outcome } = await promptInstalacion.userChoice;
     promptInstalacion = null;
     // Si la descarta, el boton vuelve por si cambia de idea.
-    if (outcome !== 'accepted') installBtn.classList.add('show');
+    if (outcome !== 'accepted') actualizarDisponibilidadInstalarApp();
   });
 
   window.addEventListener('appinstalled', () => {
@@ -5145,16 +5369,6 @@
     installBtn.classList.remove('show');
     iosHint.classList.remove('show');
   });
-
-  // iOS/Safari no dispara beforeinstallprompt: se explican los pasos manuales.
-  const CLAVE_AVISO_IOS = 'segurpanel:avisoInstalacionIOS';
-  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const esSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
-
-  if (esIOS && esSafari && !yaInstalada() && !localStorage.getItem(CLAVE_AVISO_IOS)) {
-    setTimeout(() => iosHint.classList.add('show'), 2500);
-  }
 
   document.getElementById('iosHintClose').addEventListener('click', () => {
     iosHint.classList.remove('show');

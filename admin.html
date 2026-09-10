@@ -177,7 +177,7 @@
     <div class="table-wrap">
       <table id="tablaUsuarios">
         <thead>
-          <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr>
+          <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Alta</th><th>Instalar app</th><th>Acciones</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -231,6 +231,10 @@
     </select>
     <label for="modalAprobarClave">Clave temporal (opcional: se genera si se deja en blanco)</label>
     <input type="text" id="modalAprobarClave" placeholder="Se generará automáticamente">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+      <input type="checkbox" id="modalAprobarInstalarApp" style="width:auto;">
+      Puede instalar la app
+    </label>
     <div class="modal-actions">
       <button class="btn btn-outline" type="button" id="modalAprobarCancelar">Cancelar</button>
       <button class="btn btn-ok" type="button" id="modalAprobarConfirmar">Aprobar</button>
@@ -346,6 +350,7 @@
     $('modalAprobarEmail').textContent = email;
     $('modalAprobarRol').value = 'retencion';
     $('modalAprobarClave').value = '';
+    $('modalAprobarInstalarApp').checked = false;
     $('modalAprobar').classList.add('show');
   }
   $('modalAprobarCancelar').addEventListener('click', () => $('modalAprobar').classList.remove('show'));
@@ -353,11 +358,12 @@
   $('modalAprobarConfirmar').addEventListener('click', async () => {
     const rol = $('modalAprobarRol').value;
     const clave = $('modalAprobarClave').value.trim();
+    const canInstallApp = $('modalAprobarInstalarApp').checked;
     $('modalAprobarConfirmar').disabled = true;
     try {
       const { ok, datos } = await llamar(`/api/admin/requests/${solicitudEnCurso}/approve`, {
         method: 'POST',
-        body: JSON.stringify({ role: rol, tempPassword: clave || undefined }),
+        body: JSON.stringify({ role: rol, tempPassword: clave || undefined, canInstallApp }),
       });
       if (!ok) { toast(datos.error || 'No se pudo aprobar la solicitud.', true); return; }
       $('modalAprobar').classList.remove('show');
@@ -407,6 +413,9 @@
         </td>
         <td><span class="pill pill-status-${u.status}">${ETIQUETAS_ESTADO[u.status] || u.status}</span></td>
         <td>${formatearFecha(u.createdAt)}</td>
+        <td style="text-align:center;">
+          <input type="checkbox" data-instalar-app="${u.id}" ${u.canInstallApp ? 'checked' : ''} title="Puede instalar la app">
+        </td>
         <td>
           ${u.status === 'active'
             ? `<button class="btn btn-danger" data-desactivar="${u.id}" ${esYo ? 'disabled title="No puedes desactivar tu propia cuenta"' : ''}>Desactivar</button>`
@@ -430,6 +439,22 @@
     tbody.querySelectorAll('[data-reset]').forEach(btn => {
       btn.addEventListener('click', () => resetPassword(btn.dataset.reset));
     });
+    tbody.querySelectorAll('[data-instalar-app]').forEach(chk => {
+      chk.addEventListener('change', () => cambiarInstalarApp(chk.dataset.instalarApp, chk.checked, chk));
+    });
+  }
+
+  async function cambiarInstalarApp(id, canInstallApp, checkboxEl) {
+    const { ok, datos } = await llamar(`/api/admin/users/${id}/install-app`, {
+      method: 'POST',
+      body: JSON.stringify({ canInstallApp }),
+    });
+    if (!ok) {
+      toast(datos.error || 'No se pudo actualizar el permiso de instalación.', true);
+      checkboxEl.checked = !canInstallApp;
+      return;
+    }
+    toast(canInstallApp ? 'Usuario podrá instalar la app.' : 'Se ha revocado el permiso de instalar la app.');
   }
 
   async function cambiarRol(id, rol, selectEl) {
@@ -474,6 +499,8 @@
     analisis_contrato: 'Análisis de contrato',
     publicar_alianza: 'Publicar alianza',
     cambio_rol: 'Cambio de rol',
+    reset_datos_tab: 'Reseteo de datos (pestaña)',
+    eliminar_alianza: 'Eliminar alianza/noticia',
   };
 
   function detalleAuditoriaTexto(registro) {
@@ -487,6 +514,10 @@
         return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
       case 'cambio_rol':
         return escapeHtml(`${d.usuarioObjetivo || '—'}: ${d.rolAnterior || '—'} → ${d.rolNuevo || '—'}`);
+      case 'reset_datos_tab':
+        return escapeHtml(`${d.tab || '—'} (${d.eliminados || 0} eliminado(s))`);
+      case 'eliminar_alianza':
+        return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
       default:
         return escapeHtml(JSON.stringify(d));
     }
