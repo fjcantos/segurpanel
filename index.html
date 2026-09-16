@@ -1032,6 +1032,20 @@
   .linechart-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
   /* ---------- Repositorio ---------- */
+  .repo-subtabs { display: flex; gap: 8px; margin: 14px 0 18px; border-bottom: 1px solid var(--border); }
+  .repo-subtab-btn {
+    border: none;
+    background: none;
+    color: var(--muted);
+    padding: 8px 4px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .repo-subtab-btn.active { color: var(--heading); border-bottom-color: var(--navy); }
+  .repo-download-pdf-btn { margin-top: 8px; }
   .repo-filters {
     display: flex;
     flex-wrap: wrap;
@@ -2027,62 +2041,117 @@
 
   <!-- ===== REPOSITORIO (solo super_admin y admin) ===== -->
   <section id="repositorio" class="tab-content" data-restricted="retencion">
-    <h2 class="section-title">Repositorio de contratos</h2>
-    <p class="section-sub">Cada contrato analizado en la pestaña Análisis se guarda aquí ya anonimizado (sin ningún dato personal): empresa, tipo, provincia, fecha, riesgo y cláusulas detectadas. Se compara automáticamente con contratos anteriores de la misma empresa y tipo para avisar de cláusulas nuevas, modificadas o eliminadas.</p>
+    <h2 class="section-title">Repositorio</h2>
+    <p class="section-sub">Cada contrato analizado en la pestaña Análisis se guarda aquí ya anonimizado (sin ningún dato personal), tanto la detección básica de cláusulas como el análisis legal avanzado con IA. Se compara automáticamente con la versión anterior de la misma empresa y tipo para avisar de cláusulas nuevas, modificadas o eliminadas.</p>
 
-    <div class="compare-legend" id="repoLegend" hidden></div>
+    <div class="repo-subtabs" id="repoSubtabs">
+      <button type="button" class="repo-subtab-btn active" data-repo-subtab="contratos">Contratos</button>
+      <button type="button" class="repo-subtab-btn" data-repo-subtab="avanzados">Análisis Avanzados</button>
+    </div>
 
-    <button type="button" class="btn-export" id="btnExportRepositorio">⬇ Exportar a Excel</button>
-    <button type="button" class="btn-reset-tab" data-reset-tab="contratos" hidden>🗑 Resetear datos</button>
+    <div id="repoVistaContratos">
+      <div class="compare-legend" id="repoLegend" hidden></div>
 
-    <div class="repo-filters">
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Empresa</div>
-        <div class="repo-filter-swatches" id="repoFiltroEmpresa"></div>
-      </div>
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Tipo</div>
-        <div class="repo-pill-group" id="repoFiltroTipo">
-          <button class="repo-pill active" type="button" data-tipo="">Todos</button>
-          <button class="repo-pill" type="button" data-tipo="hogar">Hogar</button>
-          <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
-          <button class="repo-pill" type="button" data-tipo="__sin_clasificar__">Sin clasificar</button>
+      <button type="button" class="btn-export" id="btnExportRepositorio">⬇ Exportar a Excel</button>
+      <button type="button" class="btn-reset-tab" data-reset-tab="contratos" hidden>🗑 Resetear datos</button>
+
+      <div class="repo-filters">
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Empresa</div>
+          <div class="repo-filter-swatches" id="repoFiltroEmpresa"></div>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Tipo</div>
+          <div class="repo-pill-group" id="repoFiltroTipo">
+            <button class="repo-pill active" type="button" data-tipo="">Todos</button>
+            <button class="repo-pill" type="button" data-tipo="hogar">Hogar</button>
+            <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
+            <button class="repo-pill" type="button" data-tipo="__sin_clasificar__">Sin clasificar</button>
+          </div>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Provincia</div>
+          <select id="repoFiltroProvincia"><option value="">Todas</option></select>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Riesgo</div>
+          <select id="repoFiltroNivel">
+            <option value="">Todos</option>
+            <option value="bajo">Bajo</option>
+            <option value="medio">Medio</option>
+            <option value="alto">Alto</option>
+            <option value="muy_alto">Muy alto</option>
+          </select>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Desde</div>
+          <input type="date" id="repoFiltroDesde">
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Hasta</div>
+          <input type="date" id="repoFiltroHasta">
         </div>
       </div>
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Provincia</div>
-        <select id="repoFiltroProvincia"><option value="">Todas</option></select>
+
+      <div class="repo-list" id="repoLista"><div class="empty-note">Cargando…</div></div>
+
+      <h3 class="equip-section-title">Evolución por compañía</h3>
+      <p class="chart-sub">Elige una compañía y un tipo de contrato para ver su línea temporal, con los cambios de cláusulas destacados.</p>
+      <div class="repo-filter-swatches" id="repoHistEmpresa"></div>
+      <div class="repo-pill-group repo-hist-tipo" id="repoHistTipo">
+        <button class="repo-pill active" type="button" data-tipo="hogar">Hogar</button>
+        <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
       </div>
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Riesgo</div>
-        <select id="repoFiltroNivel">
-          <option value="">Todos</option>
-          <option value="bajo">Bajo</option>
-          <option value="medio">Medio</option>
-          <option value="alto">Alto</option>
-          <option value="muy_alto">Muy alto</option>
-        </select>
-      </div>
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Desde</div>
-        <input type="date" id="repoFiltroDesde">
-      </div>
-      <div class="repo-filter-group">
-        <div class="repo-filter-label">Hasta</div>
-        <input type="date" id="repoFiltroHasta">
-      </div>
+      <div class="repo-timeline" id="repoTimeline"><div class="empty-note">Elige una compañía arriba para ver su evolución.</div></div>
     </div>
 
-    <div class="repo-list" id="repoLista"><div class="empty-note">Cargando…</div></div>
+    <div id="repoVistaAvanzados" hidden>
+      <p class="chart-sub">Análisis legal cláusula por cláusula elaborado con IA, guardado automáticamente cada vez que se genera desde la pestaña «Análisis Avanzado».</p>
 
-    <h3 class="equip-section-title">Evolución por compañía</h3>
-    <p class="chart-sub">Elige una compañía y un tipo de contrato para ver su línea temporal, con los cambios de cláusulas destacados.</p>
-    <div class="repo-filter-swatches" id="repoHistEmpresa"></div>
-    <div class="repo-pill-group repo-hist-tipo" id="repoHistTipo">
-      <button class="repo-pill active" type="button" data-tipo="hogar">Hogar</button>
-      <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
+      <div class="compare-legend" id="repoLegendAvz" hidden></div>
+
+      <button type="button" class="btn-export" id="btnExportRepositorioAvz">⬇ Exportar a Excel</button>
+
+      <div class="repo-filters">
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Empresa</div>
+          <div class="repo-filter-swatches" id="repoFiltroEmpresaAvz"></div>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Tipo</div>
+          <div class="repo-pill-group" id="repoFiltroTipoAvz">
+            <button class="repo-pill active" type="button" data-tipo="">Todos</button>
+            <button class="repo-pill" type="button" data-tipo="hogar">Hogar</button>
+            <button class="repo-pill" type="button" data-tipo="negocio">Negocio</button>
+            <button class="repo-pill" type="button" data-tipo="__sin_clasificar__">Sin clasificar</button>
+          </div>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Provincia</div>
+          <select id="repoFiltroProvinciaAvz"><option value="">Todas</option></select>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Riesgo</div>
+          <select id="repoFiltroNivelAvz">
+            <option value="">Todos</option>
+            <option value="bajo">Bajo</option>
+            <option value="medio">Medio</option>
+            <option value="alto">Alto</option>
+            <option value="muy_alto">Muy alto</option>
+          </select>
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Desde</div>
+          <input type="date" id="repoFiltroDesdeAvz">
+        </div>
+        <div class="repo-filter-group">
+          <div class="repo-filter-label">Hasta</div>
+          <input type="date" id="repoFiltroHastaAvz">
+        </div>
+      </div>
+
+      <div class="repo-list" id="repoListaAvz"><div class="empty-note">Cargando…</div></div>
     </div>
-    <div class="repo-timeline" id="repoTimeline"><div class="empty-note">Elige una compañía arriba para ver su evolución.</div></div>
   </section>
 
   <!-- ===== ANALISIS AVANZADO ===== -->
@@ -2487,7 +2556,7 @@
   // de color, tanto en las tablas/tarjetas como en cualquier otra parte de
   // la pantalla.
   function mostrarLeyendasSuperAdmin() {
-    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend', 'equiposLegend', 'statsLegend', 'repoLegend'].forEach(id => {
+    ['compareLegend', 'offersLegend', 'alianzasLegend', 'intelLegend', 'equiposLegend', 'statsLegend', 'repoLegend', 'repoLegendAvz'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.innerHTML = construirLeyendaHTML();
@@ -2568,7 +2637,7 @@
     },
     contratos: {
       titulo: 'Resetear datos: Análisis / Repositorio / Estadísticas',
-      texto: 'Análisis, Repositorio y Estadísticas comparten los mismos contratos analizados: vas a borrarlos todos, junto con el mapa de provincias. Esta acción no se puede deshacer.',
+      texto: 'Análisis, Repositorio (Contratos y Análisis Avanzados) y Estadísticas comparten los mismos contratos analizados: vas a borrarlos todos, junto con el mapa de provincias. Esta acción no se puede deshacer.',
     },
   };
   let resetTabEnCurso = null;
@@ -3636,12 +3705,14 @@
     </div>`;
   }
 
-  // Llama a /api/repositorio/:id/tipo y sustituye el contenido de
-  // `contenedorFila` por el resultado (exito o error). Devuelve true/false.
-  async function clasificarContrato(id, tipo, contenedorFila) {
+  // Llama a <endpointBase>/:id/tipo (por defecto /api/repositorio, tambien
+  // usado por Analisis Avanzados con /api/repositorio-avanzado) y sustituye
+  // el contenido de `contenedorFila` por el resultado (exito o error).
+  // Devuelve true/false.
+  async function clasificarContrato(id, tipo, contenedorFila, endpointBase) {
     contenedorFila.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
-      const { ok, datos } = await llamarAPI(`/api/repositorio/${id}/tipo`, {
+      const { ok, datos } = await llamarAPI(`${endpointBase || '/api/repositorio'}/${id}/tipo`, {
         method: 'POST',
         body: JSON.stringify({ tipo }),
       });
@@ -4642,6 +4713,233 @@
     }).join('');
   }
 
+  /* ---------- Repositorio > sub-pestanas (Contratos / Analisis Avanzados) ---------- */
+  document.querySelectorAll('.repo-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.repo-subtab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const esAvanzados = btn.dataset.repoSubtab === 'avanzados';
+      document.getElementById('repoVistaContratos').hidden = esAvanzados;
+      document.getElementById('repoVistaAvanzados').hidden = !esAvanzados;
+      if (esAvanzados && !repoAvzCargadoAlgunaVez) cargarRepositorioAvanzado();
+    });
+  });
+
+  /* ---------- Repositorio > Analisis Avanzados (guardado automatico de cada
+     analisis legal con IA) ----------
+     Mismo patron que el Repositorio de contratos basico: se pide siempre el
+     listado completo (el backend ya calcula los cambios sobre el historial
+     entero de cada grupo empresa+tipo) y aqui solo se filtra en memoria. */
+  let repoAvzDatosCompletos = [];
+  let repoAvzCargadoAlgunaVez = false;
+  let repoAvzFiltrosInicializados = false;
+  let repoAvzFiltroEmpresa = '';
+  let repoAvzFiltroTipo = '';
+
+  function inicializarFiltrosRepositorioAvz() {
+    if (repoAvzFiltrosInicializados) return;
+    repoAvzFiltrosInicializados = true;
+
+    const empresas = Object.keys(COLORES_EMPRESA);
+
+    const contFiltroEmpresa = document.getElementById('repoFiltroEmpresaAvz');
+    contFiltroEmpresa.innerHTML =
+      `<button class="repo-swatch-btn repo-swatch-all active" type="button" data-empresa="">Todas</button>` +
+      empresas.map(e => `<button class="repo-swatch-btn" type="button" data-empresa="${escapeHtml(e)}">${swatchHtml(e)}</button>`).join('');
+    contFiltroEmpresa.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        contFiltroEmpresa.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoAvzFiltroEmpresa = btn.dataset.empresa;
+        aplicarFiltrosRepositorioAvanzadoYRenderizar();
+      });
+    });
+
+    document.getElementById('repoFiltroTipoAvz').querySelectorAll('.repo-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('repoFiltroTipoAvz').querySelectorAll('.repo-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        repoAvzFiltroTipo = btn.dataset.tipo;
+        aplicarFiltrosRepositorioAvanzadoYRenderizar();
+      });
+    });
+
+    ['repoFiltroProvinciaAvz', 'repoFiltroNivelAvz', 'repoFiltroDesdeAvz', 'repoFiltroHastaAvz'].forEach(id => {
+      document.getElementById(id).addEventListener('change', aplicarFiltrosRepositorioAvanzadoYRenderizar);
+    });
+  }
+
+  async function cargarRepositorioAvanzado() {
+    inicializarFiltrosRepositorioAvz();
+    repoAvzCargadoAlgunaVez = true;
+    const lista = document.getElementById('repoListaAvz');
+    lista.innerHTML = '<div class="empty-note">Cargando…</div>';
+    try {
+      const { ok, datos } = await llamarAPI('/api/repositorio-avanzado');
+      if (!ok) {
+        lista.innerHTML = `<div class="empty-note">${escapeHtml((datos && datos.error) || 'No se pudo cargar los análisis avanzados.')}</div>`;
+        return;
+      }
+      repoAvzDatosCompletos = datos.analisisAvanzados || [];
+      poblarProvinciasRepositorioAvz();
+      aplicarFiltrosRepositorioAvanzadoYRenderizar();
+    } catch (e) {
+      lista.innerHTML = '<div class="empty-note">No se pudo conectar con el servidor.</div>';
+    }
+  }
+
+  const btnExportRepositorioAvz = document.getElementById('btnExportRepositorioAvz');
+  if (btnExportRepositorioAvz) {
+    btnExportRepositorioAvz.addEventListener('click', (e) => {
+      const columnas = ['Empresa', 'Tipo', 'Provincia', 'Fecha', 'Riesgo', 'Resumen', 'Cláusulas analizadas'];
+      const coloresEmpresa = {};
+      const filas = repoAvzDatosCompletos.map(a => {
+        const empresa = a.empresa || 'Sin identificar';
+        const colorHex = colorEmpresaHexSolido(a.empresa);
+        if (colorHex) coloresEmpresa[empresa] = colorHex;
+        return [
+          empresa,
+          a.tipo === 'hogar' ? 'Hogar' : a.tipo === 'negocio' ? 'Negocio' : 'Sin clasificar',
+          a.provincia || '—',
+          a.fecha ? new Date(a.fecha).toLocaleDateString('es-ES') : '—',
+          `${ETIQUETAS_RIESGO[a.nivel] || a.nivel || '—'} · ${a.puntuacion}/10`,
+          a.resumenGeneral || '—',
+          (a.clausulas || []).map(cl => cl.titulo).join('; ') || '—',
+        ];
+      });
+      exportarExcel(e.currentTarget, nombreArchivoConFecha('segurpanel-repositorio-avanzado'), [
+        { titulo: 'Análisis Avanzados', columnas, filas, coloresEmpresa },
+      ]);
+    });
+  }
+
+  function poblarProvinciasRepositorioAvz() {
+    const select = document.getElementById('repoFiltroProvinciaAvz');
+    const actual = select.value;
+    const provincias = [...new Set(repoAvzDatosCompletos.map(a => a.provincia).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas</option>' + provincias.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    if (provincias.includes(actual)) select.value = actual;
+  }
+
+  function aplicarFiltrosRepositorioAvanzadoYRenderizar() {
+    const provincia = document.getElementById('repoFiltroProvinciaAvz').value;
+    const nivel = document.getElementById('repoFiltroNivelAvz').value;
+    const desde = document.getElementById('repoFiltroDesdeAvz').value;
+    const hasta = document.getElementById('repoFiltroHastaAvz').value;
+
+    let lista = repoAvzDatosCompletos;
+    if (repoAvzFiltroEmpresa) lista = lista.filter(a => a.empresa === repoAvzFiltroEmpresa);
+    if (repoAvzFiltroTipo === '__sin_clasificar__') lista = lista.filter(a => !a.tipo);
+    else if (repoAvzFiltroTipo) lista = lista.filter(a => a.tipo === repoAvzFiltroTipo);
+    if (provincia) lista = lista.filter(a => a.provincia === provincia);
+    if (nivel) lista = lista.filter(a => a.nivel === nivel);
+    if (desde) lista = lista.filter(a => a.fecha.slice(0, 10) >= desde);
+    if (hasta) lista = lista.filter(a => a.fecha.slice(0, 10) <= hasta);
+
+    renderRepoListaAvz(lista);
+  }
+
+  function renderClausulasAvzDetalle(clausulas) {
+    if (!clausulas || !clausulas.length) return '<div class="empty-note" style="padding:4px 0;">No se identificaron cláusulas individuales.</div>';
+    return clausulas.map(c => {
+      const color = COLORES_RIESGO[c.riesgo] || COLORES_RIESGO.bajo;
+      return `
+        <div class="clause-item risk-${escapeHtml(c.riesgo || 'bajo')}">
+          <div>
+            <div class="clause-label">Cláusula ${escapeHtml(String(c.numero))} · ${escapeHtml(c.titulo)}<span class="clause-risk-tag" style="background:${color}22;color:${color};">${escapeHtml(ETIQUETAS_RIESGO[c.riesgo] || c.riesgo)}</span></div>
+            <div class="clause-explicacion">${escapeHtml(c.explicacion)}</div>
+            <div class="clause-base-legal">Base legal: ${escapeHtml(c.baseLegal)}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function tarjetaRepositorioAvanzado(a) {
+    const nivelClase = 'nivel-' + (a.nivel || 'bajo');
+    const nivelTexto = a.nivel ? `${ETIQUETAS_RIESGO[a.nivel]} · ${a.puntuacion}/10` : 'Sin riesgo';
+    const tipoTexto = a.tipo ? TIPO_CONTRATO_LABEL[a.tipo] : 'Sin clasificar';
+    const tieneCambios = !!(a.cambios && a.cambios.tieneCambios);
+
+    return `
+      <div class="repo-card" data-id="${a.id}">
+        <div class="repo-card-top">
+          ${swatchHtml(a.empresa)}
+          <div class="repo-card-info">
+            <div class="repo-card-fecha">${formatoFechaCorta(a.fecha)}</div>
+            <div class="repo-card-meta">${escapeHtml(tipoTexto)} · ${escapeHtml(a.provincia || 'Provincia desconocida')}</div>
+          </div>
+          <span class="repo-risk-badge ${nivelClase}">${escapeHtml(nivelTexto)}</span>
+          ${tieneCambios ? `<span class="change-dot" title="${escapeHtml(resumenCambiosTexto(a.cambios))}"></span>` : ''}
+          <button class="repo-expand-btn" type="button">Detalle ▾</button>
+        </div>
+        <div class="repo-card-detail" hidden>
+          <div class="clause-explicacion" style="margin-bottom:8px;">${escapeHtml(a.resumenGeneral || '')}</div>
+          ${tieneCambios ? renderCambiosBox(a.cambios) : ''}
+          ${!a.tipo ? renderFilaClasificar(a.id, null) : ''}
+          ${renderClausulasAvzDetalle(a.clausulas)}
+          <div>
+            <button class="repo-download-pdf-btn" type="button" data-id="${a.id}">⬇ Descargar informe PDF</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function descargarPdfRepositorioAvanzado(id, btnEl) {
+    const textoOriginalBtn = btnEl.textContent;
+    btnEl.textContent = 'Generando…';
+    btnEl.disabled = true;
+    try {
+      const respuesta = await fetch(`/api/repositorio-avanzado/${id}/pdf`, { credentials: 'same-origin' });
+      if (respuesta.status === 401) {
+        window.location.href = '/';
+        return;
+      }
+      if (!respuesta.ok) throw new Error('No se pudo generar el PDF.');
+      const blob = await respuesta.blob();
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = `informe-analisis-avanzado-uic-${id}.pdf`;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('No se pudo descargar el informe PDF.');
+    } finally {
+      btnEl.textContent = textoOriginalBtn;
+      btnEl.disabled = false;
+    }
+  }
+
+  function renderRepoListaAvz(lista) {
+    const cont = document.getElementById('repoListaAvz');
+    if (!lista.length) {
+      cont.innerHTML = '<div class="empty-note">No hay análisis avanzados que coincidan con estos filtros.</div>';
+      return;
+    }
+    cont.innerHTML = lista.map(a => tarjetaRepositorioAvanzado(a)).join('');
+
+    cont.querySelectorAll('.repo-expand-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const detalle = btn.closest('.repo-card').querySelector('.repo-card-detail');
+        detalle.hidden = !detalle.hidden;
+        btn.textContent = detalle.hidden ? 'Detalle ▾' : 'Detalle ▴';
+      });
+    });
+    cont.querySelectorAll('.repo-classify-row button[data-clasificar]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fila = btn.closest('.repo-classify-row');
+        const ok = await clasificarContrato(Number(btn.dataset.id), btn.dataset.clasificar, fila, '/api/repositorio-avanzado');
+        if (ok) cargarRepositorioAvanzado();
+      });
+    });
+    cont.querySelectorAll('.repo-download-pdf-btn').forEach(btn => {
+      btn.addEventListener('click', () => descargarPdfRepositorioAvanzado(Number(btn.dataset.id), btn));
+    });
+  }
+
   /* ---------- Analisis Avanzado: analisis legal con IA (Claude) ----------
      Se dispara automaticamente desde handleFile() (pestana Analisis), no
      tiene subida de archivo propia: procesa el mismo archivo en el
@@ -4737,7 +5035,12 @@
       resumen.resumenGeneral || 'Revisa el detalle de cada cláusula antes de firmar.';
     riskSummary.classList.add('show');
 
-    resultsAdvEl.innerHTML = '';
+    resultsAdvEl.innerHTML = (resumen.cambios && resumen.cambios.tieneCambios)
+      ? renderCambiosBox(resumen.cambios).replace(
+          'Cambios respecto al contrato anterior de esta empresa y tipo:',
+          'Cambios respecto al análisis avanzado anterior de esta empresa y tipo:'
+        )
+      : '';
     if (clausulas.length === 0) {
       const note = document.createElement('div');
       note.className = 'empty-note';

@@ -185,14 +185,19 @@ const REGLAS_ANONIMIZACION = [
   { id: "email", etiqueta: "[EMAIL]", re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
   // IBAN / cuenta bancaria (ES + 2 digitos de control + 20 digitos, con o sin espacios)
   { id: "iban", etiqueta: "[IBAN]", re: /\b[A-Z]{2}\d{2}(?:[ -]?\d{4}){4,5}\b/g },
-  // NIE: letra X/Y/Z + 7 digitos + letra
-  { id: "nie", etiqueta: "[NIE]", re: /\b[XYZxyz]\d{7}[A-Za-z]\b/g },
+  // Cuenta bancaria formato CCC antiguo (4-4-2-10 digitos, con o sin
+  // separadores). Va antes que telefono: aunque \b evita que un telefono de 9
+  // digitos "muerda" en mitad de esta tirada de 20, mantener el orden deja
+  // claro cual de las dos reglas manda si algun dia dejan de ser excluyentes.
+  { id: "cuenta_bancaria", etiqueta: "[CUENTA_BANCARIA]", re: /\b\d{4}[ -]?\d{4}[ -]?\d{2}[ -]?\d{10}\b/g },
+  // NIE: letra X/Y/Z + 7 digitos + letra, con separador opcional (espacio o guion)
+  { id: "nie", etiqueta: "[NIE]", re: /\b[XYZxyz][-\s]?\d{7}[-\s]?[A-Za-z]\b/g },
   // CIF: letra + 7 digitos + digito/letra de control
   { id: "cif", etiqueta: "[CIF]", re: /\b[A-HJNPQSUVWabhjnpqsuvw]\d{7}[0-9A-Ja-j]\b/g },
-  // DNI/NIF: 8 digitos + letra
-  { id: "dni", etiqueta: "[DNI/NIF]", re: /\b\d{8}[A-Za-z]\b/g },
-  // Telefono espanol (fijo o movil, con o sin prefijo +34)
-  { id: "telefono", etiqueta: "[TELÉFONO]", re: /(?:(?:\+|00)34[ .-]?)?\b[6789]\d{2}(?:[ .-]?\d{3}){2}\b/g },
+  // DNI/NIF: 8 digitos + letra, con separador opcional (espacio o guion)
+  { id: "dni", etiqueta: "[DNI/NIF]", re: /\b\d{8}[-\s]?[A-Za-z]\b/g },
+  // Telefono espanol (fijo o movil, con o sin prefijo +34, con o sin parentesis)
+  { id: "telefono", etiqueta: "[TELÉFONO]", re: /(?:\(?(?:\+|00)34\)?[ .-]?)?\b[6789]\d{2}(?:[ .-]?\d{3}){2}\b/g },
   // Direcciones postales habituales en contratos
   {
     id: "direccion",
@@ -208,20 +213,34 @@ const REGLAS_ANONIMIZACION = [
   },
   // Codigo postal + poblacion (p.ej. "28045 Madrid")
   { id: "cp", etiqueta: "[CÓDIGO POSTAL]", re: /\b\d{5}\b(?=\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})/g },
-  // Numero de cliente/abonado/poliza/contrato (identificador interno que
-  // permite rastrear a la persona aunque el nombre ya se haya anonimizado)
+  // Matricula espanola actual: 4 digitos + 3 consonantes (sin vocales/Ñ/Q)
+  { id: "matricula", etiqueta: "[MATRÍCULA]", re: /\b\d{4}\s?-?\s?[BCDFGHJKLMNPRSTVWXYZ]{3}\b/g },
+  // URLs (http/https o www.), para no dejar rastreable ninguna web de terceros
+  { id: "url", etiqueta: "[URL]", re: /\b(?:https?:\/\/|www\.)[^\s,;]+/gi },
+  // Numero de cliente/abonado/poliza/contrato/serie/orden (identificador
+  // interno que permite rastrear a la persona aunque el nombre ya se haya
+  // anonimizado)
   {
     id: "referencia",
     etiqueta: "[REF]",
-    re: /(?:N[uú]mero|N[ºo]\.?)\s+de\s+(?:cliente|abonado|p[oó]liza|contrato|expediente|instalaci[oó]n)(\s*:?\s*)([A-Za-z0-9/\-]{3,20})/gi,
+    re: /(?:(?:N[uú]mero|N[ºo]\.?)\s+de\s+(?:cliente|abonado|p[oó]liza|contrato|expediente|instalaci[oó]n|serie|orden)|C[oó]digo de cliente|Id de cliente)(\s*:?\s*)([A-Za-z0-9/\-]{3,20})/gi,
     grupoReemplazo: 2,
   },
-  // Nombres de persona tras etiquetas habituales de contrato. Admite
-  // apellidos compuestos con conectores en minuscula ("de", "del", "la"...).
+  // Nombres de persona tras etiquetas habituales de contrato (incluye
+  // firmas: "Fdo.:", "P.p."). Admite apellidos compuestos con conectores en
+  // minuscula ("de", "del", "la"...).
   {
     id: "nombre",
     etiqueta: "[NOMBRE]",
-    re: /(?:D\.|Dña\.|Don|Doña|Sr\.|Sra\.|Nombre y apellidos|Nombre del cliente|Nombre del titular|Nombre del contratante|Titular|Abonado|Asegurado|Contratante|Suscriptor|Representante legal|Representado por|En representaci[oó]n de|Firmado por|Apellidos y nombre|Cliente)(\s*:?\s*)([A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+(?:\s+(?:de|del|de la|de los|de las|la|las|los|y)\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+|\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+){1,4})/g,
+    re: /(?:D\.|Dña\.|Don|Doña|Sr\.|Sra\.|Nombre y apellidos|Nombre del cliente|Nombre del titular|Nombre del contratante|Titular|Abonado|Asegurado|Contratante|Suscriptor|Representante legal|Representado por|En representaci[oó]n de|Firmado por|Fdo\.?:?|P\.p\.?|Apellidos y nombre|Cliente)(\s*:?\s*)([A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+(?:\s+(?:de|del|de la|de los|de las|la|las|los|y)\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+|\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+){1,4})/g,
+    grupoReemplazo: 2,
+  },
+  // Razon social por etiqueta explicita (antes de la regla generica S.L./S.A.
+  // para que capture tambien nombres comerciales que no llevan esos sufijos)
+  {
+    id: "razon_social",
+    etiqueta: "[EMPRESA]",
+    re: /(?:Raz[oó]n Social|Denominaci[oó]n Social|Nombre comercial|Titular de la actividad|Nombre de la empresa)(\s*:?\s*)([^\n,;]{2,80})/gi,
     grupoReemplazo: 2,
   },
   // Razon social generica ("... S.L.", "... S.A.", "... S.L.U.", "... S.C.")

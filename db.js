@@ -143,6 +143,21 @@ db.exec(`
     created_at  TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS contratos_avanzados (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    provincia          TEXT,
+    empresa            TEXT,
+    tipo               TEXT,
+    puntuacion         INTEGER,
+    nivel_global       TEXT,
+    resumen_general    TEXT,
+    clausulas_json     TEXT,
+    total_anonimizado  INTEGER,
+    texto_anonimizado  TEXT,
+    user_id            INTEGER REFERENCES users(id),
+    created_at         TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
@@ -151,6 +166,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_contratos_avanzados_empresa_tipo ON contratos_avanzados(empresa, tipo);
 `);
 
 // Migracion defensiva: contract_stats se creo en una version anterior sin
@@ -611,6 +627,76 @@ function borrarContractStats() {
   return info.changes;
 }
 
+/* ---------- Repositorio de analisis avanzados (contratos_avanzados) ---------- */
+//
+// Analogo a contract_stats/Repositorio pero para el analisis legal avanzado
+// con IA (clausula por clausula, con resumen y base legal): cada llamada a
+// /api/analisis-avanzado guarda aqui su resultado ya anonimizado. Se lista
+// SIEMPRE en orden cronologico ascendente por el mismo motivo que
+// listarRepositorioResumen: la deteccion de cambios (server.js) compara cada
+// analisis con el inmediatamente anterior de su mismo grupo empresa+tipo.
+
+function registrarAnalisisAvanzado({
+  provincia,
+  empresa,
+  tipo,
+  puntuacion,
+  nivelGlobal,
+  resumenGeneral,
+  clausulas,
+  totalAnonimizado,
+  textoAnonimizado,
+  userId,
+}) {
+  const info = db
+    .prepare(
+      `INSERT INTO contratos_avanzados
+        (provincia, empresa, tipo, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, texto_anonimizado, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      provincia || null,
+      empresa || null,
+      tipo === "hogar" || tipo === "negocio" ? tipo : null,
+      Number.isFinite(puntuacion) ? puntuacion : null,
+      nivelGlobal || null,
+      resumenGeneral || null,
+      JSON.stringify(clausulas || []),
+      Number.isFinite(totalAnonimizado) ? totalAnonimizado : null,
+      textoAnonimizado || null,
+      userId || null,
+      ahoraISO()
+    );
+  return Number(info.lastInsertRowid);
+}
+
+function listarAnalisisAvanzadoResumen() {
+  return db
+    .prepare(
+      `SELECT id, provincia, empresa, tipo, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, created_at, user_id
+       FROM contratos_avanzados
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all();
+}
+
+function obtenerAnalisisAvanzadoDetalle(id) {
+  return db.prepare("SELECT * FROM contratos_avanzados WHERE id = ?").get(id);
+}
+
+function clasificarAnalisisAvanzado(id, tipo) {
+  db.prepare("UPDATE contratos_avanzados SET tipo = ? WHERE id = ?").run(tipo, id);
+  return db.prepare("SELECT id, tipo FROM contratos_avanzados WHERE id = ?").get(id);
+}
+
+// Usado por "Resetear datos de prueba" y el reseteo por pestana (ambito
+// "contratos"): contratos_avanzados solo alimenta la vista "Analisis
+// Avanzados" del Repositorio, asi que se borra junto con contract_stats.
+function borrarAnalisisAvanzado() {
+  const info = db.prepare("DELETE FROM contratos_avanzados").run();
+  return info.changes;
+}
+
 function estadisticasPorProvincia() {
   return db
     .prepare(
@@ -824,6 +910,11 @@ module.exports = {
   obtenerContratoDetalle,
   clasificarContrato,
   borrarContractStats,
+  registrarAnalisisAvanzado,
+  listarAnalisisAvanzadoResumen,
+  obtenerAnalisisAvanzadoDetalle,
+  clasificarAnalisisAvanzado,
+  borrarAnalisisAvanzado,
   estadisticasPorProvincia,
   contarUsuariosActivos,
   registrarVisitaTab,

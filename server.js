@@ -640,11 +640,11 @@ async function apiAdminResetDatosPrueba(req, res) {
     });
   }
 
-  const eliminados = db.borrarContractStats();
+  const eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
   enviarJSON(res, 200, {
     ok: true,
     eliminados,
-    mensaje: `Datos de prueba eliminados: ${eliminados} contrato(s) borrado(s) del Repositorio, Estadísticas y el mapa de provincias.`,
+    mensaje: `Datos de prueba eliminados: ${eliminados} contrato(s)/análisis avanzado(s) borrado(s) del Repositorio (Contratos y Análisis Avanzados), Estadísticas y el mapa de provincias.`,
   });
 }
 
@@ -656,8 +656,9 @@ async function apiAdminResetDatosPrueba(req, res) {
 //   - comparador: notas internas y marcas de "vigilar" por empresa.
 //   - alianzas: alianzas pendientes, publicadas y descartadas (incluye las
 //     noticias del sector mostradas en Inicio, que reutilizan las publicadas).
-//   - contratos: Análisis, Repositorio y Estadísticas comparten la misma
-//     tabla (contract_stats), asi que las tres pestañas borran lo mismo.
+//   - contratos: Análisis, Repositorio (Contratos y Análisis Avanzados) y
+//     Estadísticas comparten las tablas contract_stats/contratos_avanzados,
+//     asi que las tres pestañas borran lo mismo.
 // Misma exigencia que el reseteo global: confirmar con la contraseña actual
 // de quien ejecuta la accion.
 const AMBITOS_RESET_TAB = new Set(["comparador", "alianzas", "contratos"]);
@@ -695,8 +696,8 @@ async function apiAdminResetTabData(req, res) {
     eliminados = db.borrarAlianzas();
     mensaje = `Datos eliminados: ${eliminados} alianza(s) borrada(s) (pendientes, publicadas y descartadas).`;
   } else if (tab === "contratos") {
-    eliminados = db.borrarContractStats();
-    mensaje = `Datos eliminados: ${eliminados} contrato(s) borrado(s) de Análisis, Repositorio y Estadísticas.`;
+    eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
+    mensaje = `Datos eliminados: ${eliminados} contrato(s)/análisis avanzado(s) borrado(s) de Análisis, Repositorio (Contratos y Análisis Avanzados) y Estadísticas.`;
   }
 
   registrarAuditoriaSegura({
@@ -1102,6 +1103,12 @@ async function apiAnalisisAvanzado(req, res) {
       });
     }
 
+    // Provincia y empresa se extraen del texto ORIGINAL (antes de anonimizar,
+    // que sustituye justamente el CP y el nombre de la empresa), igual que en
+    // apiAnalisis.
+    const { provincia, empresa } = analisis.extraerProvinciaYEmpresa(textoOriginal);
+    const { tipo, certeza: tipoDetectadoConCerteza } = analisis.detectarTipoContrato(textoOriginal);
+
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
     const analisisIA = await analisis.analizarConIA(textoAnonimizado);
     // Segunda pasada de anonimizacion sobre el TEXTO GENERADO por la IA: la
@@ -1110,7 +1117,68 @@ async function apiAnalisisAvanzado(req, res) {
     // modelo reformulase o citase algo del contexto.
     const { resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas } = analisis.anonimizarResumenIA(analisisIA);
 
-    const resumen = { resumenGeneral, puntuacionGlobal, nivelGlobal, totalAnonimizado, clausulas };
+    const analisisAvanzadoId = db.registrarAnalisisAvanzado({
+      provincia,
+      empresa,
+      tipo,
+      puntuacion: puntuacionGlobal,
+      nivelGlobal,
+      resumenGeneral,
+      clausulas,
+      totalAnonimizado,
+      textoAnonimizado,
+      userId: sesion.usuario.id,
+    });
+
+    registrarAuditoriaSegura({
+      userId: sesion.usuario.id,
+      email: sesion.usuario.email,
+      action: "analisis_avanzado",
+      detail: { analisisAvanzadoId, empresa, tipo },
+      ip: obtenerIP(req),
+    });
+
+    // Aviso por email si este analisis avanzado tiene clausulas distintas al
+    // anterior de la misma empresa+tipo (mismo patron que apiAnalisis con
+    // construirRepositorioCompleto, aqui con la version avanzada).
+    let cambios = null;
+    if (empresa) {
+      try {
+        const repositorioAvanzado = construirRepositorioAvanzadoCompleto();
+        const actual = repositorioAvanzado.find((c) => c.id === analisisAvanzadoId);
+        if (actual && actual.cambios) {
+          cambios = actual.cambios;
+          if (cambios.tieneCambios) {
+            email
+              .enviarEmailCambioClausulas({
+                empresa,
+                tipo,
+                nuevas: cambios.nuevas,
+                modificadas: cambios.modificadas,
+                eliminadas: cambios.eliminadas,
+                fecha: new Date(actual.fecha).toLocaleString("es-ES"),
+              })
+              .catch((e) => console.error("Error enviando email de cambio de cláusulas (avanzado):", e));
+          }
+        }
+      } catch (e) {
+        console.error("Error comprobando cambios de cláusulas (avanzado):", e);
+      }
+    }
+
+    const resumen = {
+      analisisAvanzadoId,
+      provincia,
+      empresa,
+      tipo,
+      tipoDetectadoConCerteza,
+      resumenGeneral,
+      puntuacionGlobal,
+      nivelGlobal,
+      totalAnonimizado,
+      clausulas,
+      cambios,
+    };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
     push
@@ -2118,6 +2186,209 @@ async function apiRepositorioClasificar(req, res, id) {
 }
 
 /* ================================================================
+   API: repositorio de analisis avanzados (solo super_admin y admin)
+   ================================================================ */
+//
+// Analogo a la seccion anterior (Repositorio de contratos) pero para
+// contratos_avanzados: el analisis legal clausula por clausula generado con
+// IA. A diferencia del detector de clausulas por patrones (que usa un `id`
+// fijo por regla), la IA no sigue una taxonomia fija de clausulas, asi que
+// la comparacion entre versiones se hace por titulo normalizado.
+
+// Tabla de acentos en vez de normalize('NFD') + rango combinante: mas simple
+// y explicita, y evita depender de escapes unicode en el codigo fuente.
+const MAPA_ACENTOS_TITULO = {
+  á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", à: "a", è: "e", ì: "i", ò: "o", ù: "u",
+};
+
+function normalizarTitulo(t) {
+  return String(t || "")
+    .toLowerCase()
+    .replace(/[áéíóúüàèìòù]/g, (c) => MAPA_ACENTOS_TITULO[c] || c)
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function calcularCambiosClausulasAvanzado(anteriores, actuales) {
+  const mapaAnterior = new Map(anteriores.map((c) => [normalizarTitulo(c.titulo), c]));
+  const mapaActual = new Map(actuales.map((c) => [normalizarTitulo(c.titulo), c]));
+
+  const nuevas = [];
+  const modificadas = [];
+  const eliminadas = [];
+
+  mapaActual.forEach((c, titulo) => {
+    if (!mapaAnterior.has(titulo)) {
+      nuevas.push(c.titulo);
+    } else {
+      const previa = mapaAnterior.get(titulo);
+      if (
+        (previa.explicacion || "") !== (c.explicacion || "") ||
+        (previa.baseLegal || "") !== (c.baseLegal || "") ||
+        (previa.riesgo || "") !== (c.riesgo || "")
+      ) {
+        modificadas.push(c.titulo);
+      }
+    }
+  });
+  mapaAnterior.forEach((c, titulo) => {
+    if (!mapaActual.has(titulo)) eliminadas.push(c.titulo);
+  });
+
+  return { nuevas, modificadas, eliminadas, tieneCambios: nuevas.length + modificadas.length + eliminadas.length > 0 };
+}
+
+// Construye la lista completa de analisis avanzados con los cambios ya
+// calculados, en orden cronologico ascendente (igual que
+// construirRepositorioCompleto). A diferencia de la version basica, el
+// nivel de riesgo no se recalcula: viene ya clasificado por la IA en
+// nivel_global.
+function construirRepositorioAvanzadoCompleto() {
+  const filas = db.listarAnalisisAvanzadoResumen();
+  const ultimoPorGrupo = new Map();
+
+  return filas.map((f) => {
+    let clausulas = [];
+    try {
+      clausulas = JSON.parse(f.clausulas_json) || [];
+    } catch (e) {
+      clausulas = [];
+    }
+
+    const analisisAvanzado = {
+      id: f.id,
+      fecha: f.created_at,
+      provincia: f.provincia,
+      empresa: f.empresa,
+      tipo: f.tipo,
+      puntuacion: f.puntuacion,
+      nivel: f.nivel_global,
+      resumenGeneral: f.resumen_general,
+      totalAnonimizado: f.total_anonimizado,
+      clausulas,
+      cambios: null,
+    };
+
+    if (f.empresa && f.tipo) {
+      const clave = f.empresa + "||" + f.tipo;
+      const anterior = ultimoPorGrupo.get(clave);
+      if (anterior) {
+        analisisAvanzado.cambios = calcularCambiosClausulasAvanzado(anterior.clausulas, clausulas);
+      }
+      ultimoPorGrupo.set(clave, analisisAvanzado);
+    }
+
+    return analisisAvanzado;
+  });
+}
+
+async function apiRepositorioAvanzadoGet(req, res, query) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  let analisisAvanzados = construirRepositorioAvanzadoCompleto();
+
+  const empresa = query.get("empresa");
+  const tipo = query.get("tipo");
+  const provincia = query.get("provincia");
+  const nivel = query.get("nivel");
+  const fechaDesde = query.get("fechaDesde");
+  const fechaHasta = query.get("fechaHasta");
+
+  if (empresa) analisisAvanzados = analisisAvanzados.filter((c) => c.empresa === empresa);
+  if (tipo) analisisAvanzados = analisisAvanzados.filter((c) => c.tipo === tipo);
+  if (provincia) analisisAvanzados = analisisAvanzados.filter((c) => c.provincia === provincia);
+  if (nivel) analisisAvanzados = analisisAvanzados.filter((c) => c.nivel === nivel);
+  if (fechaDesde) analisisAvanzados = analisisAvanzados.filter((c) => c.fecha.slice(0, 10) >= fechaDesde);
+  if (fechaHasta) analisisAvanzados = analisisAvanzados.filter((c) => c.fecha.slice(0, 10) <= fechaHasta);
+
+  analisisAvanzados.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
+
+  enviarJSON(res, 200, { analisisAvanzados });
+}
+
+async function apiRepositorioAvanzadoDetalle(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const fila = db.obtenerAnalisisAvanzadoDetalle(id);
+  if (!fila) return enviarJSON(res, 404, { error: "Análisis avanzado no encontrado." });
+
+  let clausulas = [];
+  try {
+    clausulas = JSON.parse(fila.clausulas_json) || [];
+  } catch (e) {
+    clausulas = [];
+  }
+
+  enviarJSON(res, 200, {
+    id: fila.id,
+    fecha: fila.created_at,
+    provincia: fila.provincia,
+    empresa: fila.empresa,
+    tipo: fila.tipo,
+    puntuacion: fila.puntuacion,
+    nivel: fila.nivel_global,
+    resumenGeneral: fila.resumen_general,
+    totalAnonimizado: fila.total_anonimizado,
+    clausulas,
+    textoAnonimizado: fila.texto_anonimizado,
+  });
+}
+
+async function apiRepositorioAvanzadoClasificar(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const fila = db.obtenerAnalisisAvanzadoDetalle(id);
+  if (!fila) return enviarJSON(res, 404, { error: "Análisis avanzado no encontrado." });
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  if (!TIPOS_CONTRATO_VALIDOS.has(cuerpo.tipo)) {
+    return enviarJSON(res, 400, { error: "Tipo inválido. Usa 'hogar' o 'negocio'." });
+  }
+
+  const actualizado = db.clasificarAnalisisAvanzado(id, cuerpo.tipo);
+  enviarJSON(res, 200, { ok: true, id: actualizado.id, tipo: actualizado.tipo });
+}
+
+async function apiRepositorioAvanzadoPdf(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const fila = db.obtenerAnalisisAvanzadoDetalle(id);
+  if (!fila) return enviarJSON(res, 404, { error: "Análisis avanzado no encontrado." });
+
+  let clausulas = [];
+  try {
+    clausulas = JSON.parse(fila.clausulas_json) || [];
+  } catch (e) {
+    clausulas = [];
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="informe-analisis-avanzado-uic-${fila.id}.pdf"`,
+    "Cache-Control": "no-store",
+  });
+
+  const doc = analisis.generarInformePDFAvanzado({
+    resumenGeneral: fila.resumen_general,
+    puntuacionGlobal: fila.puntuacion,
+    nivelGlobal: fila.nivel_global,
+    clausulas,
+    totalAnonimizado: fila.total_anonimizado,
+  });
+  doc.pipe(res);
+}
+
+/* ================================================================
    API: alianzas entre empresas de alarmas y otros sectores
    ================================================================ */
 //
@@ -2650,6 +2921,9 @@ const idDescartarAlianza = RUTA_CON_ID("/api/alianzas", "/descartar");
 const idEliminarAlianza = RUTA_CON_ID("/api/alianzas", "/eliminar");
 const idDetalleRepositorio = RUTA_CON_ID("/api/repositorio", "");
 const idClasificarRepositorio = RUTA_CON_ID("/api/repositorio", "/tipo");
+const idDetalleRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "");
+const idClasificarRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "/tipo");
+const idPdfRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "/pdf");
 
 async function manejarPeticion(req, res) {
   // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
@@ -2726,6 +3000,18 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET") {
       const idDetalle = idDetalleRepositorio(ruta);
       if (idDetalle !== null) return await apiRepositorioDetalle(req, res, idDetalle);
+    }
+
+    if (req.method === "GET" && ruta === "/api/repositorio-avanzado") return await apiRepositorioAvanzadoGet(req, res, url.searchParams);
+    if (req.method === "POST") {
+      const idTipoAvz = idClasificarRepositorioAvanzado(ruta);
+      if (idTipoAvz !== null) return await apiRepositorioAvanzadoClasificar(req, res, idTipoAvz);
+    }
+    if (req.method === "GET") {
+      const idPdfAvz = idPdfRepositorioAvanzado(ruta);
+      if (idPdfAvz !== null) return await apiRepositorioAvanzadoPdf(req, res, idPdfAvz);
+      const idDetalleAvz = idDetalleRepositorioAvanzado(ruta);
+      if (idDetalleAvz !== null) return await apiRepositorioAvanzadoDetalle(req, res, idDetalleAvz);
     }
 
     if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
