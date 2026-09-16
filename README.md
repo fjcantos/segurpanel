@@ -4,7 +4,7 @@
 retención y ventas de **UIC**, especializada en el sector de alarmas y
 seguridad privada en España. Centraliza en una sola herramienta la
 comparativa de competencia, el análisis legal de contratos con IA, material
-de formación, generación de propuestas comerciales y un asistente de IA
+de formación, referencia legal específica de alarmas y un asistente de IA
 experto en retención de clientes — todo con autenticación, control de roles
 y auditoría.
 
@@ -31,8 +31,9 @@ según el rol del usuario, 13 pestañas funcionales:
 | --- | --- |
 | Comparativa de mercado | Inicio, Comparador, Ofertas, Alianzas, Equipos, Inteligencia |
 | Análisis de contratos con IA | Análisis, Análisis Avanzado, Repositorio |
+| Referencia legal | Normativa, Ley de Alarmas |
 | Gestión interna | Estadísticas |
-| Generación de contenido con IA | Generador de Propuestas, Formaciones |
+| Generación de contenido con IA | Formaciones |
 | Asistencia | IA Assistant |
 
 Incluye además un panel de administración (`/admin`) para gestionar usuarios,
@@ -70,9 +71,9 @@ pestaña.
 
 **IA / APIs externas**
 - [API de Anthropic (Claude)](https://www.anthropic.com/) — chat del IA
-  Assistant (`claude-haiku-4-5-20251001`), Análisis Avanzado, Generador de
-  Propuestas y Formaciones (`claude-opus-5`). La clave de API nunca se envía
-  al navegador: todas las llamadas pasan por `server.js`.
+  Assistant (`claude-haiku-4-5-20251001`), Análisis Avanzado y Formaciones
+  (`claude-opus-5`). La clave de API nunca se envía al navegador: todas las
+  llamadas pasan por `server.js`.
 - [Unsplash API](https://unsplash.com/developers) — fotos de fondo reales
   para las diapositivas de Formaciones (opcional).
 - [Google News RSS](https://news.google.com/) — fuente de los scrapers de
@@ -128,8 +129,7 @@ npm install
 ```
 
 Configura la clave de la API de Anthropic (obligatoria para que funcionen el
-IA Assistant, el Análisis Avanzado, el Generador de Propuestas y
-Formaciones):
+IA Assistant, el Análisis Avanzado y Formaciones):
 
 ```bash
 setx ANTHROPIC_API_KEY "sk-ant-tu-clave-aqui"
@@ -153,7 +153,7 @@ vez por consola — ver detalle en [DOCUMENTACION.md](DOCUMENTACION.md#autentica
 
 | Variable | Obligatoria | Descripción |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Sí, para las funciones de IA | Clave de la API de Anthropic. Sin ella, la app funciona pero el IA Assistant, el Análisis Avanzado, Propuestas y Formaciones muestran un aviso pidiendo que se configure. |
+| `ANTHROPIC_API_KEY` | Sí, para las funciones de IA | Clave de la API de Anthropic. Sin ella, la app funciona pero el IA Assistant, el Análisis Avanzado y Formaciones muestran un aviso pidiendo que se configure. |
 | `PORT` | No (por defecto `3000`) | Puerto HTTP del servidor. Render lo define automáticamente. |
 | `DATA_DIR` | Recomendada en producción | Directorio persistente para `segurpanel.db`, el secreto JWT y los backups. Sin ella se usa `./data` local, que en plataformas de filesystem efímero (Render) se pierde en cada despliegue. |
 | `JWT_SECRET` | Recomendada en producción | Secreto para firmar las sesiones JWT (HS256). Si no se define, se genera uno aleatorio la primera vez y se guarda en `DATA_DIR/.jwt-secret`. |

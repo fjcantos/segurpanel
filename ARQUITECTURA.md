@@ -48,7 +48,7 @@ flowchart TB
     REPO -->|"auto-deploy\nen cada push a main"| WEB
 
     BROWSER <-->|"HTTPS\nlogin, pestañas, API REST"| WEB
-    WEB -->|"POST /api/chat\nPOST /api/analisis-avanzado\nPOST /api/propuestas/generar\nPOST /api/formaciones/*"| ANTHROPIC
+    WEB -->|"POST /api/chat\nPOST /api/analisis-avanzado\nPOST /api/formaciones/*"| ANTHROPIC
     WEB -->|"fotos de fondo\n(Formaciones)"| UNSPLASH
 
     S1 -->|"lee RSS"| GNEWS
@@ -109,7 +109,7 @@ scripts Python (solo librería estándar, sin dependencias que instalar):
   `server.js` es el único que tiene la clave (`ANTHROPIC_API_KEY`); el
   navegador nunca la ve. La usan: el chat del IA Assistant
   (`claude-haiku-4-5-20251001`), el Análisis Avanzado de contratos, el
-  Generador de Propuestas y Formaciones (`claude-opus-5`).
+  Formaciones (`claude-opus-5`).
 - **API de Unsplash** — fotos de fondo reales para las diapositivas
   generadas en Formaciones. Opcional; sin clave, Formaciones sigue
   funcionando sin fotos.

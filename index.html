@@ -638,31 +638,6 @@
   .news-item-delete:disabled { opacity: 0.6; cursor: not-allowed; }
   .news-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 
-  .proposal-form {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px 18px;
-    max-width: 720px;
-  }
-  .proposal-field { display: flex; flex-direction: column; gap: 6px; }
-  .proposal-field-wide { grid-column: 1 / -1; }
-  .proposal-field label { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
-  .proposal-field select,
-  .proposal-field input,
-  .proposal-field textarea {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-family: inherit;
-    font-size: 0.88rem;
-    color: var(--text);
-    background: var(--card-bg, #fff);
-    resize: vertical;
-  }
-  .proposal-field-wide .btn-publish { flex: 0 0 auto; padding: 10px 20px; border-radius: 999px; font-size: 0.85rem; }
-  .proposal-status { margin-left: 12px; font-size: 0.82rem; color: var(--muted); }
-  .proposal-status.is-error { color: var(--danger, #c0392b); }
-
   /* ---------- Formaciones ---------- */
   .formacion-empresa-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
   .formacion-empresa-btn {
@@ -1479,6 +1454,10 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4S7 3 3 4v12c4-1 7 0 7 0s3-1 7 0V4c-4-1-7 0-7 0z"/><path d="M10 4v12"/></svg>
     Normativa
   </button>
+  <button class="tab-btn" data-tab="leyAlarmas">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l6 2.5v4c0 4.5-2.6 7.7-6 9-3.4-1.3-6-4.5-6-9v-4L10 2z"/><path d="M7.2 10l2 2 3.6-4"/></svg>
+    Ley de Alarmas
+  </button>
   <button class="tab-btn" data-tab="inteligencia">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17V9M8 17V4M13 17v-6M18 17V7"/></svg>
     Inteligencia
@@ -1495,10 +1474,6 @@
   <button class="tab-btn" data-tab="analisisAvanzado" data-restricted="retencion">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
     Análisis Avanzado
-  </button>
-  <button class="tab-btn" data-tab="generadorPropuestas">
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 2.5h7l3 3V17a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5z"/><path d="M12 2.5V6h3.5M7 9h6M7 12h6M7 15h3.5"/></svg>
-    Propuestas
   </button>
   <button class="tab-btn" data-tab="formaciones">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="3" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13v4"/></svg>
@@ -1933,6 +1908,21 @@
     <div class="empty-note" id="normSinResultados" hidden>No se ha encontrado ninguna coincidencia. Prueba con otro término.</div>
   </section>
 
+  <!-- ===== LEY DE ALARMAS ===== -->
+  <section id="leyAlarmas" class="tab-content">
+    <h2 class="section-title">Ley de Alarmas</h2>
+    <p class="section-sub">Legislación española aplicable específicamente a empresas de alarmas: instalación, mantenimiento y conexión a Central Receptora de Alarmas. No cubre vigilancia ni otras actividades de seguridad privada.</p>
+
+    <div class="norm-disclaimer">Contenido divulgativo para apoyar la argumentación comercial y la atención al cliente. No sustituye el asesoramiento legal: consulta siempre el texto oficial vigente en el BOE o ante la Unidad Central de Seguridad Privada antes de basar en él una decisión.</div>
+
+    <div class="norm-search-wrap">
+      <input type="search" id="leyBuscador" placeholder="🔍 Buscar en la ley de alarmas (ej. CRA, grado 3, permanencia, registro…)" autocomplete="off">
+    </div>
+
+    <div id="leyAlarmasAcordeon"></div>
+    <div class="empty-note" id="leySinResultados" hidden>No se ha encontrado ninguna coincidencia. Prueba con otro término.</div>
+  </section>
+
   <!-- ===== INTELIGENCIA ===== -->
   <section id="inteligencia" class="tab-content">
     <h2 class="section-title">Inteligencia de mercado</h2>
@@ -2176,38 +2166,6 @@
     </div>
 
     <div class="analysis-results" id="analysisResultsAdv"></div>
-  </section>
-
-  <!-- ===== GENERADOR DE PROPUESTAS ===== -->
-  <section id="generadorPropuestas" class="tab-content">
-    <h2 class="section-title">Generador de propuestas</h2>
-    <p class="section-sub">Genera una propuesta comercial personalizada en PDF con IA (logo UIC, argumentos de valor, comparativa con la competencia y precio recomendado).</p>
-
-    <form class="proposal-form" id="proposalForm">
-      <div class="proposal-field">
-        <label for="proposalTipoCliente">Tipo de cliente</label>
-        <select id="proposalTipoCliente" name="tipoCliente">
-          <option value="hogar">Hogar</option>
-          <option value="negocio">Negocio</option>
-        </select>
-      </div>
-      <div class="proposal-field">
-        <label for="proposalZona">Zona geográfica</label>
-        <select id="proposalZona" name="zona"></select>
-      </div>
-      <div class="proposal-field">
-        <label for="proposalPresupuesto">Presupuesto aproximado (€/mes)</label>
-        <input type="number" id="proposalPresupuesto" name="presupuesto" min="0" step="1" placeholder="Ej. 40">
-      </div>
-      <div class="proposal-field proposal-field-wide">
-        <label for="proposalNecesidades">Necesidades específicas</label>
-        <textarea id="proposalNecesidades" name="necesidades" rows="3" placeholder="Ej. vivienda unifamiliar con jardín, quiere cámaras exteriores y videoverificación..."></textarea>
-      </div>
-      <div class="proposal-field proposal-field-wide">
-        <button type="submit" class="btn-publish" id="proposalSubmitBtn">Generar propuesta</button>
-        <span class="proposal-status" id="proposalStatus"></span>
-      </div>
-    </form>
   </section>
 
   <!-- ===== FORMACIONES ===== -->
@@ -3081,6 +3039,215 @@
     },
   ];
 
+  // Datos de la pestana "Ley de Alarmas": legislacion especifica de empresas
+  // de alarmas (instalacion, mantenimiento y conexion a CRA), separada de la
+  // normativa general de seguridad privada de NORMATIVA_DATA. Reutiliza el
+  // mismo formato de categoria/item/detalle/tabla que normItemHtml y
+  // normCategoriaHtml ya saben renderizar, asi que no hace falta duplicar
+  // esas funciones, solo el contenedor y el buscador (ver renderLeyAlarmas).
+  const LEY_ALARMAS_DATA = [
+    {
+      id: 'marco-especifico',
+      titulo: 'Ley 5/2014 y RD 195/2023: marco específico de alarmas',
+      items: [
+        {
+          titulo: 'Instalación y mantenimiento de sistemas de alarma como actividad de seguridad privada',
+          codigo: 'Ley 5/2014, arts. 5 y 7-24',
+          resumen: 'La instalación y el mantenimiento de sistemas de seguridad electrónica (alarmas) es una actividad de seguridad privada reservada a empresas autorizadas: no puede prestarla cualquier instalador eléctrico o de telecomunicaciones.',
+          detalles: [
+            { titulo: 'Actividad reservada', texto: 'Solo empresas de seguridad autorizadas pueden instalar, mantener y conectar sistemas de alarma a una Central Receptora; hacerlo sin autorización es una infracción grave o muy grave según el caso.' },
+            { titulo: 'Compatibilidad con otras actividades', texto: 'Una empresa de alarmas puede combinar instalación y mantenimiento con la explotación de su propia CRA si cuenta con la autorización específica para cada actividad; algunas combinaciones con vigilancia presencial están limitadas por ley.' },
+            { titulo: 'Ámbito territorial de la autorización', texto: 'La autorización administrativa puede ser de ámbito autonómico o estatal según el territorio en el que la empresa vaya a operar, y condiciona dónde puede prestar servicio legalmente.' },
+          ],
+        },
+        {
+          titulo: 'Conexión a Centrales Receptoras de Alarmas (CRA): requisitos legales',
+          codigo: 'Ley 5/2014, art. 48 · RD 195/2023',
+          resumen: 'Todo sistema de alarma conectado a una CRA debe cumplir un procedimiento legal de verificación antes de movilizar a las Fuerzas y Cuerpos de Seguridad, para reducir las falsas alarmas.',
+          detalles: [
+            { titulo: 'Verificación previa obligatoria', texto: 'La CRA debe intentar verificar la señal (por vídeo, audio o llamada al abonado) antes de avisar a la Policía o Guardia Civil; avisar sin verificar cuando la verificación es exigible puede acarrear sanción.' },
+            { titulo: 'Comunicación a las Fuerzas de Seguridad', texto: 'Una vez verificada una alarma real, la CRA está obligada a comunicarlo de inmediato al cuerpo policial competente por el canal establecido, con los datos identificativos del inmueble y del titular.' },
+            { titulo: 'Requisitos técnicos de la CRA', texto: 'La propia central debe cumplir requisitos de seguridad física, redundancia de comunicaciones y personal operador cualificado (desarrollados técnicamente en la norma UNE-EN 50518, ver pestaña Normativa).' },
+          ],
+        },
+        {
+          titulo: 'RD 195/2023: qué cambia respecto al reglamento anterior',
+          codigo: 'RD 195/2023',
+          resumen: 'Sustituye al Reglamento de Seguridad Privada de 1994 y actualiza los procedimientos administrativos y los requisitos técnicos de los sistemas de alarma a la tecnología y la Ley 5/2014.',
+          detalles: [
+            { titulo: 'Digitalización de trámites', texto: 'Simplifica y digitaliza la tramitación de autorizaciones, inscripciones y comunicaciones de las empresas ante la Administración.' },
+            { titulo: 'Contenido mínimo de los contratos', texto: 'Fija qué debe recoger obligatoriamente el contrato de instalación y mantenimiento suscrito con el cliente (ver categoría "Obligaciones con el cliente" más abajo).' },
+            { titulo: 'Régimen transitorio', texto: 'Concede plazos de adaptación a empresas y sistemas ya autorizados bajo la normativa anterior; conviene comprobar que la documentación de una empresa está actualizada al nuevo reglamento.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'requisitos-empresas',
+      titulo: 'Empresas instaladoras y mantenedoras: requisitos legales',
+      items: [
+        {
+          titulo: 'Autorización administrativa previa',
+          codigo: 'Ley 5/2014, arts. 7-13',
+          resumen: 'Antes de operar, la empresa debe obtener autorización de la Secretaría de Estado de Seguridad (Ministerio del Interior), acreditando solvencia, medios técnicos y personal habilitado.',
+          detalles: [
+            { titulo: 'Requisitos generales', texto: 'Objeto social exclusivo de seguridad privada (para las actividades compatibles previstas), capital social mínimo, y medios materiales y humanos adecuados a la actividad declarada.' },
+            { titulo: 'Renovación y modificación', texto: 'Cualquier cambio relevante (domicilio, órganos de gobierno, actividades prestadas) debe comunicarse a la Administración; la autorización puede suspenderse o revocarse por incumplimiento.' },
+          ],
+        },
+        {
+          titulo: 'Registro Nacional de Seguridad Privada: quién debe estar inscrito',
+          codigo: 'Ley 5/2014, art. 10',
+          resumen: 'Tanto la empresa como su personal habilitado (director técnico, instaladores/mantenedores acreditados) deben figurar inscritos; el cliente puede y debe poder comprobarlo antes de contratar.',
+          detalles: [
+            { titulo: 'Inscripción de la empresa', texto: 'Es requisito previo para operar legalmente; una empresa no inscrita que presta servicios de alarma incurre en infracción, con independencia de su calidad técnica.' },
+            { titulo: 'Habilitación del personal', texto: 'Los técnicos que instalan o mantienen sistemas de seguridad conectados a CRA deben contar con la habilitación profesional correspondiente, no basta con cualificación eléctrica general.' },
+            { titulo: 'Cómo comprobarlo', texto: 'Se puede verificar consultando el Registro Nacional de Seguridad Privada o solicitando a la empresa el número de inscripción antes de firmar el contrato.' },
+          ],
+        },
+        {
+          titulo: 'Seguro de responsabilidad civil obligatorio',
+          codigo: 'Ley 5/2014, art. 11',
+          resumen: 'Toda empresa de seguridad debe tener contratado un seguro de responsabilidad civil que cubra los daños derivados de su actividad, incluidos fallos de instalación o de servicio.',
+          detalles: [
+            { titulo: 'Cobertura mínima', texto: 'La cuantía mínima se fija reglamentariamente y debe mantenerse vigente durante toda la actividad de la empresa, no solo en el momento de la autorización inicial.' },
+            { titulo: 'Relevancia para el cliente', texto: 'Permite al cliente reclamar una indemnización si un fallo imputable a la empresa (mala instalación, negligencia en el mantenimiento) le causa un perjuicio.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'grados-seguridad-aplicacion',
+      titulo: 'Grados de seguridad 1 a 4: cuándo aplica cada uno',
+      items: [
+        {
+          titulo: 'Elección del grado de seguridad según el riesgo',
+          codigo: 'UNE-EN 50131',
+          resumen: 'El grado exigible a un sistema de alarma depende del riesgo asumido en la instalación (valor de lo protegido, probabilidad de intrusión cualificada) y, en ciertos sectores, viene impuesto por normativa propia del sector.',
+          detalles: [
+            { titulo: 'No es una simple preferencia comercial', texto: 'El grado no se elige solo por presupuesto: determinadas actividades obligadas (entidades bancarias, joyerías, establecimientos que manejan efectivo o material valioso) tienen exigencias mínimas de grado fijadas por su normativa sectorial de medidas de seguridad.' },
+            { titulo: 'Quién hace la evaluación', texto: 'La empresa instaladora debe evaluar el riesgo del inmueble antes de proponer el grado y los componentes, y dejar constancia de esa recomendación en la documentación del proyecto.' },
+          ],
+          tabla: {
+            titulo: 'Grados de seguridad UNE-EN 50131 y aplicación típica',
+            cabecera: ['Grado', 'Riesgo asumido', 'Aplicación típica'],
+            filas: [
+              ['1', 'Bajo', 'Viviendas particulares sin antecedentes de riesgo especial; uso residencial estándar.'],
+              ['2', 'Bajo a medio', 'Viviendas y pequeños comercios; es el grado más habitual en contratación doméstica.'],
+              ['3', 'Medio a alto', 'Comercios de mayor valor, oficinas, farmacias y negocios con antecedentes de intrusión.'],
+              ['4', 'Alto (la seguridad es prioritaria)', 'Entidades bancarias, joyerías, infraestructuras críticas y actividades obligadas por normativa sectorial específica.'],
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 'obligaciones-cliente-alarmas',
+      titulo: 'Obligaciones con el cliente: contrato, permanencia y desistimiento',
+      items: [
+        {
+          titulo: 'Contenido mínimo del contrato de instalación y mantenimiento',
+          codigo: 'RD 195/2023',
+          resumen: 'El contrato debe identificar con claridad a las partes, el sistema instalado, los servicios incluidos y las condiciones económicas, para que el cliente sepa exactamente qué contrata.',
+          detalles: [
+            { titulo: 'Elementos obligatorios', texto: 'Identificación de la empresa (incluida su inscripción registral) y del cliente, descripción del equipo instalado, servicios contratados (instalación, mantenimiento, conexión a CRA), precio total, duración y condiciones de baja.' },
+            { titulo: 'Propiedad o cesión de los equipos', texto: 'El contrato debe aclarar si los equipos son propiedad del cliente o quedan cedidos en comodato por la empresa, porque de ello depende qué ocurre con ellos al terminar el contrato.' },
+          ],
+        },
+        {
+          titulo: 'Cláusula de permanencia y penalización por baja anticipada',
+          codigo: 'LGDCU · LCGC',
+          resumen: 'Es lícita si es proporcionada al coste real no amortizado por la empresa (p. ej. el equipo cedido gratuitamente a cambio de la permanencia), pero puede considerarse abusiva si es desproporcionada o no se informó con claridad antes de firmar.',
+          detalles: [
+            { titulo: 'Criterio de proporcionalidad', texto: 'Los tribunales y organismos de consumo valoran si la penalización se corresponde con un coste real (subvención del equipo, coste de instalación) y no con un importe fijo desconectado de cualquier perjuicio.' },
+            { titulo: 'Información previa', texto: 'La permanencia y su penalización deben figurar de forma clara y destacada en el contrato, no en letra pequeña ni remitida a condiciones generales no entregadas al cliente.' },
+          ],
+        },
+        {
+          titulo: 'Derecho de desistimiento en contratos de alarma',
+          codigo: '14 días naturales',
+          resumen: 'Al tratarse habitualmente de ventas fuera de establecimiento (puerta a puerta) o a distancia (telefónica, online), el cliente tiene 14 días naturales para desistir sin penalización ni justificación.',
+          detalles: [
+            { titulo: 'Instalación ya realizada', texto: 'Si el cliente pide expresamente que la instalación empiece antes de que acabe el plazo de desistimiento, puede tener que abonar la parte proporcional del servicio ya prestado si finalmente desiste.' },
+            { titulo: 'Falta de información sobre el derecho', texto: 'Si la empresa no informó correctamente de este derecho, el plazo se amplía hasta 12 meses adicionales desde la firma.' },
+          ],
+        },
+        {
+          titulo: 'Renovación automática y preaviso de baja',
+          codigo: 'LCGC · LGDCU',
+          resumen: 'La prórroga tácita del contrato no puede usarse para dificultar desproporcionadamente que el cliente se dé de baja una vez cumplida la permanencia inicial.',
+          detalles: [
+            { titulo: 'Preaviso razonable', texto: 'El plazo de preaviso exigido para comunicar la baja debe ser razonable (orientativamente entre 1 y 3 meses) y estar claramente informado, no oculto en condiciones generales.' },
+            { titulo: 'Simetría en los canales de baja', texto: 'Si el contrato se pudo firmar por teléfono o de forma electrónica, el cliente debe poder darse de baja por un canal igual de accesible, sin trabas desproporcionadas.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'derechos-consumidor-alarmas',
+      titulo: 'Derechos del consumidor en contratos de alarmas',
+      items: [
+        {
+          titulo: 'Información previa a la contratación',
+          codigo: 'LGDCU arts. 60 y ss.',
+          resumen: 'Antes de firmar, la empresa debe informar de forma clara del precio total, la duración, la permanencia, si los equipos son en propiedad o cesión, y si el sistema queda conectado a una CRA.',
+          detalles: [
+            { titulo: 'Precio total desglosado', texto: 'Debe distinguirse la cuota de mantenimiento/conexión de otros conceptos (instalación, equipos, seguros asociados) para que el cliente pueda comparar ofertas.' },
+          ],
+        },
+        {
+          titulo: 'Retirada de equipos al finalizar el contrato',
+          resumen: 'Si los equipos estaban cedidos en comodato, la empresa debe retirarlos o dejar de facturar por ellos una vez resuelto el contrato, sin coste adicional injustificado para el cliente.',
+          detalles: [
+            { titulo: 'Plazo razonable de retirada', texto: 'La empresa debe gestionar la retirada en un plazo razonable tras la baja efectiva; seguir facturando mantenimiento sobre un equipo que el cliente ya no quiere usar puede dar lugar a reclamación.' },
+          ],
+        },
+        {
+          titulo: 'A quién reclamar: empresa, CRA o Administración',
+          codigo: 'UCSP · OMIC',
+          resumen: 'Un conflicto económico o contractual se reclama ante la empresa y, en su caso, OMIC o Junta Arbitral de Consumo; una irregularidad de la empresa (falta de habilitación, incumplimientos técnicos de la CRA) se denuncia ante la Unidad Central de Seguridad Privada.',
+          detalles: [
+            { titulo: 'Conflicto contractual o económico', texto: 'Hoja de reclamaciones de la propia empresa, OMIC municipal o Junta Arbitral de Consumo si la empresa está adherida al sistema arbitral.' },
+            { titulo: 'Irregularidad de seguridad privada', texto: 'Falta de inscripción registral, personal no habilitado o incumplimiento de los requisitos de verificación de la CRA se denuncian ante la Unidad Central de Seguridad Privada de la Policía Nacional.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'sanciones-infracciones-alarmas',
+      titulo: 'Sanciones e infracciones más comunes',
+      items: [
+        {
+          titulo: 'Clasificación general de las infracciones',
+          codigo: 'Ley 5/2014, arts. 52-64',
+          resumen: 'Las infracciones se clasifican en muy graves, graves y leves, con sanciones económicas crecientes y, en los casos más graves, suspensión o revocación de la autorización de la empresa.',
+          detalles: [
+            { titulo: 'Muy graves', texto: 'Prestar servicios de seguridad sin autorización, o con ella suspendida o revocada; pueden acarrear las sanciones más elevadas y el cierre de la actividad.' },
+            { titulo: 'Graves', texto: 'Incumplimientos relevantes de las condiciones de la autorización, uso de personal no habilitado o incumplimiento de obligaciones esenciales frente al cliente o la Administración.' },
+            { titulo: 'Leves', texto: 'Incumplimientos formales o de menor entidad, como defectos de documentación o comunicaciones fuera de plazo a la Administración.' },
+          ],
+        },
+        {
+          titulo: 'Infracciones más habituales en el sector de alarmas',
+          resumen: 'Más allá de la clasificación legal, en la práctica destacan un puñado de incumplimientos recurrentes en empresas instaladoras y CRA.',
+          detalles: [
+            { titulo: 'Operar sin inscripción o con personal no habilitado', texto: 'Instalar o mantener sistemas de alarma sin que la empresa o el técnico figuren inscritos en el Registro Nacional de Seguridad Privada.' },
+            { titulo: 'No verificar antes de avisar a la Policía', texto: 'Comunicar una alarma a las Fuerzas de Seguridad sin haber intentado la verificación previa exigida, generando falsas alarmas reiteradas.' },
+            { titulo: 'Incumplir los requisitos técnicos de conexión a CRA', texto: 'No cumplir los tiempos de respuesta, la redundancia de comunicaciones o los procedimientos operativos exigidos a la Central Receptora.' },
+            { titulo: 'Publicidad engañosa sobre coberturas o tiempos de respuesta', texto: 'Prometer tiempos de respuesta, coberturas o certificaciones que el sistema realmente instalado no cumple.' },
+          ],
+        },
+        {
+          titulo: 'Consecuencias para el cliente de un incumplimiento de la empresa',
+          resumen: 'Una infracción administrativa de la empresa no exime automáticamente al cliente de sus obligaciones contractuales, pero sí puede fundamentar una reclamación o denuncia paralela.',
+          detalles: [
+            { titulo: 'Vía civil/consumo y vía administrativa son independientes', texto: 'El cliente puede reclamar por la vía contractual (baja, indemnización) ante la empresa u OMIC, y además denunciar el incumplimiento normativo ante la Unidad Central de Seguridad Privada; una cosa no sustituye a la otra.' },
+          ],
+        },
+      ],
+    },
+  ];
+
   function normTablaHtml(tabla) {
     if (!tabla) return '';
     const filas = tabla.filas.map(f => `<tr>${f.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
@@ -3194,7 +3361,70 @@
     if (notaVacia) notaVacia.hidden = !(q && totalVisible === 0);
   }
 
+  // Pestaña "Ley de Alarmas": mismo patron de acordeon+buscador que
+  // Normativa (reutiliza normCategoriaHtml/normItemHtml), pero con su propio
+  // contenedor y dataset (LEY_ALARMAS_DATA) para no mezclarse con la
+  // normativa general de seguridad privada.
+  function renderLeyAlarmas() {
+    const cont = document.getElementById('leyAlarmasAcordeon');
+    if (!cont) return;
+    cont.innerHTML = LEY_ALARMAS_DATA.map((cat, i) => normCategoriaHtml(cat, i === 0)).join('');
+
+    cont.querySelectorAll('.period-header').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cuerpo = btn.nextElementSibling;
+        cuerpo.hidden = !cuerpo.hidden;
+        btn.querySelector('.period-chevron').textContent = cuerpo.hidden ? '▾' : '▴';
+      });
+    });
+
+    const buscador = document.getElementById('leyBuscador');
+    if (buscador) buscador.addEventListener('input', () => filtrarLeyAlarmas(buscador.value));
+  }
+
+  function filtrarLeyAlarmas(query) {
+    const cont = document.getElementById('leyAlarmasAcordeon');
+    if (!cont) return;
+    const q = query.trim().toLowerCase();
+    const categorias = Array.from(cont.querySelectorAll('.norm-category'));
+    let totalVisible = 0;
+
+    categorias.forEach((catEl, i) => {
+      const items = Array.from(catEl.querySelectorAll('.norm-item'));
+      let visiblesEnCat = 0;
+      items.forEach(item => {
+        const coincide = !q || (item.dataset.search || '').includes(q);
+        item.hidden = !coincide;
+        if (coincide) {
+          visiblesEnCat++;
+          if (q) item.open = true;
+        } else if (q) {
+          item.open = false;
+        }
+      });
+      totalVisible += visiblesEnCat;
+
+      const body = catEl.querySelector('.period-body');
+      const header = catEl.querySelector('.period-header');
+      const chevron = header.querySelector('.period-chevron');
+
+      if (q) {
+        catEl.hidden = visiblesEnCat === 0;
+        body.hidden = visiblesEnCat === 0;
+        chevron.textContent = visiblesEnCat > 0 ? '▴' : '▾';
+      } else {
+        catEl.hidden = false;
+        body.hidden = i !== 0;
+        chevron.textContent = i === 0 ? '▴' : '▾';
+      }
+    });
+
+    const notaVacia = document.getElementById('leySinResultados');
+    if (notaVacia) notaVacia.hidden = !(q && totalVisible === 0);
+  }
+
   renderNormativa();
+  renderLeyAlarmas();
 
   function aplicarModoSoloLectura() {
     const contenido = document.querySelector('main.content');
@@ -5072,91 +5302,6 @@
     enlace.click();
     enlace.remove();
   });
-
-  /* ---------- Generador de propuestas comerciales (API real de Anthropic vía backend local) ---------- */
-  const PROVINCIAS_ESPANA = [
-    'Álava', 'Albacete', 'Alicante', 'Almería', 'Asturias', 'Ávila', 'Badajoz', 'Barcelona',
-    'Burgos', 'Cáceres', 'Cádiz', 'Cantabria', 'Castellón', 'Ciudad Real', 'Córdoba', 'Cuenca',
-    'Girona', 'Granada', 'Guadalajara', 'Guipúzcoa', 'Huelva', 'Huesca', 'Illes Balears', 'Jaén',
-    'A Coruña', 'La Rioja', 'Las Palmas', 'León', 'Lleida', 'Lugo', 'Madrid', 'Málaga', 'Murcia',
-    'Navarra', 'Ourense', 'Palencia', 'Pontevedra', 'Salamanca', 'Santa Cruz de Tenerife',
-    'Segovia', 'Sevilla', 'Soria', 'Tarragona', 'Teruel', 'Toledo', 'Valencia', 'Valladolid',
-    'Vizcaya', 'Zamora', 'Zaragoza', 'Ceuta', 'Melilla',
-  ];
-
-  const proposalForm = document.getElementById('proposalForm');
-  const proposalZonaSelect = document.getElementById('proposalZona');
-  const proposalStatus = document.getElementById('proposalStatus');
-  const proposalSubmitBtn = document.getElementById('proposalSubmitBtn');
-  let proposalPdfBlobUrl = null;
-
-  if (proposalZonaSelect) {
-    proposalZonaSelect.innerHTML = PROVINCIAS_ESPANA
-      .map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`)
-      .join('');
-  }
-
-  function setProposalStatus(mensaje, esError) {
-    if (!proposalStatus) return;
-    proposalStatus.textContent = mensaje || '';
-    proposalStatus.classList.toggle('is-error', !!esError);
-  }
-
-  if (proposalForm) {
-    proposalForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (proposalPdfBlobUrl) { URL.revokeObjectURL(proposalPdfBlobUrl); proposalPdfBlobUrl = null; }
-
-      const tipoCliente = document.getElementById('proposalTipoCliente').value;
-      const zona = proposalZonaSelect.value;
-      const presupuesto = document.getElementById('proposalPresupuesto').value;
-      const necesidades = document.getElementById('proposalNecesidades').value.trim();
-
-      const compareTable = document.getElementById('compareTable');
-      const competencia = compareTable ? extraerTablaParaExcel(compareTable).filas : [];
-
-      proposalSubmitBtn.disabled = true;
-      setProposalStatus('Generando propuesta con IA… puede tardar unos segundos.', false);
-
-      try {
-        const respuesta = await fetch('/api/propuestas/generar', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipoCliente, zona, presupuesto, necesidades, competencia }),
-        });
-
-        if (respuesta.status === 401) {
-          window.location.href = '/';
-          return;
-        }
-
-        if (!respuesta.ok) {
-          let mensaje = 'No se ha podido generar la propuesta.';
-          try {
-            const datos = await respuesta.json();
-            if (datos && datos.error) mensaje = datos.error;
-          } catch (err) { /* respuesta no era JSON */ }
-          setProposalStatus(mensaje, true);
-          return;
-        }
-
-        const blob = await respuesta.blob();
-        proposalPdfBlobUrl = URL.createObjectURL(blob);
-        const enlace = document.createElement('a');
-        enlace.href = proposalPdfBlobUrl;
-        enlace.download = 'propuesta-comercial-uic.pdf';
-        document.body.appendChild(enlace);
-        enlace.click();
-        enlace.remove();
-        setProposalStatus('Propuesta generada y descargada.', false);
-      } catch (err) {
-        setProposalStatus('No se ha podido conectar con el servidor para generar la propuesta.', true);
-      } finally {
-        proposalSubmitBtn.disabled = false;
-      }
-    });
-  }
 
   /* ---------- Formaciones (presentaciones PPTX generadas con IA) ---------- */
   const formacionEmpresaGrid = document.getElementById('formacionEmpresaGrid');

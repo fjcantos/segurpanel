@@ -15,11 +15,11 @@ del sistema, ver [ARQUITECTURA.md](ARQUITECTURA.md).
   - [Equipos](#equipos)
   - [Análisis](#análisis)
   - [Normativa](#normativa)
+  - [Ley de Alarmas](#ley-de-alarmas)
   - [Inteligencia](#inteligencia)
   - [Estadísticas](#estadísticas)
   - [Repositorio](#repositorio)
   - [Análisis Avanzado](#análisis-avanzado)
-  - [Generador de Propuestas](#generador-de-propuestas)
   - [Formaciones](#formaciones)
   - [IA Assistant](#ia-assistant)
 - [Panel de administración (`/admin`)](#panel-de-administración-admin)
@@ -148,6 +148,21 @@ sistemas de alarma en España, con buscador. Contenido de apoyo comercial que
 no sustituye el asesoramiento legal (remite siempre al BOE/AENOR/organismo
 correspondiente).
 
+### Ley de Alarmas
+
+*(Visible para todos los roles.)* Referencia divulgativa centrada
+específicamente en la legislación aplicable a empresas de alarmas (no
+vigilancia ni seguridad privada en general): artículos de la Ley 5/2014 y del
+RD 195/2023 propios de sistemas de alarma, requisitos de las empresas
+instaladoras/mantenedoras, obligaciones con el cliente (contrato,
+permanencia, penalización, desistimiento), requisitos de conexión a
+Centrales Receptoras de Alarmas, cuándo aplica cada grado de seguridad (1 a
+4), el Registro Nacional de Seguridad Privada, derechos del consumidor
+propios de este tipo de contrato y las sanciones/infracciones más comunes
+del sector. Organizado en acordeones expandibles por sección, con buscador
+por palabra clave. Contenido de apoyo comercial que no sustituye el
+asesoramiento legal.
+
 ### Inteligencia
 
 Panel de gráficos de referencia derivados del Comparador: cuota mensual
@@ -188,14 +203,6 @@ sencillo. Se dispara automáticamente al subir un contrato en la pestaña
 Análisis (no hace falta repetir la subida aquí). Muestra una puntuación de
 riesgo de 1 a 10 con recomendación, y permite descargar el informe completo
 en PDF.
-
-### Generador de Propuestas
-
-Genera una propuesta comercial personalizada en PDF con IA, a partir de
-tipo de cliente (hogar/negocio), zona geográfica, presupuesto aproximado y
-necesidades específicas en texto libre. El PDF incluye el logo de UIC,
-argumentos de valor, comparativa con la competencia y un precio
-recomendado.
 
 ### Formaciones
 
