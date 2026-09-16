@@ -1911,12 +1911,12 @@
   <!-- ===== LEY DE ALARMAS ===== -->
   <section id="leyAlarmas" class="tab-content">
     <h2 class="section-title">Ley de Alarmas</h2>
-    <p class="section-sub">Legislación española aplicable específicamente a empresas de alarmas: instalación, mantenimiento y conexión a Central Receptora de Alarmas. No cubre vigilancia ni otras actividades de seguridad privada.</p>
+    <p class="section-sub">Legislación española aplicable específicamente a empresas de alarmas: instalación, mantenimiento, equipos y componentes exigidos por grado de seguridad, y conexión a Central Receptora de Alarmas. No cubre vigilancia ni otras actividades de seguridad privada.</p>
 
     <div class="norm-disclaimer">Contenido divulgativo para apoyar la argumentación comercial y la atención al cliente. No sustituye el asesoramiento legal: consulta siempre el texto oficial vigente en el BOE o ante la Unidad Central de Seguridad Privada antes de basar en él una decisión.</div>
 
     <div class="norm-search-wrap">
-      <input type="search" id="leyBuscador" placeholder="🔍 Buscar en la ley de alarmas (ej. CRA, grado 3, permanencia, registro…)" autocomplete="off">
+      <input type="search" id="leyBuscador" placeholder="🔍 Buscar en la ley de alarmas (ej. PIR, microondas, sirena, comunicador, zona de pánico, grado 3…)" autocomplete="off">
     </div>
 
     <div id="leyAlarmasAcordeon"></div>
@@ -3246,6 +3246,249 @@
         },
       ],
     },
+    {
+      id: 'equipos-componentes',
+      titulo: 'Equipos y componentes: requisitos legales por grado',
+      items: [
+        {
+          titulo: 'De dónde salen las especificaciones técnicas de los equipos',
+          codigo: 'Ley 5/2014 · RD 195/2023 · serie UNE-EN 50131',
+          resumen: 'La Ley 5/2014 y el RD 195/2023 exigen que los sistemas de alarma cumplan las normas técnicas armonizadas aplicables, pero las cifras concretas (potencia de sirena, autonomía de batería, tipo de detector) están en esas normas técnicas, principalmente la serie UNE-EN 50131, no redactadas artículo a artículo en el reglamento.',
+          detalles: [
+            { titulo: 'Remisión normativa', texto: 'El reglamento obliga a que la instalación y el mantenimiento se ajusten a la normativa técnica vigente; el instalador es responsable de acreditar que cada componente cumple la norma correspondiente a su grado.' },
+            { titulo: 'Qué debe pedir el cliente', texto: 'Una empresa seria debe poder mostrar la ficha técnica o certificado de conformidad de cada equipo (central, detectores, sirena) con la norma UNE-EN que le corresponda.' },
+          ],
+        },
+        {
+          titulo: 'Equipamiento mínimo orientativo exigido por grado de seguridad',
+          codigo: 'UNE-EN 50131 (serie)',
+          resumen: 'Cada grado de seguridad condiciona el tipo de central, la resistencia a la manipulación de los detectores, la vía de comunicación y la autonomía de batería exigibles.',
+          detalles: [
+            { titulo: 'Grados 1 y 2 (residencial/pequeño comercio)', texto: 'Central básica con autoprotección limitada, detectores estándar (PIR, contactos magnéticos), una vía de comunicación y batería de respaldo con autonomía mínima habitual de 12 horas.' },
+            { titulo: 'Grados 3 y 4 (alto riesgo)', texto: 'Central con mayor resistencia a la manipulación y autoprotección reforzada, detectores de doble tecnología, comunicación redundante (dos vías independientes) y batería de respaldo con autonomía mínima habitual de 60 horas.' },
+            { titulo: 'Cifras orientativas, no definitivas', texto: 'Las horas de autonomía y demás cifras son valores habituales de la norma técnica; la certificación oficial de cada equipo concreto es la que fija el dato vinculante, no esta tabla divulgativa.' },
+          ],
+          tabla: {
+            titulo: 'Equipamiento orientativo por grado de seguridad',
+            cabecera: ['Grado', 'Central', 'Detección', 'Comunicación', 'Batería mínima orientativa'],
+            filas: [
+              ['1', 'Básica, autoprotección limitada', 'PIR y contactos magnéticos estándar', 'Una vía (IP, PSTN o radio)', '≈ 12 horas'],
+              ['2', 'Básica reforzada', 'PIR y contactos magnéticos estándar', 'Una vía, preferible IP o GPRS', '≈ 12 horas'],
+              ['3', 'Resistente a manipulación, autoprotegida', 'Doble tecnología (PIR + microondas)', 'Dos vías recomendadas (p. ej. IP + GPRS)', '≈ 60 horas'],
+              ['4', 'Máxima resistencia y autoprotección', 'Doble tecnología y detección redundante', 'Dos vías obligatorias e independientes', '≈ 60 horas'],
+            ],
+          },
+        },
+        {
+          titulo: 'Central de alarma: requisitos técnicos legales',
+          codigo: 'UNE-EN 50131-1 / 50131-3',
+          resumen: 'La central de control e indicación es el "cerebro" del sistema: recibe las señales de los detectores, gestiona las zonas y transmite el aviso al comunicador.',
+          detalles: [
+            { titulo: 'Autoprotección (tamper)', texto: 'Debe detectar la apertura de su propia caja y el intento de desconexión o sabotaje, generando una señal de manipulación independiente de la de intrusión.' },
+            { titulo: 'Registro de eventos', texto: 'Debe guardar un histórico de activaciones, desactivaciones, alarmas y averías, identificando usuario y hora, exigible para la trazabilidad ante la CRA o una inspección.' },
+            { titulo: 'Alimentación', texto: 'Debe contar con fuente de alimentación principal y batería de respaldo que entre en funcionamiento automáticamente ante un corte de suministro.' },
+          ],
+        },
+        {
+          titulo: 'Sirenas: requisitos de potencia, duración y ubicación',
+          codigo: 'UNE-EN 50131-4',
+          resumen: 'Las sirenas (interiores y exteriores) deben cumplir niveles mínimos de presión sonora y limitar su tiempo de funcionamiento para no generar molestias indefinidas ni incumplir ordenanzas municipales de ruido.',
+          detalles: [
+            { titulo: 'Nivel sonoro mínimo', texto: 'La norma exige un nivel de presión sonora mínimo para que la sirena cumpla su función disuasoria, distinto para sirena interior y exterior.' },
+            { titulo: 'Duración máxima de sonido', texto: 'El tiempo de sonido está limitado (habitualmente en torno a 3 minutos por activación) precisamente para evitar el efecto "alarma que suena todo el día" y las quejas vecinales; después la central debe silenciarla aunque la alarma siga activa internamente.' },
+            { titulo: 'Ubicación y autoprotección', texto: 'La sirena exterior debe instalarse en un punto visible pero de difícil acceso o manipulación, con su propia batería y protección antiapertura (tamper) independiente de la central.' },
+          ],
+        },
+        {
+          titulo: 'Comunicadores: vías de transmisión permitidas',
+          codigo: 'UNE-EN 50136',
+          resumen: 'El comunicador traslada la señal de la central hasta la Central Receptora de Alarmas (CRA); la norma admite varias vías, con distinta fiabilidad y distinto grado de redundancia exigible.',
+          detalles: [
+            { titulo: 'IP (red del cliente o dedicada)', texto: 'Vía rápida y económica, pero depende de la conexión a internet del cliente; requiere supervisión de la línea para detectar cortes.' },
+            { titulo: 'PSTN (línea telefónica fija tradicional)', texto: 'Vía histórica, cada vez menos usada en solitario por la progresiva retirada de la red de telefonía fija tradicional; sigue siendo válida como vía de respaldo en algunas instalaciones.' },
+            { titulo: 'GPRS/móvil', texto: 'Vía independiente de la línea fija del cliente, muy usada como segunda vía de respaldo por su resistencia a que alguien corte el cableado de la vivienda o el local.' },
+            { titulo: 'Radio', texto: 'Vía propia de la empresa de seguridad (frecuencia dedicada), habitual en sistemas de grado alto por su fiabilidad y menor dependencia de infraestructuras de terceros.' },
+            { titulo: 'Redundancia exigida en grados altos', texto: 'Los grados 3 y 4 exigen normalmente doble vía de comunicación simultánea o de respaldo automático, para que el fallo de una no deje la instalación sin cobertura.' },
+          ],
+        },
+        {
+          titulo: 'Baterías de respaldo: autonomía mínima exigida',
+          codigo: 'UNE-EN 50131-6',
+          resumen: 'Todo el sistema (central, sirenas, comunicador) debe seguir funcionando ante un corte de suministro eléctrico durante un tiempo mínimo que depende del grado de seguridad.',
+          detalles: [
+            { titulo: 'Por qué importa', texto: 'Un corte de luz intencionado es una táctica habitual antes de un intento de intrusión; la batería de respaldo es lo que evita que ese corte deje el sistema inoperativo.' },
+            { titulo: 'Autonomía orientativa', texto: 'Los valores habituales de la norma técnica son de unas 12 horas en grados 1-2 y unas 60 horas en grados 3-4, aunque pueden reducirse si existe una vía de comunicación de alarma de batería baja y reposición rápida garantizada — la cifra vinculante es siempre la de la ficha certificada del equipo concreto.' },
+          ],
+        },
+        {
+          titulo: 'Teclados y mandos: homologación requerida',
+          codigo: 'UNE-EN 50131-3 / 50131-5-3',
+          resumen: 'Los dispositivos de armado/desarmado (teclado, mando a distancia, llave de proximidad, app) deben identificar de forma inequívoca al usuario que opera el sistema.',
+          detalles: [
+            { titulo: 'Código de usuario individual', texto: 'Cada usuario debería tener su propio código o credencial, para que el registro de eventos de la central identifique quién armó o desarmó el sistema y cuándo.' },
+            { titulo: 'Comunicación cifrada en mandos inalámbricos', texto: 'Los mandos y teclados inalámbricos deben usar comunicación cifrada y con protección antisustitución (rolling code o equivalente) para evitar que una señal capturada permita desarmar el sistema.' },
+            { titulo: 'Coacción/pánico silencioso', texto: 'Es habitual (y recomendable) que el teclado admita un código de coacción que desarma en apariencia el sistema pero envía en silencio una alarma de pánico a la CRA.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'tipos-detectores',
+      titulo: 'Tipos de detectores según la normativa técnica',
+      items: [
+        {
+          titulo: 'PIR — infrarrojos pasivos',
+          codigo: 'UNE-EN 50131-2-2',
+          resumen: 'El detector más habitual en interiores: capta la radiación infrarroja (calor) emitida por un cuerpo en movimiento dentro de su zona de cobertura.',
+          detalles: [
+            { titulo: 'Cómo funciona', texto: 'Compara la radiación infrarroja del entorno con la de un objeto en movimiento; no emite ninguna señal, solo "escucha" el infrarrojo ambiente (de ahí "pasivo").' },
+            { titulo: 'Limitaciones', texto: 'Es sensible a cambios bruscos de temperatura, corrientes de aire cálido o animales de cierto tamaño, lo que puede generar falsas alarmas si no se elige correctamente el modelo (p. ej. inmunidad a mascotas).' },
+          ],
+        },
+        {
+          titulo: 'Microondas y doble tecnología',
+          codigo: 'UNE-EN 50131-2-3 y 2-4',
+          resumen: 'El detector de microondas emite una señal de radiofrecuencia y analiza su reflejo (efecto Doppler) para detectar movimiento; combinado con un PIR en el mismo equipo forma un detector de "doble tecnología".',
+          detalles: [
+            { titulo: 'Por qué se combina con PIR', texto: 'La doble tecnología exige que ambos sensores (PIR y microondas) coincidan en detectar movimiento antes de generar alarma, lo que reduce drásticamente las falsas alarmas frente a un único sensor.' },
+            { titulo: 'Cuándo se exige', texto: 'Es habitual y recomendable en grados 3 y 4, y en entornos con más falsas alarmas potenciales (corrientes de aire, mascotas, vibraciones de tráfico cercano).' },
+          ],
+        },
+        {
+          titulo: 'Contactos magnéticos (detectores de apertura)',
+          codigo: 'UNE-EN 50131-2-6',
+          resumen: 'Formados por un imán y un sensor situados en el marco y la hoja de una puerta o ventana: detectan la apertura al separarse ambas piezas.',
+          detalles: [
+            { titulo: 'Uso típico', texto: 'Elemento básico de la zona perimetral en prácticamente cualquier instalación, sea cual sea el grado, por su fiabilidad y bajo coste.' },
+            { titulo: 'Versión reforzada', texto: 'Existen versiones con doble balanceo (resistentes a la manipulación con un imán externo) exigibles en grados altos.' },
+          ],
+        },
+        {
+          titulo: 'Detectores de rotura de cristal',
+          codigo: 'UNE-EN 50131-2-7',
+          resumen: 'Detectan el sonido característico (frecuencia) de un cristal al romperse, complementando al contacto magnético en puertas y ventanas acristaladas.',
+          detalles: [
+            { titulo: 'Tipos', texto: 'Acústicos (analizan el sonido ambiente de la sala) o de contacto/inerciales (fijados directamente sobre el cristal, detectan su vibración).' },
+            { titulo: 'Cuándo se recomiendan', texto: 'Especialmente en escaparates, puertas balconeras o grandes superficies acristaladas donde el intruso podría evitar el contacto magnético rompiendo el cristal sin abrir la hoja.' },
+          ],
+        },
+        {
+          titulo: 'Detectores de humo, gas e inundación',
+          codigo: 'Normativa de detección de incendios (fuera de UNE-EN 50131)',
+          resumen: 'No son detectores de intrusión: pertenecen a la protección contra incendios y otros riesgos del hogar, pero se integran habitualmente en el mismo paquete comercial de alarma.',
+          detalles: [
+            { titulo: 'Regulación distinta', texto: 'Los detectores de humo/incendio se rigen por normativa propia de protección contra incendios, no por la serie UNE-EN 50131 de intrusión; conviene no confundir ambas certificaciones al vender el paquete combinado.' },
+            { titulo: 'Detectores de gas e inundación', texto: 'Habituales como servicios adicionales de "hogar conectado"; detectan fugas de gas o presencia de agua donde no debería haberla, y suelen generar un aviso independiente del de intrusión.' },
+          ],
+        },
+        {
+          titulo: 'Fotodetectores y barreras',
+          codigo: 'UNE-EN 50131-2 (barreras de infrarrojos activos)',
+          resumen: 'Emiten uno o varios haces de infrarrojos entre un emisor y un receptor; la interrupción del haz genera la alarma. Se usan sobre todo en perímetros exteriores.',
+          detalles: [
+            { titulo: 'Barreras exteriores', texto: 'Protegen vallados, accesos o linderos antes de que el intruso llegue al edificio, dando un margen de reacción mayor que la detección interior.' },
+            { titulo: 'Cortinas de infrarrojos', texto: 'Versión para interiores que protege un plano concreto (por ejemplo, delante de un escaparate) sin cubrir todo el volumen de la sala, útil quiere evitarse cobertura volumétrica completa.' },
+          ],
+        },
+        {
+          titulo: 'Detectores sísmicos y de vibración',
+          codigo: 'UNE-EN 50131-2-8',
+          resumen: 'Detectan las vibraciones mecánicas propias de un intento de perforación, corte o forzado sobre una superficie concreta (caja fuerte, muro, cristal blindado).',
+          detalles: [
+            { titulo: 'Uso típico', texto: 'Cajas fuertes, cajeros automáticos, paredes de cámaras acorazadas y elementos de alto valor donde se quiere detectar el ataque antes de que se complete, no solo la apertura final.' },
+            { titulo: 'Sensibilidad ajustable', texto: 'Se calibran para distinguir entre vibraciones ambientales normales (tráfico, portazos) y el patrón de un ataque real con herramienta.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'zonas-alarma',
+      titulo: 'Zonas de alarma: tipos y requisitos legales',
+      items: [
+        {
+          titulo: 'Zonas perimetrales',
+          resumen: 'Agrupan los detectores situados en el "envoltorio" del inmueble (puertas, ventanas, vallado): son la primera línea de defensa, protegiendo antes de que el intruso entre en el volumen interior.',
+          detalles: [
+            { titulo: 'Componentes habituales', texto: 'Contactos magnéticos en puertas y ventanas, detectores de rotura de cristal y, en exteriores, barreras de infrarrojos.' },
+            { titulo: 'Por qué se separan de las volumétricas', texto: 'Permiten armar el perímetro mientras alguien sigue dentro del inmueble (modo "en casa" o "noche"), sin activar los detectores volumétricos del interior.' },
+          ],
+        },
+        {
+          titulo: 'Zonas volumétricas',
+          resumen: 'Cubren el espacio interior (una habitación, un pasillo, toda una planta) mediante detectores de movimiento: PIR, microondas o doble tecnología.',
+          detalles: [
+            { titulo: 'Cuándo se activan', texto: 'Normalmente solo en el modo de armado "fuera" (inmueble vacío), ya que detectarían igualmente a las personas que estuvieran dentro.' },
+          ],
+        },
+        {
+          titulo: 'Zonas de pánico o coacción',
+          codigo: 'Ley 5/2014 · UNE-EN 50131-1',
+          resumen: 'Zona especial que el usuario activa manualmente (botón físico, mando o código de coacción) para pedir ayuda urgente, sin relación con que el sistema esté armado o desarmado.',
+          detalles: [
+            { titulo: 'Siempre activa', texto: 'A diferencia de las zonas perimetrales o volumétricas, la zona de pánico debe poder activarse en cualquier momento, esté el sistema armado o no.' },
+            { titulo: 'Tratamiento prioritario en la CRA', texto: 'Una señal de pánico o coacción se trata como máxima prioridad en la Central Receptora, habitualmente con protocolo de aviso inmediato a la Policía o Guardia Civil sin necesidad de la verificación previa exigida para una alarma de intrusión ordinaria.' },
+          ],
+        },
+        {
+          titulo: 'Zonas 24 horas',
+          resumen: 'Zonas que permanecen siempre activas, esté el sistema armado o desarmado: típicamente sabotaje/tamper, incendio, inundación o la propia zona de pánico.',
+          detalles: [
+            { titulo: 'Por qué no se pueden desactivar', texto: 'Protegen riesgos que existen independientemente de si el usuario está en casa (un incendio, una manipulación de la central), así que desarmar el sistema para entrar y salir no debe dejarlas desprotegidas.' },
+          ],
+        },
+        {
+          titulo: 'Zonas temporizadas (entrada/salida)',
+          resumen: 'Dan al usuario un margen de tiempo para salir del inmueble tras armar el sistema, y para desarmarlo al entrar, sin que salte la alarma durante ese intervalo.',
+          detalles: [
+            { titulo: 'Tiempo de entrada y de salida', texto: 'Se configuran de forma independiente (habitualmente entre 20 y 60 segundos cada uno) según la distancia entre la puerta de acceso y el teclado.' },
+            { titulo: 'Equilibrio entre comodidad y seguridad', texto: 'Un tiempo de entrada demasiado largo da más margen a un intruso para desactivar el sistema antes de que se dispare la alarma; conviene ajustarlo al mínimo razonable para el usuario.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'instalacion-mantenimiento-legal',
+      titulo: 'Instalación y mantenimiento: obligaciones legales',
+      items: [
+        {
+          titulo: 'Empresas autorizadas para instalar: registro obligatorio',
+          codigo: 'Ley 5/2014, arts. 7-10',
+          resumen: 'Solo puede instalar o mantener sistemas de alarma una empresa de seguridad autorizada e inscrita en el Registro Nacional de Seguridad Privada, con personal técnico habilitado.',
+          detalles: [
+            { titulo: 'Verificación antes de contratar', texto: 'El cliente (o el comercial que le asesora) puede pedir el número de inscripción de la empresa en el Registro Nacional de Seguridad Privada antes de firmar.' },
+          ],
+        },
+        {
+          titulo: 'Revisiones periódicas obligatorias',
+          codigo: 'RD 195/2023',
+          resumen: 'El sistema instalado debe mantenerse en condiciones de funcionamiento mediante revisiones periódicas, no basta con la instalación inicial.',
+          detalles: [
+            { titulo: 'Periodicidad habitual', texto: 'La normativa y los contratos tipo del sector suelen establecer al menos una revisión técnica anual, más frecuente en instalaciones de grado alto o especialmente críticas.' },
+            { titulo: 'Qué se revisa', texto: 'Estado de baterías, correcto funcionamiento de cada detector y sirena, cobertura de las vías de comunicación con la CRA y actualización del registro de usuarios autorizados.' },
+          ],
+        },
+        {
+          titulo: 'Certificado de instalación requerido',
+          codigo: 'RD 195/2023',
+          resumen: 'Al finalizar la instalación, la empresa debe emitir un certificado o boletín que acredite que el sistema cumple la norma técnica correspondiente a su grado.',
+          detalles: [
+            { titulo: 'Contenido del certificado', texto: 'Identificación de la empresa instaladora y del técnico, relación de equipos instalados con su grado de seguridad, y fecha de puesta en marcha.' },
+            { titulo: 'Por qué conservarlo', texto: 'Es el documento que acredita el cumplimiento normativo ante una inspección, un siniestro con la aseguradora del cliente, o una reclamación posterior.' },
+          ],
+        },
+        {
+          titulo: 'Documentación que debe entregar la empresa al cliente',
+          codigo: 'RD 195/2023 · LGDCU',
+          resumen: 'Más allá del contrato, el cliente tiene derecho a recibir la documentación necesaria para entender y usar su propio sistema.',
+          detalles: [
+            { titulo: 'Manual de usuario', texto: 'Instrucciones de armado/desarmado, gestión de códigos de usuario y qué hacer ante una alarma o un fallo del sistema.' },
+            { titulo: 'Certificado de instalación', texto: 'El documento descrito en el punto anterior, acreditativo del cumplimiento técnico.' },
+            { titulo: 'Copia del contrato completo', texto: 'Incluidas las condiciones generales, no solo el resumen comercial firmado en el momento de la venta.' },
+            { titulo: 'Datos de contacto de la CRA y de asistencia técnica', texto: 'Para que el cliente sepa a quién avisar ante una avería o una duda de funcionamiento, sin depender únicamente del comercial que le vendió el sistema.' },
+          ],
+        },
+      ],
+    },
   ];
 
   function normTablaHtml(tabla) {
@@ -3262,9 +3505,19 @@
       </div>`;
   }
 
+  // Indice de busqueda de cada norma: titulo+codigo+resumen+detalles y,
+  // cuando el item tiene tabla (p.ej. grados de seguridad o equipamiento por
+  // grado), tambien su cabecera y filas, para que un termino que solo
+  // aparece dentro de la tabla (p.ej. "60 horas" o un valor de una celda)
+  // tambien sea localizable con el buscador.
   function normItemBusqueda(item) {
     const partes = [item.titulo, item.codigo || '', item.resumen]
       .concat((item.detalles || []).map(d => `${d.titulo} ${d.texto}`));
+    if (item.tabla) {
+      partes.push(item.tabla.titulo || '');
+      partes.push((item.tabla.cabecera || []).join(' '));
+      (item.tabla.filas || []).forEach((fila) => partes.push(fila.join(' ')));
+    }
     return partes.join(' ').toLowerCase();
   }
 
