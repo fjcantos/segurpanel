@@ -740,6 +740,14 @@ function etiquetaNivelGlobal(nivelGlobal) {
   }
 }
 
+// Margenes de los informes PDF (analisis basico y avanzado). El margen
+// derecho es mayor que el resto porque anchoUtil = pageWidth - left - right
+// se usa como ancho maximo de todos los bloques de texto: con un margen
+// derecho pequeno, el texto quedaba pegado (o se salia por) el borde fisico
+// de la pagina en algunos lectores de PDF. El resto de margenes se dejan en
+// 50pt, el valor original.
+const MARGENES_PDF = { top: 50, bottom: 50, left: 50, right: 70 };
+
 // Cabecera comun (logo UIC, titulo, fecha y linea separadora) para ambos
 // informes; devuelve la posicion Y donde empieza el cuerpo del documento.
 function dibujarCabecera(doc, anchoUtil, titulo) {
@@ -807,7 +815,10 @@ function dibujarPiePagina(doc, anchoUtil, texto) {
 function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, conteosAnonimizacion, totalAnonimizado }) {
   const doc = new PDFDocument({
     size: "A4",
-    margin: 50,
+    // Margen derecho mayor que el resto: da un colchon extra para que el
+    // texto justificado a ancho completo (anchoUtil, calculado a partir de
+    // este margen) nunca quede pegado al borde fisico de la pagina.
+    margins: MARGENES_PDF,
     bufferPages: true, // necesario para volver a paginas anteriores y anadir el pie de pagina
     info: { Title: "Informe de análisis de contrato - UIC" },
   });
@@ -876,18 +887,23 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
       .fillColor(GRIS)
       .font("Helvetica")
       .fontSize(10)
-      .text("No se han detectado cláusulas de riesgo automáticamente. Revisa el documento completo manualmente.", doc.page.margins.left);
+      .text("No se han detectado cláusulas de riesgo automáticamente. Revisa el documento completo manualmente.", doc.page.margins.left, doc.y, { width: anchoUtil });
   }
 
   clausulas.forEach((clausula) => {
     if (doc.y > doc.page.height - doc.page.margins.bottom - 90) doc.addPage();
 
     const inicioBloque = doc.y;
+    const anchoLabel = anchoUtil - 60;
+    // Altura real de la etiqueta con el ancho que va a ocupar: si es larga y
+    // ocupa dos lineas, el bloque siguiente debe bajar en proporcion o la
+    // descripcion se solapa visualmente con la segunda linea de la etiqueta.
+    doc.font("Helvetica-Bold").fontSize(11);
+    const altoLabel = doc.heightOfString(clausula.label, { width: anchoLabel });
+
     doc
       .fillColor(NEGRO)
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(clausula.label, doc.page.margins.left, inicioBloque, { width: anchoUtil - 60 });
+      .text(clausula.label, doc.page.margins.left, inicioBloque, { width: anchoLabel });
 
     doc
       .fillColor(ROJO)
@@ -905,7 +921,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
     // posicion x del bloque de puntuacion (que queda pegado al margen
     // derecho) y termine recortada fuera de la pagina.
     doc.x = doc.page.margins.left;
-    doc.y = inicioBloque + 16;
+    doc.y = inicioBloque + Math.max(altoLabel, 14) + 5;
 
     doc.fillColor(GRIS).font("Helvetica").fontSize(9.5).text(clausula.descripcion, doc.page.margins.left, doc.y, { width: anchoUtil });
 
@@ -945,7 +961,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
 function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas, totalAnonimizado }) {
   const doc = new PDFDocument({
     size: "A4",
-    margin: 50,
+    margins: MARGENES_PDF,
     bufferPages: true,
     info: { Title: "Informe de análisis legal avanzado - UIC" },
   });
@@ -1008,7 +1024,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
       .fillColor(GRIS)
       .font("Helvetica")
       .fontSize(10)
-      .text("El asistente no ha identificado cláusulas individuales. Revisa el documento completo manualmente.", doc.page.margins.left);
+      .text("El asistente no ha identificado cláusulas individuales. Revisa el documento completo manualmente.", doc.page.margins.left, doc.y, { width: anchoUtil });
   }
 
   const anchoBarra = 5;
@@ -1020,12 +1036,17 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
     const inicioBloque = doc.y;
     const xTexto = doc.page.margins.left + anchoBarra + 12;
     const { color: colorBarra, etiqueta } = colorRiesgo(clausula.riesgo);
+    const anchoTitulo = anchoTexto - 90;
+    const tituloTexto = `Cláusula ${clausula.numero} · ${clausula.titulo}`;
+    // Altura real del titulo con el ancho que va a ocupar: si es largo y
+    // ocupa dos lineas, la explicacion debe bajar en proporcion o queda
+    // solapada visualmente con la segunda linea del titulo.
+    doc.font("Helvetica-Bold").fontSize(11);
+    const altoTitulo = doc.heightOfString(tituloTexto, { width: anchoTitulo });
 
     doc
       .fillColor(NEGRO)
-      .font("Helvetica-Bold")
-      .fontSize(11)
-      .text(`Cláusula ${clausula.numero} · ${clausula.titulo}`, xTexto, inicioBloque, { width: anchoTexto - 90 });
+      .text(tituloTexto, xTexto, inicioBloque, { width: anchoTitulo });
 
     doc
       .fillColor(colorBarra)
@@ -1034,7 +1055,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
       .text(etiqueta, doc.page.width - doc.page.margins.right - 90, inicioBloque + 1, { width: 90, align: "right" });
 
     doc.x = xTexto;
-    doc.y = inicioBloque + 18;
+    doc.y = inicioBloque + Math.max(altoTitulo, 14) + 5;
     doc.fillColor(GRIS).font("Helvetica").fontSize(9.5).text(clausula.explicacion, xTexto, doc.y, { width: anchoTexto });
 
     doc.x = xTexto;
