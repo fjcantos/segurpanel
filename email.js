@@ -156,4 +156,117 @@ async function enviarEmailCambioClausulas(cambio) {
   }
 }
 
-module.exports = { enviarEmailAlianzasNuevas, enviarEmailCambioClausulas };
+/* ================================================================
+   Doble factor (2FA): codigo de 6 digitos tras un login correcto
+   ================================================================ */
+
+function construirHtmlCodigo2FA(codigo) {
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Verificación en dos pasos</p>
+    </div>
+    <div style="padding:28px;text-align:center;">
+      <p style="margin:0 0 18px;color:#4a0015;font-size:14px;line-height:1.5;">
+        Introduce este código para completar tu inicio de sesión. Caduca en 10 minutos.
+      </p>
+      <div style="display:inline-block;background:#f7e9ec;border-radius:10px;padding:16px 28px;letter-spacing:8px;font-size:32px;font-weight:700;color:#8B0026;font-family:'Courier New',monospace;">
+        ${escapeHtml(codigo)}
+      </div>
+      <p style="margin:20px 0 0;color:#8a7680;font-size:12px;">
+        Si no has intentado iniciar sesión, cambia tu contraseña e informa a un Super Admin.
+      </p>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// A diferencia de enviarEmailAlianzasNuevas/enviarEmailCambioClausulas
+// (fire-and-forget), aqui SI interesa saber si el envio ha funcionado: sin
+// el codigo por email el usuario no puede completar el login, asi que
+// apiLogin en server.js usa el resultado para avisar de un problema en vez
+// de dejar al usuario esperando un correo que nunca llegará. Devuelve
+// {ok:boolean} en vez de lanzar, para que el llamador no necesite try/catch.
+async function enviarEmailCodigo2FA(usuario, codigo) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return { ok: false, motivo: "SMTP no configurado" };
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: usuario.email,
+      subject: `SegurPanel - Tu código de verificación: ${codigo}`,
+      html: construirHtmlCodigo2FA(codigo),
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error("Error enviando email de código 2FA:", e.message || e);
+    return { ok: false, motivo: e.message || "Error desconocido" };
+  }
+}
+
+/* ================================================================
+   Aviso de IP bloqueada por demasiados intentos de login fallidos
+   ================================================================ */
+
+function construirHtmlIPBloqueada({ ip, intentos, bloqueadaHasta }) {
+  const hastaTexto = bloqueadaHasta
+    ? new Date(bloqueadaHasta).toLocaleString("es-ES", { dateStyle: "long", timeStyle: "short" })
+    : "—";
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Aviso de seguridad: IP bloqueada</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;line-height:1.5;">
+        La dirección IP <strong>${escapeHtml(ip)}</strong> se ha bloqueado automáticamente durante 30 minutos tras
+        registrar <strong>${escapeHtml(String(intentos))} intentos de inicio de sesión fallidos</strong> en los últimos 15 minutos.
+      </p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Bloqueada hasta:</strong> ${escapeHtml(hastaTexto)}</p>
+      <p style="margin:16px 0 0;color:#8a7680;font-size:12px;">
+        Si reconoces esta actividad (p.ej. alguien del equipo con la contraseña olvidada), no hace falta ninguna acción: el bloqueo se levanta solo pasado ese tiempo.
+        Si no la reconoces, revisa el Panel de auditoría.
+      </p>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que enviarEmailAlianzasNuevas: nunca debe romper
+// el flujo de login que lo origina. `destinatarios` es la lista de emails
+// de los super_admin activos (la calcula el llamador con
+// db.listarSuperAdminsActivos(), para no acoplar email.js a db.js).
+async function enviarEmailIPBloqueada({ ip, intentos, bloqueadaHasta, destinatarios }) {
+  if (!Array.isArray(destinatarios) || destinatarios.length === 0) return;
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: destinatarios.join(", "),
+      subject: `SegurPanel - IP bloqueada por intentos de login fallidos (${ip})`,
+      html: construirHtmlIPBloqueada({ ip, intentos, bloqueadaHasta }),
+    });
+  } catch (e) {
+    console.error("Error enviando email de aviso de IP bloqueada:", e.message || e);
+  }
+}
+
+module.exports = {
+  enviarEmailAlianzasNuevas,
+  enviarEmailCambioClausulas,
+  enviarEmailCodigo2FA,
+  enviarEmailIPBloqueada,
+};

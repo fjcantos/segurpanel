@@ -18,6 +18,7 @@
 const path = require("path");
 const fs = require("fs");
 const { DatabaseSync } = require("node:sqlite");
+const cifrado = require("./cifrado");
 
 const DIR_DATOS = process.env.DATA_DIR || path.join(__dirname, "data");
 const RUTA_DB = path.join(DIR_DATOS, "segurpanel.db");
@@ -118,6 +119,36 @@ db.exec(`
     created_at        TEXT NOT NULL
   );
 
+  -- Codigos de un solo uso para el doble factor (2FA) de super_admin/admin
+  -- tras un login con contraseña correcta (ver auth.js/server.js). Solo se
+  -- guarda el hash del codigo, nunca el codigo en claro.
+  CREATE TABLE IF NOT EXISTS two_factor_codes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    code_hash   TEXT NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    used        INTEGER NOT NULL DEFAULT 0,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
+  -- Intentos de login fallidos por IP (independiente del bloqueo por
+  -- CUENTA ya existente en users.failed_attempts/locked_until): permite
+  -- frenar un ataque que pruebe muchas cuentas distintas desde la misma IP,
+  -- no solo muchos intentos contra una misma cuenta.
+  CREATE TABLE IF NOT EXISTS ip_login_attempts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip          TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS ip_blocks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip             TEXT NOT NULL,
+    blocked_until  TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS push_subscriptions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id),
@@ -167,6 +198,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ofertas_empresa ON ofertas(empresa);
   CREATE INDEX IF NOT EXISTS idx_contract_stats_provincia ON contract_stats(provincia);
   CREATE INDEX IF NOT EXISTS idx_tab_visits_user ON tab_visits(user_id);
+  CREATE INDEX IF NOT EXISTS idx_two_factor_codes_user ON two_factor_codes(user_id, used, expires_at);
+  CREATE INDEX IF NOT EXISTS idx_ip_login_attempts_ip ON ip_login_attempts(ip, created_at);
+  CREATE INDEX IF NOT EXISTS idx_ip_blocks_ip ON ip_blocks(ip, blocked_until);
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_contratos_avanzados_empresa_tipo ON contratos_avanzados(empresa, tipo);
@@ -220,6 +254,12 @@ function buscarUsuarioPorId(id) {
 
 function listarUsuarios() {
   return db.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
+}
+
+// Usado para notificar por email a todo super_admin activo cuando una IP
+// se bloquea por demasiados intentos de login fallidos (ver server.js).
+function listarSuperAdminsActivos() {
+  return db.prepare("SELECT * FROM users WHERE role = 'super_admin' AND status = 'active'").all();
 }
 
 function crearUsuario({ email, name, passwordHash, role, status, mustChangePassword, approvedBy, canInstallApp }) {
@@ -293,6 +333,82 @@ function limpiarIntentosFallidos(userId) {
     ahoraISO(),
     userId
   );
+}
+
+/* ---------- Rate limiting de login por IP ----------
+   Independiente del bloqueo por CUENTA de arriba (failed_attempts/
+   locked_until): aqui se cuenta por IP, para frenar un ataque que pruebe
+   muchas cuentas distintas desde la misma direccion, no solo muchos
+   intentos contra una misma cuenta. */
+
+const UMBRAL_INTENTOS_IP = 5;
+const MINUTOS_VENTANA_IP = 15;
+const MINUTOS_BLOQUEO_IP = 30;
+
+// Fecha (ISO) hasta la que esa IP esta bloqueada, o null si no hay ningun
+// bloqueo activo ahora mismo.
+function ipBloqueadaHasta(ip) {
+  if (!ip) return null;
+  const fila = db
+    .prepare("SELECT blocked_until FROM ip_blocks WHERE ip = ? AND blocked_until > ? ORDER BY blocked_until DESC LIMIT 1")
+    .get(ip, ahoraISO());
+  return fila ? fila.blocked_until : null;
+}
+
+// Registra un intento fallido de login desde esta IP. Si en los ultimos
+// MINUTOS_VENTANA_IP minutos ya hay UMBRAL_INTENTOS_IP intentos o mas, crea
+// un bloqueo de MINUTOS_BLOQUEO_IP minutos. El bloqueo se crea UNA sola vez
+// por racha (yaAvisada=true en los intentos siguientes mientras siga
+// bloqueada), para que el aviso por email a super_admin en server.js no se
+// dispare mas de una vez por bloqueo.
+function registrarIntentoFallidoIP(ip) {
+  if (!ip) return { bloqueada: false, intentos: 0 };
+  db.prepare("INSERT INTO ip_login_attempts (ip, created_at) VALUES (?, ?)").run(ip, ahoraISO());
+
+  const desde = new Date(Date.now() - MINUTOS_VENTANA_IP * 60 * 1000).toISOString();
+  const { n: intentos } = db
+    .prepare("SELECT COUNT(*) AS n FROM ip_login_attempts WHERE ip = ? AND created_at > ?")
+    .get(ip, desde);
+
+  if (intentos < UMBRAL_INTENTOS_IP) return { bloqueada: false, intentos };
+
+  const bloqueoExistente = ipBloqueadaHasta(ip);
+  if (bloqueoExistente) return { bloqueada: true, intentos, bloqueadaHasta: bloqueoExistente, yaAvisada: true };
+
+  const bloqueadaHasta = new Date(Date.now() + MINUTOS_BLOQUEO_IP * 60 * 1000).toISOString();
+  db.prepare("INSERT INTO ip_blocks (ip, blocked_until, created_at) VALUES (?, ?, ?)").run(ip, bloqueadaHasta, ahoraISO());
+  return { bloqueada: true, intentos, bloqueadaHasta, yaAvisada: false };
+}
+
+/* ---------- Codigos de doble factor (2FA) ---------- */
+
+const DURACION_CODIGO_2FA_MINUTOS = 10;
+const MAX_INTENTOS_CODIGO_2FA = 5;
+
+// Crea un codigo nuevo e invalida (marca como usados) los codigos previos
+// sin usar de ese mismo usuario: solo el ultimo emitido es valido, aunque
+// el usuario haya pedido reenviarlo varias veces.
+function crearCodigo2FA({ userId, codeHash }) {
+  db.prepare("UPDATE two_factor_codes SET used = 1 WHERE user_id = ? AND used = 0").run(userId);
+  const expiraEn = new Date(Date.now() + DURACION_CODIGO_2FA_MINUTOS * 60 * 1000).toISOString();
+  const info = db
+    .prepare("INSERT INTO two_factor_codes (user_id, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .run(userId, codeHash, expiraEn, ahoraISO());
+  return Number(info.lastInsertRowid);
+}
+
+function buscarCodigo2FAVigente(userId) {
+  return db
+    .prepare("SELECT * FROM two_factor_codes WHERE user_id = ? AND used = 0 AND expires_at > ? ORDER BY id DESC LIMIT 1")
+    .get(userId, ahoraISO());
+}
+
+function incrementarIntentosCodigo2FA(id) {
+  db.prepare("UPDATE two_factor_codes SET attempts = attempts + 1 WHERE id = ?").run(id);
+}
+
+function marcarCodigo2FAUsado(id) {
+  db.prepare("UPDATE two_factor_codes SET used = 1 WHERE id = ?").run(id);
 }
 
 /* ---------- Solicitudes de acceso ---------- */
@@ -563,7 +679,7 @@ function registrarContratoAnalizado({ provincia, empresa, puntuacion, clausulas,
       empresa || null,
       Number.isFinite(puntuacion) ? puntuacion : null,
       JSON.stringify(clausulas || []),
-      textoAnonimizado || null,
+      cifrado.cifrar(textoAnonimizado || null),
       userId || null,
       ahoraISO(),
       tipo === "hogar" || tipo === "negocio" ? tipo : null
@@ -622,7 +738,9 @@ function listarRepositorioResumen() {
 }
 
 function obtenerContratoDetalle(id) {
-  return db.prepare("SELECT * FROM contract_stats WHERE id = ?").get(id);
+  const fila = db.prepare("SELECT * FROM contract_stats WHERE id = ?").get(id);
+  if (fila) fila.texto_anonimizado = cifrado.descifrar(fila.texto_anonimizado);
+  return fila;
 }
 
 function clasificarContrato(id, tipo) {
@@ -677,7 +795,7 @@ function registrarAnalisisAvanzado({
       resumenGeneral || null,
       JSON.stringify(clausulas || []),
       Number.isFinite(totalAnonimizado) ? totalAnonimizado : null,
-      textoAnonimizado || null,
+      cifrado.cifrar(textoAnonimizado || null),
       userId || null,
       ahoraISO()
     );
@@ -695,7 +813,9 @@ function listarAnalisisAvanzadoResumen() {
 }
 
 function obtenerAnalisisAvanzadoDetalle(id) {
-  return db.prepare("SELECT * FROM contratos_avanzados WHERE id = ?").get(id);
+  const fila = db.prepare("SELECT * FROM contratos_avanzados WHERE id = ?").get(id);
+  if (fila) fila.texto_anonimizado = cifrado.descifrar(fila.texto_anonimizado);
+  return fila;
 }
 
 function clasificarAnalisisAvanzado(id, tipo) {
@@ -874,17 +994,16 @@ function registrarAuditoria({ userId, email, action, detail, ip }) {
   db.prepare(
     `INSERT INTO audit_log (user_id, email, action, detail, ip, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(userId || null, email || null, action, detail || null, ip || null, ahoraISO());
+  ).run(userId || null, email || null, action, cifrado.cifrar(detail || null), ip || null, ahoraISO());
 }
 
 function listarAuditoria({ limit, before } = {}) {
   const tope = Math.min(Math.max(Number(limit) || 100, 1), 500);
-  if (before) {
-    return db
-      .prepare("SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?")
-      .all(Number(before), tope);
-  }
-  return db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(tope);
+  const filas = before
+    ? db.prepare("SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?").all(Number(before), tope)
+    : db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(tope);
+  filas.forEach((f) => { f.detail = cifrado.descifrar(f.detail); });
+  return filas;
 }
 
 // Usado por "Limpiar logs de auditoría" (panel de Super Admin, confirmado
@@ -941,6 +1060,7 @@ module.exports = {
   buscarUsuarioPorEmail,
   buscarUsuarioPorId,
   listarUsuarios,
+  listarSuperAdminsActivos,
   crearUsuario,
   actualizarPassword,
   actualizarRol,
@@ -948,6 +1068,13 @@ module.exports = {
   actualizarPuedeInstalarApp,
   registrarIntentoFallido,
   limpiarIntentosFallidos,
+  ipBloqueadaHasta,
+  registrarIntentoFallidoIP,
+  crearCodigo2FA,
+  buscarCodigo2FAVigente,
+  incrementarIntentosCodigo2FA,
+  marcarCodigo2FAUsado,
+  MAX_INTENTOS_CODIGO_2FA,
   crearSolicitudAcceso,
   solicitudPendientePorEmail,
   listarSolicitudes,

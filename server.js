@@ -160,6 +160,19 @@ function exigirSesion(req, res, { permitirCambioPendiente = false, roles = null 
 }
 
 function obtenerIP(req) {
+  // Detras de un proxy TLS (Render en produccion) req.socket.remoteAddress
+  // es la IP del propio proxy para TODAS las peticiones, no la del cliente
+  // real: eso inutilizaria el rate limiting por IP (ver
+  // registrarIntentoFallidoIP/ipBloqueadaHasta en db.js), que agruparia a
+  // todo el mundo bajo la misma IP. Mismo patron que esConexionSegura con
+  // X-Forwarded-Proto: se respeta X-Forwarded-For si el proxy lo establece
+  // (el primer valor de la lista es la IP original del cliente; el resto
+  // son los proxies intermedios), y si no existe se cae al socket directo
+  // (uso local, sin proxy delante).
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
   return (req.socket && req.socket.remoteAddress) || null;
 }
 
@@ -276,7 +289,51 @@ async function apiRequestAccess(req, res) {
   });
 }
 
+// Registra un intento de login fallido contra la IP de origen (rate
+// limiting independiente del bloqueo por cuenta de arriba) y, si eso
+// dispara un bloqueo NUEVO (no si ya estaba bloqueada de un intento
+// anterior en la misma racha), avisa por email a todo super_admin activo
+// y deja constancia en el panel de auditoria.
+function registrarFalloLoginIP(ip) {
+  if (!ip) return;
+  const resultado = db.registrarIntentoFallidoIP(ip);
+  if (!resultado.bloqueada || resultado.yaAvisada) return;
+
+  const destinatarios = db.listarSuperAdminsActivos().map((u) => u.email).filter(Boolean);
+  email
+    .enviarEmailIPBloqueada({
+      ip,
+      intentos: resultado.intentos,
+      bloqueadaHasta: resultado.bloqueadaHasta,
+      destinatarios,
+    })
+    .catch((e) => console.error("Error enviando email de aviso de IP bloqueada:", e));
+
+  registrarAuditoriaSegura({
+    userId: null,
+    email: null,
+    action: "ip_bloqueada",
+    detail: { ip, intentos: resultado.intentos, bloqueadaHasta: resultado.bloqueadaHasta },
+    ip,
+  });
+}
+
 async function apiLogin(req, res) {
+  const ip = obtenerIP(req);
+
+  // Rate limiting por IP: se comprueba ANTES de leer/validar credenciales,
+  // para no gastar ni un solo intento de verificacion de contraseña (ni
+  // dar ninguna pista sobre si el correo existe) mientras la IP este
+  // bloqueada.
+  const bloqueadaHasta = db.ipBloqueadaHasta(ip);
+  if (bloqueadaHasta) {
+    return enviarJSON(res, 429, {
+      error: "Demasiados intentos fallidos desde esta conexión. Inténtalo de nuevo más tarde.",
+      code: "IP_BLOQUEADA",
+      bloqueadaHasta,
+    });
+  }
+
   let cuerpo;
   try {
     cuerpo = await leerCuerpoJSON(req);
@@ -284,17 +341,21 @@ async function apiLogin(req, res) {
     return enviarJSON(res, 400, { error: e.message });
   }
 
-  const email = auth.normalizarEmail(cuerpo.email);
+  const correo = auth.normalizarEmail(cuerpo.email);
   const password = typeof cuerpo.password === "string" ? cuerpo.password : "";
+  const recordar = !!cuerpo.recordar;
 
-  if (!auth.esCorreoPermitido(email) || !password) {
+  if (!auth.esCorreoPermitido(correo) || !password) {
     return enviarJSON(res, 400, { error: "Correo o contraseña inválidos." });
   }
 
-  const usuario = db.buscarUsuarioPorEmail(email);
+  const usuario = db.buscarUsuarioPorEmail(correo);
   const ERROR_GENERICO = { error: "Correo o contraseña incorrectos.", code: "CREDENCIALES_INVALIDAS" };
 
-  if (!usuario) return enviarJSON(res, 401, ERROR_GENERICO);
+  if (!usuario) {
+    registrarFalloLoginIP(ip);
+    return enviarJSON(res, 401, ERROR_GENERICO);
+  }
 
   if (usuario.status === "pending") {
     return enviarJSON(res, 403, {
@@ -318,11 +379,104 @@ async function apiLogin(req, res) {
 
   if (!auth.verificarPassword(password, usuario.password_hash)) {
     db.registrarIntentoFallido(usuario.id);
+    registrarFalloLoginIP(ip);
     return enviarJSON(res, 401, ERROR_GENERICO);
   }
 
   db.limpiarIntentosFallidos(usuario.id);
-  const { token } = auth.crearSesionParaUsuario(req, usuario);
+
+  // Doble factor (2FA): solo super_admin/admin, y solo cuando el login ya
+  // esta completo por lo demas (si tiene pendiente el cambio de la
+  // contraseña temporal, ese flujo aparte termina de loguear en
+  // apiChangePassword, no aqui).
+  const necesita2FA =
+    !usuario.must_change_password &&
+    (usuario.role === auth.ROLES.SUPER_ADMIN || usuario.role === auth.ROLES.ADMIN);
+
+  if (necesita2FA) {
+    const codigo = auth.generarCodigo2FA();
+    db.crearCodigo2FA({ userId: usuario.id, codeHash: auth.hashCodigo2FA(codigo) });
+
+    const envio = await email.enviarEmailCodigo2FA(usuario, codigo);
+    if (!envio.ok) {
+      return enviarJSON(res, 503, {
+        error: "No se pudo enviar el código de verificación por email. Inténtalo de nuevo en unos minutos.",
+        code: "ERROR_ENVIO_2FA",
+      });
+    }
+
+    return enviarJSON(res, 200, {
+      requiresTwoFactor: true,
+      pendingToken: auth.crearTokenPendiente2FA(usuario),
+      email: usuario.email,
+    });
+  }
+
+  const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
+
+  registrarAuditoriaSegura({
+    userId: usuario.id,
+    email: usuario.email,
+    action: "login",
+    ip,
+  });
+
+  enviarJSON(res, 200, { usuario: usuarioPublico(usuario) }, {
+    "Set-Cookie": auth.cookieSesion(req, token, recordar),
+  });
+}
+
+// Segundo paso del login para super_admin/admin: el codigo de 6 digitos
+// enviado por email (ver apiLogin). pendingToken es el token de corta
+// duracion devuelto por apiLogin, que demuestra que ya se paso el paso 1
+// (contraseña correcta) para ese usuario concreto.
+async function apiVerificar2FA(req, res) {
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const pendingToken = typeof cuerpo.pendingToken === "string" ? cuerpo.pendingToken : "";
+  const codigo = typeof cuerpo.code === "string" ? cuerpo.code.trim() : "";
+  const recordar = !!cuerpo.recordar;
+
+  const userId = auth.verificarTokenPendiente2FA(pendingToken);
+  if (!userId) {
+    return enviarJSON(res, 401, {
+      error: "La verificación ha caducado o no es válida. Vuelve a iniciar sesión.",
+      code: "PENDIENTE_2FA_INVALIDO",
+    });
+  }
+
+  const usuario = db.buscarUsuarioPorId(userId);
+  if (!usuario || usuario.status !== "active") {
+    return enviarJSON(res, 401, { error: "No se pudo completar el inicio de sesión." });
+  }
+
+  const registro = db.buscarCodigo2FAVigente(userId);
+  if (!registro) {
+    return enviarJSON(res, 401, {
+      error: "El código ha caducado. Pide que se reenvíe.",
+      code: "CODIGO_2FA_CADUCADO",
+    });
+  }
+
+  if (registro.attempts >= db.MAX_INTENTOS_CODIGO_2FA) {
+    return enviarJSON(res, 401, {
+      error: "Demasiados intentos con este código. Pide que se reenvíe.",
+      code: "CODIGO_2FA_BLOQUEADO",
+    });
+  }
+
+  if (!codigo || auth.hashCodigo2FA(codigo) !== registro.code_hash) {
+    db.incrementarIntentosCodigo2FA(registro.id);
+    return enviarJSON(res, 401, { error: "Código incorrecto.", code: "CODIGO_2FA_INCORRECTO" });
+  }
+
+  db.marcarCodigo2FAUsado(registro.id);
+  const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
     userId: usuario.id,
@@ -332,8 +486,42 @@ async function apiLogin(req, res) {
   });
 
   enviarJSON(res, 200, { usuario: usuarioPublico(usuario) }, {
-    "Set-Cookie": auth.cookieSesion(req, token),
+    "Set-Cookie": auth.cookieSesion(req, token, recordar),
   });
+}
+
+// Reenvia el codigo de 2FA (por si el primero se pierde/tarda), invalidando
+// el anterior. Mismo pendingToken que ya tiene la pantalla de verificacion.
+async function apiReenviar2FA(req, res) {
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const pendingToken = typeof cuerpo.pendingToken === "string" ? cuerpo.pendingToken : "";
+  const userId = auth.verificarTokenPendiente2FA(pendingToken);
+  if (!userId) {
+    return enviarJSON(res, 401, {
+      error: "La verificación ha caducado o no es válida. Vuelve a iniciar sesión.",
+      code: "PENDIENTE_2FA_INVALIDO",
+    });
+  }
+
+  const usuario = db.buscarUsuarioPorId(userId);
+  if (!usuario || usuario.status !== "active") {
+    return enviarJSON(res, 401, { error: "No se pudo reenviar el código." });
+  }
+
+  const codigo = auth.generarCodigo2FA();
+  db.crearCodigo2FA({ userId: usuario.id, codeHash: auth.hashCodigo2FA(codigo) });
+
+  const envio = await email.enviarEmailCodigo2FA(usuario, codigo);
+  if (!envio.ok) {
+    return enviarJSON(res, 503, { error: "No se pudo reenviar el código por email. Inténtalo de nuevo en unos minutos." });
+  }
+  enviarJSON(res, 200, { ok: true });
 }
 
 async function apiMe(req, res) {
@@ -2875,6 +3063,8 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "POST" && ruta === "/api/auth/request-access") return await apiRequestAccess(req, res);
     if (req.method === "POST" && ruta === "/api/auth/login") return await apiLogin(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/verify-2fa") return await apiVerificar2FA(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/resend-2fa") return await apiReenviar2FA(req, res);
     if (req.method === "POST" && ruta === "/api/auth/logout") return await apiLogout(req, res);
     if (req.method === "POST" && ruta === "/api/auth/change-password") return await apiChangePassword(req, res);
     if (req.method === "GET" && ruta === "/api/auth/me") return await apiMe(req, res);

@@ -17,7 +17,11 @@ const DOMINIO_PERMITIDO = "verisure.es";
 const SUPER_ADMIN_EMAIL = "fjose.cantos@verisure.es";
 
 const NOMBRE_COOKIE = "sp_session";
-const DURACION_SESION_HORAS = 12;
+const DURACION_SESION_HORAS = 8;
+// Duracion de la sesion con "Recordarme" marcado en el login: 7 dias en vez
+// de las 8 horas habituales. Se aplica tanto al JWT (expiresIn) como al
+// Max-Age de la cookie (ver crearSesionParaUsuario/cookieSesion).
+const DURACION_SESION_RECORDAR_HORAS = 24 * 7;
 const RONDAS_BCRYPT = 12;
 
 const ROLES = Object.freeze({
@@ -138,9 +142,18 @@ function cabeceraSetCookie(nombre, valor, { maxAgeSegundos, seguro, borrar } = {
   return partes.join("; ");
 }
 
-function cookieSesion(req, token) {
+// Sin "recordar": cookie DE SESION (sin Max-Age/Expires) — el navegador la
+// borra al cerrarse del todo, asi que volver a abrir la app exige iniciar
+// sesion de nuevo aunque el JWT en si todavia no haya caducado. Con
+// "recordar": cookie persistente 7 dias. En ambos casos el JWT tiene su
+// propia caducidad server-side (ver crearSesionParaUsuario) igual de larga
+// que el Max-Age de la cookie, asi que aunque el navegador conservase la
+// cookie mas alla de lo esperado (algunos gestores de "restaurar pestañas"
+// no la borran siempre al cerrar), la sesion deja de ser valida en el
+// servidor pasado ese tiempo de todos modos.
+function cookieSesion(req, token, recordar) {
   return cabeceraSetCookie(NOMBRE_COOKIE, token, {
-    maxAgeSegundos: DURACION_SESION_HORAS * 3600,
+    maxAgeSegundos: recordar ? DURACION_SESION_RECORDAR_HORAS * 3600 : undefined,
     seguro: esConexionSegura(req),
   });
 }
@@ -151,9 +164,10 @@ function cookieBorrarSesion(req) {
 
 /* ---------- Sesiones (JWT + tabla sessions para poder revocar) ---------- */
 
-function crearSesionParaUsuario(req, usuario) {
+function crearSesionParaUsuario(req, usuario, recordar) {
   const jti = crypto.randomBytes(24).toString("hex");
-  const expiraEn = new Date(Date.now() + DURACION_SESION_HORAS * 3600 * 1000);
+  const duracionHoras = recordar ? DURACION_SESION_RECORDAR_HORAS : DURACION_SESION_HORAS;
+  const expiraEn = new Date(Date.now() + duracionHoras * 3600 * 1000);
 
   db.crearSesion({
     id: jti,
@@ -166,7 +180,7 @@ function crearSesionParaUsuario(req, usuario) {
   const token = jwt.sign({ role: usuario.role }, JWT_SECRET, {
     subject: String(usuario.id),
     jwtid: jti,
-    expiresIn: `${DURACION_SESION_HORAS}h`,
+    expiresIn: `${duracionHoras}h`,
   });
 
   return { token, jti };
@@ -199,6 +213,52 @@ function usuarioDesdePeticion(req) {
 
 function cerrarSesion(jti) {
   if (jti) db.revocarSesion(jti);
+}
+
+/* ---------- Doble factor (2FA) para super_admin/admin ----------
+   Tras una contraseña correcta, esos dos roles no reciben todavia una
+   sesion completa: reciben un token JWT de corta duracion (10 min) que
+   demuestra que ya pasaron el paso 1 (contraseña), y deben aportar ademas
+   el codigo de 6 digitos enviado por email para completar el login (ver
+   apiLogin/apiVerificar2FA en server.js). Este token NO es una cookie de
+   sesion ni da acceso a nada por si mismo: solo sirve para la llamada a
+   /api/auth/verify-2fa. */
+
+const DURACION_TOKEN_PENDIENTE_2FA = "10m";
+
+function generarCodigo2FA() {
+  // 6 digitos (000000-999999), con ceros a la izquierda si hace falta.
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+// Solo se guarda (y se compara) el hash del codigo, nunca el codigo en
+// claro: un hash rapido (SHA-256) es apropiado aqui porque el codigo ya
+// esta protegido por su propia caducidad (10 min), un solo uso y un limite
+// de intentos (ver MAX_INTENTOS_CODIGO_2FA en db.js) — no hace falta el
+// coste computacional de bcrypt, pensado para contraseñas de larga vida.
+function hashCodigo2FA(codigo) {
+  return crypto.createHash("sha256").update(String(codigo)).digest("hex");
+}
+
+function crearTokenPendiente2FA(usuario) {
+  return jwt.sign({ pending2FA: true }, JWT_SECRET, {
+    subject: String(usuario.id),
+    expiresIn: DURACION_TOKEN_PENDIENTE_2FA,
+  });
+}
+
+// Devuelve el id de usuario si el token es valido y es realmente un token
+// "pendiente de 2FA" (no una cookie de sesion normal reutilizada aqui por
+// error), o null si no.
+function verificarTokenPendiente2FA(token) {
+  if (typeof token !== "string" || !token) return null;
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload.pending2FA) return null;
+    return Number(payload.sub);
+  } catch (e) {
+    return null;
+  }
 }
 
 /* ---------- Siembra del Super Admin ---------- */
@@ -253,5 +313,9 @@ module.exports = {
   crearSesionParaUsuario,
   usuarioDesdePeticion,
   cerrarSesion,
+  generarCodigo2FA,
+  hashCodigo2FA,
+  crearTokenPendiente2FA,
+  verificarTokenPendiente2FA,
   asegurarSuperAdmin,
 };

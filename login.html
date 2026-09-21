@@ -243,6 +243,11 @@
           <button type="button" class="pw-toggle" data-target="loginPassword">MOSTRAR</button>
         </div>
 
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-weight:400;">
+          <input type="checkbox" id="loginRecordar" style="width:auto;">
+          Recordarme durante 7 días en este dispositivo
+        </label>
+
         <button type="submit" class="primary" id="btnLogin">
           <span class="spinner"></span><span class="btn-text">Entrar</span>
         </button>
@@ -310,6 +315,25 @@
       <button type="button" class="link" id="btnCerrarSesionCambio">Cerrar sesión</button>
       <div class="msg" id="msgCambiar"></div>
     </section>
+
+    <!-- ===== VERIFICACIÓN EN DOS PASOS (2FA) ===== -->
+    <section class="view" id="viewVerificar2FA">
+      <h1 class="title">Verifica tu identidad</h1>
+      <p class="subtitle">Te hemos enviado un código de 6 dígitos por email a <strong id="verificar2FAEmail"></strong>. Caduca en 10 minutos.</p>
+
+      <form id="formVerificar2FA">
+        <label for="codigo2FA">Código de verificación</label>
+        <input type="text" id="codigo2FA" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" style="letter-spacing:6px;font-size:1.3rem;text-align:center;font-family:'Courier New',monospace;" required>
+
+        <button type="submit" class="primary" id="btnVerificar2FA">
+          <span class="spinner"></span><span class="btn-text">Verificar y entrar</span>
+        </button>
+      </form>
+
+      <button type="button" class="link" id="btnReenviar2FA">Reenviar código</button>
+      <button type="button" class="link" id="btnCancelar2FA">Volver a iniciar sesión</button>
+      <div class="msg" id="msgVerificar2FA"></div>
+    </section>
   </div>
 
   <footer class="foot">© SegurPanel · Uso interno</footer>
@@ -326,7 +350,10 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const vistas = { login: $('viewLogin'), solicitar: $('viewSolicitar'), cambiar: $('viewCambiar') };
+  const vistas = {
+    login: $('viewLogin'), solicitar: $('viewSolicitar'), cambiar: $('viewCambiar'),
+    verificar2fa: $('viewVerificar2FA'),
+  };
 
   function mostrarVista(nombre) {
     Object.values(vistas).forEach(v => v.classList.remove('active'));
@@ -444,25 +471,49 @@
   })();
 
   /* ---------- Login ---------- */
+  // Estado del segundo paso (2FA), guardado entre el submit de formLogin y
+  // el de formVerificar2FA: el pendingToken que demuestra que ya se paso
+  // el paso 1, si se marco "Recordarme" (la casilla vive en la vista de
+  // login, no en la de 2FA, asi que hay que guardar su valor) y las
+  // credenciales para poder ofrecer guardarlas al terminar (igual que en
+  // el login normal sin 2FA).
+  let pendingToken2FA = null;
+  let recordarPendiente2FA = false;
+  let credencialPendiente2FA = null;
+
   $('formLogin').addEventListener('submit', async (e) => {
     e.preventDefault();
     ocultarMensaje('msgLogin');
     conCargaBoton($('btnLogin'), true);
     try {
+      const recordar = $('loginRecordar').checked;
+      const credencial = { email: $('loginEmail').value, password: $('loginPassword').value };
       const { ok, datos } = await llamar('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: $('loginEmail').value, password: $('loginPassword').value }),
+        body: JSON.stringify({ email: credencial.email, password: credencial.password, recordar }),
       });
       if (!ok) {
         mostrarMensaje('msgLogin', datos.error || 'No se pudo iniciar sesión.', 'error');
         conCargaBoton($('btnLogin'), false);
         return;
       }
+      if (datos.requiresTwoFactor) {
+        pendingToken2FA = datos.pendingToken;
+        recordarPendiente2FA = recordar;
+        credencialPendiente2FA = credencial;
+        $('verificar2FAEmail').textContent = datos.email || credencial.email;
+        $('codigo2FA').value = '';
+        ocultarMensaje('msgVerificar2FA');
+        mostrarVista('verificar2fa');
+        conCargaBoton($('btnLogin'), false);
+        setTimeout(() => $('codigo2FA').focus(), 50);
+        return;
+      }
       if (datos.usuario.mustChangePassword) {
         mostrarVista('cambiar');
         conCargaBoton($('btnLogin'), false);
       } else {
-        mostrarBienvenidaYRedirigir(datos.usuario, { email: $('loginEmail').value, password: $('loginPassword').value });
+        mostrarBienvenidaYRedirigir(datos.usuario, credencial);
         // El boton se queda en estado de carga: en un instante se navega
         // fuera de esta pagina, no hace falta restaurarlo.
       }
@@ -533,6 +584,70 @@
   $('btnCerrarSesionCambio').addEventListener('click', async () => {
     await llamar('/api/auth/logout', { method: 'POST' });
     window.location.reload();
+  });
+
+  /* ---------- Verificacion en dos pasos (2FA) ---------- */
+  $('formVerificar2FA').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgVerificar2FA');
+    conCargaBoton($('btnVerificar2FA'), true);
+    try {
+      const { ok, datos } = await llamar('/api/auth/verify-2fa', {
+        method: 'POST',
+        body: JSON.stringify({
+          pendingToken: pendingToken2FA,
+          code: $('codigo2FA').value.trim(),
+          recordar: recordarPendiente2FA,
+        }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgVerificar2FA', datos.error || 'Código incorrecto.', 'error');
+        conCargaBoton($('btnVerificar2FA'), false);
+        $('codigo2FA').select();
+        return;
+      }
+      mostrarBienvenidaYRedirigir(datos.usuario, credencialPendiente2FA);
+      // El boton se queda en estado de carga: en un instante se navega
+      // fuera de esta pagina, no hace falta restaurarlo.
+    } catch (err) {
+      mostrarMensaje('msgVerificar2FA', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+      conCargaBoton($('btnVerificar2FA'), false);
+    }
+  });
+
+  $('btnReenviar2FA').addEventListener('click', async () => {
+    ocultarMensaje('msgVerificar2FA');
+    const boton = $('btnReenviar2FA');
+    const textoOriginal = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Reenviando…';
+    try {
+      const { ok, datos } = await llamar('/api/auth/resend-2fa', {
+        method: 'POST',
+        body: JSON.stringify({ pendingToken: pendingToken2FA }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgVerificar2FA', datos.error || 'No se pudo reenviar el código.', 'error');
+      } else {
+        $('codigo2FA').value = '';
+        $('codigo2FA').focus();
+        mostrarMensaje('msgVerificar2FA', 'Código reenviado. Revisa tu email.', 'ok');
+      }
+    } catch (err) {
+      mostrarMensaje('msgVerificar2FA', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+    } finally {
+      boton.disabled = false;
+      boton.textContent = textoOriginal;
+    }
+  });
+
+  $('btnCancelar2FA').addEventListener('click', () => {
+    pendingToken2FA = null;
+    recordarPendiente2FA = false;
+    credencialPendiente2FA = null;
+    ocultarMensaje('msgVerificar2FA');
+    ocultarMensaje('msgLogin');
+    mostrarVista('login');
   });
 </script>
 </body>
