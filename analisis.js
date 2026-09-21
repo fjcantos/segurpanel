@@ -801,25 +801,47 @@ function etiquetaNivelGlobal(nivelGlobal) {
   }
 }
 
-// Color corporativo aproximado de cada empresa conocida (EMPRESAS_CONOCIDAS
-// en 2a), usado para el circulo identificativo de la cabecera del informe.
-// Sector Alarm usa dos colores de marca (negro y rojo): se dibuja como
-// circulo negro con borde rojo en vez de partir el circulo en dos.
-const COLOR_EMPRESA_DEFECTO = "#9aa0a6"; // gris: empresa no detectada
+// Color corporativo de cada empresa conocida (EMPRESAS_CONOCIDAS en 2a),
+// usado para el circulo identificativo de la cabecera del informe. El
+// nombre real de la empresa NO se muestra en el PDF (el informe es para
+// argumentacion comercial, no debe identificar a la competencia por su
+// nombre): en su lugar se muestra `etiqueta`, una descripcion generica del
+// color corporativo ("Empresa Rojo", "Empresa Azul"...). Sector Alarm usa
+// dos colores de marca (negro y rojo): `relleno2` hace que el circulo se
+// dibuje partido en dos mitades en vez de un solo color (ver
+// dibujarCirculoEmpresa).
+const COLOR_EMPRESA_DEFECTO = { relleno: "#9aa0a6", etiqueta: "Empresa no detectada" }; // gris
 const COLORES_EMPRESA = {
-  "Verisure": { relleno: "#CC0000" },
-  "Sector Alarm": { relleno: "#111111", borde: "#CC0000" },
-  "Sicor": { relleno: "#0b5e2e" },
-  "Segurma": { relleno: "#e8720c" },
-  "ADT": { relleno: "#0033a0" },
-  "Seguridad 3D": { relleno: "#f2c200" },
-  "Grupo Control": { relleno: "#7c2035" },
-  "Trablisa": { relleno: "#0a1f52" },
-  "MPA/Prosegur": { relleno: "#c9a227" },
+  "Verisure": { relleno: "#E8003D", etiqueta: "Empresa Rojo" },
+  "Sector Alarm": { relleno: "#000000", relleno2: "#CC0000", etiqueta: "Empresa Negro/Rojo" },
+  "Sicor": { relleno: "#1B5E20", etiqueta: "Empresa Verde" },
+  "Segurma": { relleno: "#F57C00", etiqueta: "Empresa Naranja" },
+  "ADT": { relleno: "#0D47A1", etiqueta: "Empresa Azul" },
+  "Seguridad 3D": { relleno: "#FDD835", etiqueta: "Empresa Amarillo/Verde" },
+  "Grupo Control": { relleno: "#7B1C2B", etiqueta: "Empresa Burdeos" },
+  "Trablisa": { relleno: "#0D1B3E", etiqueta: "Empresa Azul Marino/Naranja" },
+  "MPA/Prosegur": { relleno: "#FDD835", etiqueta: "Empresa Amarillo" },
 };
 
 function colorEmpresa(empresa) {
-  return COLORES_EMPRESA[empresa] || { relleno: COLOR_EMPRESA_DEFECTO };
+  return COLORES_EMPRESA[empresa] || COLOR_EMPRESA_DEFECTO;
+}
+
+// Dibuja el circulo identificativo de la cabecera. Si `info.relleno2` esta
+// definido (solo Sector Alarm) el circulo se parte en dos mitades verticales
+// (izquierda `relleno`, derecha `relleno2`) recortando dos rectangulos con
+// el propio circulo como mascara de recorte; si no, es un circulo de un
+// solo color relleno.
+function dibujarCirculoEmpresa(doc, cx, cy, r, info) {
+  if (info.relleno2) {
+    doc.save();
+    doc.circle(cx, cy, r).clip();
+    doc.rect(cx - r, cy - r, r, r * 2).fillColor(info.relleno).fill();
+    doc.rect(cx, cy - r, r, r * 2).fillColor(info.relleno2).fill();
+    doc.restore();
+  } else {
+    doc.circle(cx, cy, r).fillColor(info.relleno).fill();
+  }
 }
 
 // Badge Hogar/Negocio de la cabecera. Colores distintos de los de riesgo
@@ -873,16 +895,14 @@ function dibujarCabecera(doc, anchoUtil, titulo, meta = {}) {
     .text(`Fecha del análisis: ${fecha}`, xInfo, doc.page.margins.top + 44, { width: anchoInfo });
 
   /* ---- Fila de metadatos del contrato: circulo de color corporativo +
-     nombre de empresa, badge Hogar/Negocio a la derecha ---- */
+     descripcion generica del color (nunca el nombre real de la empresa),
+     badge Hogar/Negocio a la derecha ---- */
   const yMeta = doc.page.margins.top + 60;
-  const { relleno: colorCirculo, borde: bordeCirculo } = colorEmpresa(empresa);
+  const infoEmpresa = colorEmpresa(empresa);
   const rCirculo = 5;
   const cxCirculo = xInfo + rCirculo;
   const cyCirculo = yMeta + 6;
-  doc.circle(cxCirculo, cyCirculo, rCirculo).fillColor(colorCirculo).fill();
-  if (bordeCirculo) {
-    doc.circle(cxCirculo, cyCirculo, rCirculo).lineWidth(1.2).strokeColor(bordeCirculo).stroke();
-  }
+  dibujarCirculoEmpresa(doc, cxCirculo, cyCirculo, rCirculo, infoEmpresa);
 
   const xEmpresa = xInfo + rCirculo * 2 + 8;
   const anchoBadgeTipo = 100;
@@ -891,7 +911,7 @@ function dibujarCabecera(doc, anchoUtil, titulo, meta = {}) {
     .fillColor(NEGRO)
     .font("Helvetica-Bold")
     .fontSize(10)
-    .text(empresa || "Empresa no detectada", xEmpresa, yMeta, { width: anchoEmpresa });
+    .text(infoEmpresa.etiqueta, xEmpresa, yMeta, { width: anchoEmpresa });
 
   const { fondo: fondoTipo, texto: textoTipo, etiqueta: etiquetaTipo } = colorTipoContrato(tipo);
   const xBadgeTipo = xInfo + anchoInfo - anchoBadgeTipo;
