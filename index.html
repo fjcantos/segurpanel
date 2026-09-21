@@ -5575,6 +5575,19 @@
       : escapeHtml(mensaje);
   }
 
+  // Timeout de cliente para /api/analisis-avanzado: el servidor puede tardar
+  // bastante (analisis con IA en "effort: high" + hasta 3 reintentos
+  // automaticos de 5s cada uno si la API de Anthropic falla de forma
+  // transitoria), asi que se le da un margen amplio antes de abortar la
+  // peticion, en vez de dejar al usuario con un fetch colgado indefinidamente
+  // o un error generico de conexion si el navegador corta antes por su cuenta.
+  const TIMEOUT_ANALISIS_AVANZADO_MS = 180000;
+  // A partir de este tiempo sin respuesta se avisa de que el analisis sigue
+  // en curso: el caso normal (20-60s) no llega a verlo, pero si hace falta
+  // reintentar contra la API de Anthropic la espera puede alargarse bastante
+  // y conviene dejar claro que no se ha quedado colgado.
+  const AVISO_EN_PROCESO_MS = 30000;
+
   async function iniciarAnalisisAvanzado(file) {
     advEmptyNote.hidden = true;
     riskSummary.classList.remove('show');
@@ -5582,6 +5595,12 @@
     resultsAdvEl.innerHTML = '';
     if (advPdfBlobUrl) { URL.revokeObjectURL(advPdfBlobUrl); advPdfBlobUrl = null; }
     setAdvStatus('Analizando el contrato con IA como un abogado experto… puede tardar entre 20 y 60 segundos.', 'loading');
+
+    const controlador = new AbortController();
+    const timeoutAbort = setTimeout(() => controlador.abort(), TIMEOUT_ANALISIS_AVANZADO_MS);
+    const timeoutAviso = setTimeout(() => {
+      setAdvStatus('El análisis sigue en proceso… si la IA no responde a la primera, el servidor reintenta automáticamente y puede tardar hasta 3 minutos en total.', 'loading');
+    }, AVISO_EN_PROCESO_MS);
 
     try {
       const formData = new FormData();
@@ -5591,6 +5610,7 @@
         method: 'POST',
         credentials: 'same-origin',
         body: formData,
+        signal: controlador.signal,
       });
 
       if (respuesta.status === 401) {
@@ -5621,7 +5641,14 @@
       setAdvStatus('');
       renderResumenAvanzado(JSON.parse(decodeBase64Utf8(cabeceraResumen)));
     } catch (e) {
-      setAdvStatus('No se ha podido conectar con el servidor para el análisis legal avanzado.', 'error');
+      if (e.name === 'AbortError') {
+        setAdvStatus('El análisis está tardando más de 3 minutos y se ha cancelado. El servicio de IA puede estar saturado: inténtalo de nuevo en unos minutos.', 'error');
+      } else {
+        setAdvStatus('No se ha podido conectar con el servidor para el análisis legal avanzado.', 'error');
+      }
+    } finally {
+      clearTimeout(timeoutAbort);
+      clearTimeout(timeoutAviso);
     }
   }
 

@@ -699,10 +699,82 @@ const ESQUEMA_ANALISIS_LEGAL = {
 
 class AnalisisAvanzadoError extends Error {}
 
+// Reintentos automaticos de la llamada a la API de Anthropic: en produccion
+// se ha observado que la primera llamada puede fallar con "fetch failed"
+// (timeout/corte de red a bajo nivel, o la API saturada devolviendo 429/5xx)
+// sin que sea un fallo real del contrato ni de la peticion. MAX_REINTENTOS=3
+// da hasta 4 intentos en total (el original + 3 reintentos), esperando 5s
+// entre cada uno.
+const MAX_REINTENTOS_IA = 3;
+const ESPERA_REINTENTO_IA_MS = 5000;
+
+function esperar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Solo tiene sentido reintentar fallos TRANSITORIOS: un corte de red/timeout
+// (fetch lanza excepcion) o una respuesta 429 (rate limit) / 5xx (error del
+// lado de Anthropic) de la propia API. Un 4xx normal (400 peticion mal
+// formada, 401 API key invalida...) va a fallar exactamente igual en el
+// reintento, asi que se deja pasar sin reintentar.
+function esFalloTransitorioIA(respuesta) {
+  return respuesta.status === 429 || respuesta.status >= 500;
+}
+
+// Envuelve la llamada HTTP a Anthropic con la logica de reintentos de
+// arriba. Devuelve la respuesta (ok o el ultimo fallo, para que el llamador
+// la procese igual que antes) o relanza el ultimo error de red si ningun
+// intento tuvo exito.
+async function llamarAnthropicConReintentos(body, apiKey) {
+  let ultimoError = null;
+  for (let intento = 1; intento <= MAX_REINTENTOS_IA + 1; intento++) {
+    try {
+      const respuesta = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body,
+      });
+
+      const quedanIntentos = intento <= MAX_REINTENTOS_IA;
+      if (!respuesta.ok && esFalloTransitorioIA(respuesta) && quedanIntentos) {
+        console.error(
+          `Analisis avanzado: la API de Anthropic devolvio ${respuesta.status} (intento ${intento}/${MAX_REINTENTOS_IA + 1}). Reintentando en ${ESPERA_REINTENTO_IA_MS / 1000}s...`
+        );
+        await esperar(ESPERA_REINTENTO_IA_MS);
+        continue;
+      }
+      return respuesta;
+    } catch (e) {
+      // "fetch failed" y similares: fallo de red/timeout antes de recibir
+      // siquiera una respuesta HTTP.
+      ultimoError = e;
+      if (intento <= MAX_REINTENTOS_IA) {
+        console.error(
+          `Analisis avanzado: fallo de red llamando a Anthropic (intento ${intento}/${MAX_REINTENTOS_IA + 1}): ${e.message}. Reintentando en ${ESPERA_REINTENTO_IA_MS / 1000}s...`
+        );
+        await esperar(ESPERA_REINTENTO_IA_MS);
+      }
+    }
+  }
+  // Se agotaron todos los intentos y el ultimo tambien fue un fallo de red
+  // (si hubiera devuelto una respuesta HTTP, aunque fuese de error, ya se
+  // habria devuelto en el bucle de arriba).
+  throw new AnalisisAvanzadoError(
+    `No se pudo conectar con la API de Anthropic tras ${MAX_REINTENTOS_IA + 1} intentos: ${ultimoError ? ultimoError.message : "error desconocido"}.`
+  );
+}
+
 // Envia el texto (ya anonimizado) a la API de Anthropic para que Claude,
 // actuando como abogado experto, analice el contrato clausula por clausula.
 // La respuesta viene forzada a un JSON Schema (output_config.format), por lo
 // que el primer bloque de texto de la respuesta es JSON valido garantizado.
+// Reintenta automaticamente hasta 3 veces (ver llamarAnthropicConReintentos)
+// si la primera llamada falla por un problema transitorio de red o de la
+// API de Anthropic, antes de darse por vencido.
 async function analizarConIA(textoAnonimizado) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -711,29 +783,23 @@ async function analizarConIA(textoAnonimizado) {
 
   const textoRecortado = textoAnonimizado.slice(0, MAX_CARACTERES_ANALISIS_AVANZADO);
 
-  const respuesta = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODELO_ANALISIS_AVANZADO,
-      max_tokens: MAX_TOKENS_ANALISIS_AVANZADO,
-      system: SYSTEM_PROMPT_ANALISIS_LEGAL,
-      messages: [
-        {
-          role: "user",
-          content: `Analiza el siguiente contrato de seguridad/alarmas cláusula por cláusula:\n\n${textoRecortado}`,
-        },
-      ],
-      output_config: {
-        effort: "high",
-        format: { type: "json_schema", schema: ESQUEMA_ANALISIS_LEGAL },
+  const cuerpoPeticion = JSON.stringify({
+    model: MODELO_ANALISIS_AVANZADO,
+    max_tokens: MAX_TOKENS_ANALISIS_AVANZADO,
+    system: SYSTEM_PROMPT_ANALISIS_LEGAL,
+    messages: [
+      {
+        role: "user",
+        content: `Analiza el siguiente contrato de seguridad/alarmas cláusula por cláusula:\n\n${textoRecortado}`,
       },
-    }),
+    ],
+    output_config: {
+      effort: "high",
+      format: { type: "json_schema", schema: ESQUEMA_ANALISIS_LEGAL },
+    },
   });
+
+  const respuesta = await llamarAnthropicConReintentos(cuerpoPeticion, apiKey);
 
   const datos = await respuesta.json();
 

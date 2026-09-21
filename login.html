@@ -201,7 +201,18 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .brand, .panel, .welcome-box, .welcome-overlay { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+    /* OJO: .welcome-overlay (sin .show) NO puede ir en esta lista. Su estado
+       de reposo normal es opacity:0/pointer-events:none (invisible) hasta
+       que el JS le añade .show tras un login correcto; forzar aqui
+       "opacity:1 !important" de forma incondicional lo dejaba visible a
+       pantalla completa desde el primer render para cualquier persona con
+       esta preferencia de accesibilidad activada, tapando el formulario de
+       login para siempre aunque no hubiera sesion ni login en curso. Solo
+       se fuerza el estado final (sin transicion) una vez que .show ya esta
+       presente, que es cuando ese estado final es el correcto. */
+    .brand, .panel, .welcome-box { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+    .welcome-overlay { transition: none !important; }
+    .welcome-overlay.show { opacity: 1 !important; }
     .spinner { animation: none; }
   }
 </style>
