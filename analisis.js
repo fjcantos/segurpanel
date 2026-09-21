@@ -180,6 +180,120 @@ const EMPRESAS_CONOCIDAS = [
   "Grupo Control", "Trablisa", "MPA", "Prosegur",
 ];
 
+// Ciudades y provincias de España: las 50 provincias (con sus formas
+// cooficiales donde aplica: Alacant/Alicante, Girona, Lleida, Ourense, A
+// Coruña, Araba/Álava, Gipuzkoa, Bizkaia...), sus capitales cuando difieren
+// del nombre de la provincia, y los ~100 municipios mas poblados de España
+// (INE), que cubren de sobra las localidades que suelen aparecer en la
+// direccion de un contrato aunque no sean capital de provincia (p.ej.
+// Mijas, Marbella, Torrevieja, Fuengirola). Es una lista cerrada (gazetteer):
+// no cubre absolutamente todos los ~8100 municipios de España, pero junto
+// con la regla "cp" de abajo (que anonimiza CUALQUIER localidad que
+// acompañe a un codigo postal, este o no en esta lista) da una cobertura
+// muy alta sin arriesgarse a los falsos positivos de intentar adivinar por
+// patron que es una ciudad y que no.
+const CIUDADES_PROVINCIAS = [
+  // Provincias (nombre oficial y formas cooficiales)
+  "Almería", "Cádiz", "Córdoba", "Granada", "Huelva", "Jaén", "Málaga", "Sevilla",
+  "Huesca", "Teruel", "Zaragoza", "Asturias", "Baleares", "Illes Balears",
+  "Álava", "Araba", "Vizcaya", "Bizkaia", "Guipúzcoa", "Gipuzkoa",
+  "Las Palmas", "Santa Cruz de Tenerife", "Cantabria", "Ávila", "Burgos",
+  "León", "Palencia", "Salamanca", "Segovia", "Soria", "Valladolid", "Zamora",
+  "Albacete", "Ciudad Real", "Cuenca", "Guadalajara", "Toledo",
+  "Barcelona", "Girona", "Gerona", "Lleida", "Lérida", "Tarragona",
+  "Badajoz", "Cáceres", "A Coruña", "La Coruña", "Lugo", "Ourense", "Orense", "Pontevedra",
+  "La Rioja", "Madrid", "Murcia", "Navarra",
+  "Alicante", "Alacant", "Castellón", "Castelló", "Valencia", "València",
+  "Ceuta", "Melilla",
+  // Capitales de provincia que no coinciden con el nombre de esta
+  "Vitoria-Gasteiz", "Bilbao", "San Sebastián", "Donostia", "Oviedo",
+  "Palma", "Palma de Mallorca", "Santander", "Logroño", "Pamplona", "Iruña",
+  "Castellón de la Plana", "Las Palmas de Gran Canaria", "Santiago de Compostela",
+  // Municipios mas poblados de España (INE), no capitales de provincia
+  "Vigo", "Gijón", "L'Hospitalet de Llobregat", "Elche", "Elx", "Terrassa",
+  "Badalona", "Cartagena", "Sabadell", "Jerez de la Frontera", "Móstoles",
+  "Alcalá de Henares", "Fuenlabrada", "Leganés", "Getafe", "Alcorcón",
+  "San Cristóbal de La Laguna", "Marbella", "Dos Hermanas", "Torrejón de Ardoz",
+  "Parla", "Mataró", "Algeciras", "Santa Coloma de Gramenet", "Alcobendas",
+  "Reus", "Telde", "Barakaldo", "Roquetas de Mar", "Las Rozas de Madrid",
+  "San Fernando", "Lorca", "Sant Cugat del Vallès", "San Sebastián de los Reyes",
+  "Cornellà de Llobregat", "El Puerto de Santa María", "Rivas-Vaciamadrid",
+  "Pozuelo de Alarcón", "Chiclana de la Frontera", "Sant Boi de Llobregat",
+  "El Ejido", "Talavera de la Reina", "Torrevieja", "Mijas", "Torrent",
+  "Coslada", "Vélez-Málaga", "Arona", "Fuengirola", "Avilés", "Getxo",
+  "Manresa", "Rubí", "Orihuela", "Valdemoro", "Alcalá de Guadaíra",
+];
+
+// Ordenadas de mas larga a mas corta: en una alternancia regex (a|b|c) el
+// motor prueba las opciones en orden y se queda con la PRIMERA que caza en
+// esa posicion (no seguirá probando a ver si hay una mas larga), asi que si
+// "Palma" fuese antes que "Palma de Mallorca" en la lista, "Palma de
+// Mallorca" se cortaria en seco dejando " de Mallorca" sin anonimizar.
+const CIUDADES_PROVINCIAS_ORDENADAS = [...CIUDADES_PROVINCIAS].sort((a, b) => b.length - a.length);
+const PATRON_CIUDADES = CIUDADES_PROVINCIAS_ORDENADAS
+  .map((nombre) => nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
+
+// Conectores de apellidos compuestos ("del Río", "de la Torre", "van Dijk"),
+// tolerantes a mayuscula/minuscula inicial del conector: en la practica los
+// contratos (sobre todo si vienen de OCR o de un formulario mal rellenado)
+// no siempre respetan que el conector vaya en minuscula ("Enrique Del rio"
+// en vez de "Enrique del Río"), y exigir minuscula estricta dejaba a medias
+// justo la parte del apellido que sigue al conector.
+const CONECTOR_APELLIDO = "(?:[Dd]e(?:\\s+la|\\s+los|\\s+las)?|[Dd]el|[Ll]a|[Ll]as|[Ll]os|[Yy]|[Vv]an|[Vv]on|[Dd]er|[Dd]o|[Dd]os|[Dd]as)";
+// Nombre de pila + hasta 4 palabras mas (apellidos simples o compuestos con
+// conector). La palabra que seigue a un conector reconocido no necesita
+// empezar en mayuscula (ver comentario de CONECTOR_APELLIDO); cualquier
+// otra palabra del nombre si debe ir en mayuscula inicial, para no empezar
+// a comerse texto normal de la frase que sigue.
+const PATRON_NOMBRE =
+  "[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+(?:\\s+" + CONECTOR_APELLIDO + "\\s+[A-Za-zÀ-ÿ]+|\\s+[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+){1,4}";
+// Honorifico opcional entre la etiqueta de rol ("Cliente:", "Titular:"...) y
+// el nombre en si ("Cliente: D. Alejandro..."), para no dejarlo colgando.
+const HONORIFICO_OPCIONAL = "(?:D\\.|Dña\\.|Don|Doña|Sr\\.|Sra\\.)?\\s*";
+
+// Conectores tipicos en topónimos compuestos ("Puerto de Santa María",
+// "Palma de Mallorca"), con la misma tolerancia a mayuscula/minuscula que
+// CONECTOR_APELLIDO, para la regla "cp" de abajo (codigo postal + poblacion
+// que no está en el gazetteer CIUDADES_PROVINCIAS).
+const CONECTOR_LUGAR = "(?:[Dd]e(?:\\s+la|\\s+los|\\s+las)?|[Dd]el|[Ll]a|[Ll]as|[Ll]os)";
+
+// Construye la alternancia de una lista de etiquetas de rol ("Cliente",
+// "El instalador"...) tolerando que la inicial vaya en mayuscula o en
+// minuscula (una etiqueta de campo suele ir capitalizada, pero mencionada a
+// mitad de frase - "firmado por el instalador..." - suele ir en minuscula).
+// A proposito NO se usa el flag "i" de la regex entera para esto: eso haria
+// case-insensible tambien PATRON_NOMBRE, que depende de exigir mayuscula
+// inicial en cada palabra del nombre para no empezar a comerse texto
+// corriente en minuscula (ver el bug ya corregido de las reglas
+// "cliente"/"empleado" en el historial de este fichero).
+function disparadoresRol(frases) {
+  return frases
+    .map((frase) => {
+      const escapada = frase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+      const inicial = frase[0];
+      const minuscula = inicial.toLowerCase();
+      if (inicial === minuscula) return escapada; // ya en minuscula (p.ej. "P.p.")
+      return `(?:${escapada}|${escapada.replace(inicial, minuscula)})`;
+    })
+    .join("|");
+}
+
+const CLIENTE_DISPARADORES = disparadoresRol([
+  "Nombre y apellidos", "Apellidos y nombre", "Nombre del cliente", "Nombre del titular",
+  "Nombre del contratante", "Nombre del abonado", "Datos del cliente", "Datos del titular",
+  "El cliente", "El titular", "El abonado", "El contratante", "El suscriptor",
+  "Titular", "Abonado", "Asegurado", "Contratante", "Suscriptor", "Cliente",
+]);
+
+const EMPLEADO_DISPARADORES = disparadoresRol([
+  "Técnico instalador", "Instalador", "Técnico", "Comercial", "Vendedor", "Agente",
+  "Empleado", "Trabajador", "Gestor comercial", "Gestor", "Delegado", "Asesor", "Apoderado",
+  "Representante legal", "Representado por", "En representación de", "Actuando en representación de",
+  "En nombre de", "Por poder", "P.p.", "El comercial", "El técnico", "El instalador",
+  "El empleado", "El representante", "El gestor", "El asesor",
+]);
+
 const REGLAS_ANONIMIZACION = [
   // Email
   { id: "email", etiqueta: "[EMAIL]", re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
@@ -198,11 +312,16 @@ const REGLAS_ANONIMIZACION = [
   { id: "dni", etiqueta: "[DNI/NIF]", re: /\b\d{8}[-\s]?[A-Za-z]\b/g },
   // Telefono espanol (fijo o movil, con o sin prefijo +34, con o sin parentesis)
   { id: "telefono", etiqueta: "[TELÉFONO]", re: /(?:\(?(?:\+|00)34\)?[ .-]?)?\b[6789]\d{2}(?:[ .-]?\d{3}){2}\b/g },
-  // Direcciones postales habituales en contratos
+  // Direcciones postales habituales en contratos. Incluye las formas
+  // catalanas/gallegas/vascas mas comunes de "calle" (Carrer, Rúa, Kalea) y
+  // "avenida"/"paseo"/"plaza" (Avinguda, Passeig, Plaça, Rambla), no solo las
+  // castellanas. El espacio tras el prefijo es OPCIONAL (\s*, no \s+): con
+  // abreviaturas cortas como "C/" es habitual escribir el nombre de la calle
+  // pegado ("C/Geranio 1") y con \s+ ese caso no matcheaba nada en absoluto.
   {
     id: "direccion",
     etiqueta: "[DIRECCIÓN]",
-    re: /\b(?:Calle|C\/|Avda\.?|Avenida|Plaza|Pza\.?|Paseo|Pº\.?|Polígono|Poligono|Camino|Urbanización|Urbanizacion|Vía|Via|Ronda|Travesía|Travesia|Glorieta|Bloque)\s+[^\n,;]{3,60}/gi,
+    re: /\b(?:Calle|C\/|Avda\.?|Avenida|Avinguda|Avgda\.?|Plaza|Plaça|Pza\.?|Paseo|Passeig|Pº\.?|Polígono|Poligono|Camino|Urbanización|Urbanizacion|Vía|Via|Ronda|Travesía|Travesia|Travessera|Glorieta|Bloque|Carrer|Rambla|Rúa|Rua|Kalea|Praza)\s*[^\n,;]{3,60}/gi,
   },
   // Piso/puerta/planta (p.ej. "3º B", "Piso 2, Puerta 4") que suelen acompañar
   // a una direccion ya anonimizada por la regla anterior.
@@ -211,8 +330,37 @@ const REGLAS_ANONIMIZACION = [
     etiqueta: "[PISO/PUERTA]",
     re: /\b(?:Piso|Puerta|Planta|Escalera|Portal)\s*[:.\-]?\s*[0-9A-Za-zºª]{1,4}\b/gi,
   },
-  // Codigo postal + poblacion (p.ej. "28045 Madrid")
-  { id: "cp", etiqueta: "[CÓDIGO POSTAL]", re: /\b\d{5}\b(?=\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})/g },
+  // Codigo postal + poblacion (p.ej. "28045 Madrid", "07008 Palma de
+  // Mallorca"): a diferencia de la version anterior (que solo comprobaba con
+  // un lookahead que hubiera una poblacion detras y anonimizaba UNICAMENTE
+  // el codigo postal, dejando el nombre de la poblacion intacto), esta
+  // version consume y sustituye TAMBIEN el nombre de la localidad. Al ir por
+  // contexto (codigo postal delante) cubre cualquier poblacion, este o no en
+  // el gazetteer CIUDADES_PROVINCIAS de abajo (imposible enumerar los ~8100
+  // municipios de España).
+  {
+    id: "cp",
+    etiqueta: "[CÓDIGO POSTAL] [CIUDAD]",
+    re: new RegExp(
+      "\\b\\d{5}\\s+[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+(?:\\s+" + CONECTOR_LUGAR + "\\s+[A-Za-zÀ-ÿ]+|\\s+[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+){0,3}",
+      "g"
+    ),
+  },
+  // Ciudades y provincias de España que aparecen SIN codigo postal delante
+  // (p.ej. "domicilio social en Palma de Mallorca, Baleares", "residente en
+  // Mijas (Málaga)"): la regla "cp" de arriba ya cubre la poblacion cuando
+  // va pegada a un codigo postal, pero el nombre de la provincia que suele
+  // acompañarla despues (", Baleares", ", Málaga"...) no lleva codigo postal
+  // propio y necesita esta regla aparte, basada en el listado cerrado
+  // CIUDADES_PROVINCIAS. Limites de palabra con lookaround (no \b) porque
+  // varias provincias empiezan por vocal acentuada (Álava, Ávila), y \b no
+  // detecta bien el límite cuando el caracter a un lado no es una letra
+  // "\w" ASCII (las vocales acentuadas no lo son).
+  {
+    id: "ciudad_provincia",
+    etiqueta: "[CIUDAD]",
+    re: new RegExp("(?<![A-Za-zÀ-ÿ])(?:" + PATRON_CIUDADES + ")(?![A-Za-zÀ-ÿ])", "g"),
+  },
   // Matricula espanola actual: 4 digitos + 3 consonantes (sin vocales/Ñ/Q)
   { id: "matricula", etiqueta: "[MATRÍCULA]", re: /\b\d{4}\s?-?\s?[BCDFGHJKLMNPRSTVWXYZ]{3}\b/g },
   // URLs (http/https o www.), para no dejar rastreable ninguna web de terceros
@@ -226,13 +374,49 @@ const REGLAS_ANONIMIZACION = [
     re: /(?:(?:N[uú]mero|N[ºo]\.?)\s+de\s+(?:cliente|abonado|p[oó]liza|contrato|expediente|instalaci[oó]n|serie|orden)|C[oó]digo de cliente|Id de cliente)(\s*:?\s*)([A-Za-z0-9/\-]{3,20})/gi,
     grupoReemplazo: 2,
   },
-  // Nombres de persona tras etiquetas habituales de contrato (incluye
-  // firmas: "Fdo.:", "P.p."). Admite apellidos compuestos con conectores en
-  // minuscula ("de", "del", "la"...).
+  // Nombres de CLIENTE: persona que contrata el servicio, tras cualquiera de
+  // las etiquetas habituales con las que un contrato de alarmas identifica
+  // a esa parte. Admite un honorifico opcional entre la etiqueta y el
+  // nombre ("Cliente: D. Alejandro...") y apellidos compuestos con
+  // conectores tolerantes a mayuscula/minuscula (ver PATRON_NOMBRE).
+  {
+    id: "cliente",
+    etiqueta: "[CLIENTE]",
+    re: new RegExp(
+      "(?:" + CLIENTE_DISPARADORES + ")(\\s*:?\\s*)" +
+        HONORIFICO_OPCIONAL +
+        "(" + PATRON_NOMBRE + ")",
+      "g"
+    ),
+    grupoReemplazo: 2,
+  },
+  // Nombres de EMPLEADO: persona que representa a la empresa de seguridad
+  // (comercial, instalador, tecnico, apoderado que firma en su nombre...).
+  {
+    id: "empleado",
+    etiqueta: "[EMPLEADO]",
+    re: new RegExp(
+      "(?:" + EMPLEADO_DISPARADORES + ")(\\s*:?\\s*)" +
+        HONORIFICO_OPCIONAL +
+        "(" + PATRON_NOMBRE + ")",
+      "g"
+    ),
+    grupoReemplazo: 2,
+  },
+  // Nombres de persona tras un honorifico o firma SIN etiqueta de rol
+  // explicita (p.ej. simplemente "D. Alejandro Jaime Palmer, mayor de
+  // edad..." o "Fdo.: Enrique Del rio"): el rol (cliente o empleado) no se
+  // puede saber con certeza solo por el honorifico, asi que se anonimiza
+  // igualmente pero con la etiqueta generica [NOMBRE]. Va DESPUES de las
+  // reglas "cliente" y "empleado" para que los casos con etiqueta de rol
+  // expresa ya hayan quedado etiquetados con mas precision.
   {
     id: "nombre",
     etiqueta: "[NOMBRE]",
-    re: /(?:D\.|Dña\.|Don|Doña|Sr\.|Sra\.|Nombre y apellidos|Nombre del cliente|Nombre del titular|Nombre del contratante|Titular|Abonado|Asegurado|Contratante|Suscriptor|Representante legal|Representado por|En representaci[oó]n de|Firmado por|Fdo\.?:?|P\.p\.?|Apellidos y nombre|Cliente)(\s*:?\s*)([A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+(?:\s+(?:de|del|de la|de los|de las|la|las|los|y)\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+|\s+[A-ZÁÉÍÓÚÑ][a-zÀ-ÿ]+){1,4})/g,
+    re: new RegExp(
+      "(?:D\\.|Dña\\.|Don|Doña|Sr\\.|Sra\\.|Fdo\\.?:?|Firmado)(\\s*:?\\s*)(" + PATRON_NOMBRE + ")",
+      "g"
+    ),
     grupoReemplazo: 2,
   },
   // Razon social por etiqueta explicita (antes de la regla generica S.L./S.A.
