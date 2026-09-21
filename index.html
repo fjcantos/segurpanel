@@ -3814,6 +3814,127 @@
     if (dropzone) dropzone.classList.add('role-locked');
   }
 
+  /* ================================================================
+     Medidas de seguridad del rol retencion: marca de agua visible +
+     marca de agua forense invisible (para poder identificar el origen de
+     una captura de pantalla), bloqueo de copiar/cortar/menu contextual en
+     las pestañas de contenido sensible, y registro de cuanto tiempo pasa
+     en cada pestaña y si intenta copiar texto (ver /api/actividad/tab/* en
+     el servidor; el detalle solo lo puede consultar super_admin en
+     /admin). Nada de esto se activa para el resto de roles.
+     ================================================================ */
+
+  const PESTANAS_CONTENIDO_SENSIBLE = ['comparador', 'alianzas', 'equipos', 'inteligencia'];
+
+  // Visita de pestaña actualmente "abierta" (entre el POST inicial a
+  // /api/actividad/tab, que devuelve este id, y el momento en que se
+  // reporta su duracion): la usan tanto registrarVisitaTab (al cambiar de
+  // pestaña) como el bloqueo de copiar (para saber contra que visita sumar
+  // el intento).
+  let visitaTabActualId = null;
+  let visitaTabActualInicio = null;
+
+  // navigator.sendBeacon es fire-and-forget y, a diferencia de un fetch
+  // normal, el navegador lo sigue entregando aunque la pagina se este
+  // descargando o cambiando de pestaña en ese mismo instante (por eso se
+  // usa aqui en vez de fetch: la duracion se reporta precisamente en esos
+  // momentos). Si el navegador no lo soporta, se intenta con fetch +
+  // keepalive como red de seguridad, aunque sea menos fiable en ese caso.
+  function enviarBeacon(url, datos) {
+    const cuerpo = datos ? JSON.stringify(datos) : undefined;
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(url, cuerpo ? new Blob([cuerpo], { type: 'application/json' }) : undefined);
+      return;
+    }
+    fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: cuerpo,
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function reportarDuracionVisitaEnCurso() {
+    if (visitaTabActualId == null || visitaTabActualInicio == null) return;
+    const segundos = (Date.now() - visitaTabActualInicio) / 1000;
+    enviarBeacon(`/api/actividad/tab/${visitaTabActualId}/duracion`, { segundos });
+    visitaTabActualId = null;
+    visitaTabActualInicio = null;
+  }
+
+  // Al ocultarse la pestaña del navegador (cambio a otra pestaña,
+  // minimizar) o al cerrar/recargar la app, se cierra el cronometro de la
+  // visita en curso. 'visibilitychange' es mas fiable que 'beforeunload'
+  // en movil, donde beforeunload a menudo no llega a dispararse.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') reportarDuracionVisitaEnCurso();
+  });
+  window.addEventListener('pagehide', reportarDuracionVisitaEnCurso);
+
+  function activarMedidasSeguridadRetencion(usuario) {
+    const nombre = usuario.name || usuario.email;
+
+    // ---- Marca de agua VISIBLE: esquina inferior derecha, semitransparente,
+    // colores corporativos (los mismos --v-red/--v-burgundy de toda la app). ----
+    const visible = document.createElement('div');
+    visible.id = 'retencionMarcaAguaVisible';
+    visible.style.cssText = [
+      'position:fixed', 'right:14px', 'bottom:10px', 'z-index:9998',
+      'pointer-events:none', 'font-size:0.72rem', 'font-weight:700',
+      'color:var(--v-burgundy,#8B0026)', 'opacity:0.15', 'text-align:right',
+      'line-height:1.35', 'user-select:none', 'font-family:inherit',
+    ].join(';');
+    document.body.appendChild(visible);
+
+    // ---- Marca de agua INVISIBLE (forense): mismo texto en blanco a
+    // opacidad 0.01, repetido por toda la pantalla como imagen de fondo de
+    // un overlay a pantalla completa. A simple vista no se ve nada, pero al
+    // ser parte de los pixeles renderizados, una captura de pantalla SI la
+    // captura: revelando/subiendo el contraste de la imagen despues deja
+    // leerse quien la hizo y cuando. Se aplica sobre TODA la app (no solo
+    // el contenido de la pestaña activa), asi que cubre cualquier pestaña
+    // visible para retencion. ----
+    const invisible = document.createElement('div');
+    invisible.id = 'retencionMarcaAguaInvisible';
+    invisible.style.cssText = 'position:fixed;inset:0;z-index:9999;pointer-events:none;background-repeat:repeat;';
+    document.body.appendChild(invisible);
+
+    function actualizarMarcasAgua() {
+      const fecha = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+      visible.innerHTML = `${escapeHtml(nombre)}<br>${escapeHtml(fecha)}`;
+
+      const texto = `${nombre} · ${fecha}`.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='360' height='180'>`
+        + `<text x='4' y='22' font-size='9' fill='#ffffff' fill-opacity='0.01' font-family='Arial, sans-serif'>${texto}</text>`
+        + `<text x='70' y='95' font-size='9' fill='#ffffff' fill-opacity='0.01' font-family='Arial, sans-serif' transform='rotate(-16 70 95)'>${texto}</text>`
+        + `<text x='10' y='160' font-size='9' fill='#ffffff' fill-opacity='0.01' font-family='Arial, sans-serif'>${texto}</text>`
+        + `</svg>`;
+      invisible.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    }
+    actualizarMarcasAgua();
+    // Se refresca cada minuto: asi la hora incrustada en la marca de agua
+    // (sobre todo la invisible, pensada para identificar una captura) esta
+    // siempre cerca del momento real en que se hizo la captura, no de
+    // cuando se inicio sesion.
+    setInterval(actualizarMarcasAgua, 60000);
+
+    // ---- Bloqueo de copiar/cortar/menu contextual, solo en las pestañas
+    // de contenido sensible, y registro del intento contra la visita de
+    // pestaña en curso. ----
+    const bloquear = (e) => {
+      e.preventDefault();
+      if (visitaTabActualId != null) enviarBeacon(`/api/actividad/tab/${visitaTabActualId}/copia`);
+    };
+    PESTANAS_CONTENIDO_SENSIBLE.forEach((tab) => {
+      const seccion = document.getElementById(tab);
+      if (!seccion) return;
+      seccion.addEventListener('copy', bloquear);
+      seccion.addEventListener('cut', bloquear);
+      seccion.addEventListener('contextmenu', bloquear);
+    });
+  }
+
   async function iniciarSesionUI() {
     let ok, datos;
     try {
@@ -3865,6 +3986,7 @@
 
     if (usuario.role === 'retencion') {
       aplicarModoSoloLectura();
+      activarMedidasSeguridadRetencion(usuario);
     }
 
     cargarAlianzas();
@@ -5010,13 +5132,27 @@
   });
 
   function registrarVisitaTab(tab) {
+    // Antes de registrar la nueva visita se reporta la duracion de la
+    // anterior (si habia una en curso): visitaTabActualId/Inicio y
+    // reportarDuracionVisitaEnCurso() estan definidos mas arriba, junto con
+    // el resto de medidas de seguridad del rol retencion (se calculan para
+    // cualquier rol, aunque solo tengan efecto visible para retencion).
+    reportarDuracionVisitaEnCurso();
     fetch('/api/actividad/tab', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tab }),
       keepalive: true,
-    }).catch(() => {});
+    })
+      .then((r) => r.json())
+      .then((datos) => {
+        if (datos && datos.visitaId) {
+          visitaTabActualId = datos.visitaId;
+          visitaTabActualInicio = Date.now();
+        }
+      })
+      .catch(() => {});
   }
 
   /* ---------- Repositorio de contratos (solo super_admin y admin) ----------

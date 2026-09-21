@@ -1640,8 +1640,68 @@ async function apiActividadTab(req, res) {
   const tab = typeof cuerpo.tab === "string" ? cuerpo.tab.trim().slice(0, 60) : "";
   if (!tab) return enviarJSON(res, 400, { error: "Falta la pestaña visitada." });
 
-  db.registrarVisitaTab({ userId: sesion.usuario.id, tab });
+  // Se devuelve el id de la visita: el frontend lo guarda para poder
+  // reportar mas tarde, contra ESTA visita concreta, cuanto tiempo estuvo
+  // (ver apiActividadTabDuracion) y si intento copiar texto mientras la
+  // tenia abierta (ver apiActividadTabCopia). Solo tiene efecto visible
+  // para el rol retencion (ver medidas de seguridad en index.html), pero
+  // se registra para cualquier rol igual que ya hacia esta ruta.
+  const visitaId = db.registrarVisitaTab({ userId: sesion.usuario.id, tab });
+  enviarJSON(res, 200, { ok: true, visitaId });
+}
+
+// Se llama al salir de una pestaña (cambio a otra, cambio de pestaña del
+// navegador, cierre de la app) con cuanto tiempo estuvo abierta. El id es
+// el que devolvio apiActividadTab al entrar; exigirSesion + el WHERE por
+// user_id en finalizarVisitaTab evitan que se pueda alterar la duracion de
+// la visita de otra persona.
+async function apiActividadTabDuracion(req, res, id) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  db.finalizarVisitaTab({ id, userId: sesion.usuario.id, duracionSegundos: cuerpo.segundos });
   enviarJSON(res, 200, { ok: true });
+}
+
+// Se llama cuando el navegador bloquea un intento de copiar/cortar/abrir el
+// menu contextual en una pestaña de contenido sensible mientras el rol
+// retencion la tiene abierta (ver medidas de seguridad en index.html).
+async function apiActividadTabCopia(req, res, id) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  db.registrarIntentoCopiaTab({ id, userId: sesion.usuario.id });
+  enviarJSON(res, 200, { ok: true });
+}
+
+// Actividad detallada del rol retencion (panel de Super Admin): a
+// diferencia de /api/estadisticas (solo la ultima pestaña de cada usuario
+// activo, visible tambien para admin), esto es el HISTORICO completo de
+// pestaña + duracion + intentos de copia, y solo lo puede consultar
+// super_admin.
+async function apiAdminActividadRetencion(req, res, query) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const limit = query.get("limit");
+  const before = query.get("before");
+  const registros = db.listarActividadRetencion({ limit, before }).map((f) => ({
+    id: f.id,
+    email: f.email,
+    name: f.name,
+    tab: f.tab,
+    duracionSegundos: f.duration_seconds,
+    copyIntentos: f.copy_intentos,
+    createdAt: f.created_at,
+  }));
+  enviarJSON(res, 200, { registros });
 }
 
 /* ================================================================
@@ -2752,6 +2812,8 @@ const idClasificarRepositorio = RUTA_CON_ID("/api/repositorio", "/tipo");
 const idDetalleRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "");
 const idClasificarRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "/tipo");
 const idPdfRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "/pdf");
+const idDuracionVisitaTab = RUTA_CON_ID("/api/actividad/tab", "/duracion");
+const idCopiaVisitaTab = RUTA_CON_ID("/api/actividad/tab", "/copia");
 
 async function manejarPeticion(req, res) {
   // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
@@ -2818,6 +2880,15 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "GET" && ruta === "/api/estadisticas") return await apiEstadisticas(req, res);
     if (req.method === "POST" && ruta === "/api/actividad/tab") return await apiActividadTab(req, res);
+    if (req.method === "POST") {
+      const idDur = idDuracionVisitaTab(ruta);
+      if (idDur !== null) return await apiActividadTabDuracion(req, res, idDur);
+      const idCopia = idCopiaVisitaTab(ruta);
+      if (idCopia !== null) return await apiActividadTabCopia(req, res, idCopia);
+    }
+    if (req.method === "GET" && ruta === "/api/admin/actividad-retencion") {
+      return await apiAdminActividadRetencion(req, res, url.searchParams);
+    }
 
     if (req.method === "GET" && ruta === "/api/repositorio") return await apiRepositorioGet(req, res, url.searchParams);
     if (req.method === "POST") {

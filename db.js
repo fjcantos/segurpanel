@@ -110,10 +110,12 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS tab_visits (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL REFERENCES users(id),
-    tab         TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL REFERENCES users(id),
+    tab               TEXT NOT NULL,
+    duration_seconds  INTEGER,
+    copy_intentos     INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -192,6 +194,12 @@ if (!columnaExiste("users", "can_install_app")) {
 }
 if (!columnaExiste("contratos_avanzados", "fecha_contrato")) {
   db.exec("ALTER TABLE contratos_avanzados ADD COLUMN fecha_contrato TEXT");
+}
+if (!columnaExiste("tab_visits", "duration_seconds")) {
+  db.exec("ALTER TABLE tab_visits ADD COLUMN duration_seconds INTEGER");
+}
+if (!columnaExiste("tab_visits", "copy_intentos")) {
+  db.exec("ALTER TABLE tab_visits ADD COLUMN copy_intentos INTEGER NOT NULL DEFAULT 0");
 }
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
@@ -719,8 +727,56 @@ function contarUsuariosActivos() {
   return db.prepare("SELECT COUNT(*) AS n FROM users WHERE status = 'active'").get().n;
 }
 
+// Devuelve el id de la fila insertada: el frontend lo guarda para poder
+// reportar mas tarde, contra ESA visita concreta, cuanto tiempo estuvo en
+// la pestaña (finalizarVisitaTab, al salir de ella) y si intento copiar
+// texto mientras estaba en ella (registrarIntentoCopiaTab). Ver medidas de
+// seguridad del rol retencion en index.html.
 function registrarVisitaTab({ userId, tab }) {
-  db.prepare("INSERT INTO tab_visits (user_id, tab, created_at) VALUES (?, ?, ?)").run(userId, tab, ahoraISO());
+  const info = db
+    .prepare("INSERT INTO tab_visits (user_id, tab, created_at) VALUES (?, ?, ?)")
+    .run(userId, tab, ahoraISO());
+  return Number(info.lastInsertRowid);
+}
+
+// Se llama al salir de una pestaña (cambio a otra pestaña, cierre de la
+// app o de la sesion) con el tiempo transcurrido desde que se registro esa
+// visita. El WHERE por user_id, ademas del id, evita que un usuario pueda
+// sobrescribir la duracion de una visita de otra persona falseando el id.
+function finalizarVisitaTab({ id, userId, duracionSegundos }) {
+  db.prepare("UPDATE tab_visits SET duration_seconds = ? WHERE id = ? AND user_id = ?").run(
+    Math.max(0, Math.round(Number(duracionSegundos) || 0)),
+    id,
+    userId
+  );
+}
+
+// Se llama cuando el navegador bloquea un intento de copiar/cortar/menu
+// contextual en una pestaña de contenido sensible (ver medidas de
+// seguridad del rol retencion en index.html): suma 1 al contador de esa
+// visita concreta, para poder mostrar en el panel de Super Admin cuantas
+// veces lo intento mientras estaba en esa pestaña.
+function registrarIntentoCopiaTab({ id, userId }) {
+  db.prepare("UPDATE tab_visits SET copy_intentos = copy_intentos + 1 WHERE id = ? AND user_id = ?").run(id, userId);
+}
+
+// Actividad detallada del rol retencion para el panel de Super Admin:
+// una fila por cada pestaña que abrio, con cuanto tiempo estuvo y cuantas
+// veces intento copiar texto mientras la tenia abierta. A diferencia de
+// actividadTiempoReal() (solo la ULTIMA pestaña de cada usuario, para el
+// resumen de Estadisticas), esto es el HISTORICO completo, solo del rol
+// retencion, paginado igual que listarAuditoria.
+function listarActividadRetencion({ limit, before } = {}) {
+  const tope = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const base = `SELECT tv.id, tv.tab, tv.duration_seconds, tv.copy_intentos, tv.created_at,
+                       u.id AS user_id, u.email, u.name
+                FROM tab_visits tv
+                JOIN users u ON u.id = tv.user_id
+                WHERE u.role = 'retencion'`;
+  if (before) {
+    return db.prepare(`${base} AND tv.id < ? ORDER BY tv.id DESC LIMIT ?`).all(Number(before), tope);
+  }
+  return db.prepare(`${base} ORDER BY tv.id DESC LIMIT ?`).all(tope);
 }
 
 function actividadUsuariosActivos() {
@@ -924,6 +980,9 @@ module.exports = {
   estadisticasPorProvincia,
   contarUsuariosActivos,
   registrarVisitaTab,
+  finalizarVisitaTab,
+  registrarIntentoCopiaTab,
+  listarActividadRetencion,
   actividadUsuariosActivos,
   conteoVisitasPorUsuarioYTab,
   listarNotasEmpresas,
