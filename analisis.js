@@ -359,8 +359,26 @@ const REGLAS_ANONIMIZACION = [
   { id: "cif", etiqueta: "[CIF]", re: /\b[A-HJNPQSUVWabhjnpqsuvw]\d{7}[0-9A-Ja-j]\b/g },
   // DNI/NIF: 8 digitos + letra, con separador opcional (espacio o guion)
   { id: "dni", etiqueta: "[DNI/NIF]", re: /\b\d{8}[-\s]?[A-Za-z]\b/g },
-  // Telefono espanol (fijo o movil, con o sin prefijo +34, con o sin parentesis)
-  { id: "telefono", etiqueta: "[TELÉFONO]", re: /(?:\(?(?:\+|00)34\)?[ .-]?)?\b[6789]\d{2}(?:[ .-]?\d{3}){2}\b/g },
+  // Telefono espanol (fijo o movil, con o sin prefijo +34, con o sin
+  // parentesis). El separador va entre CADA digito, no solo cada 3 (antes
+  // exigia agrupar en tandas fijas de 3-3-3, p.ej. "612 345 678"; con eso
+  // un numero agrupado de otra forma habitual, como "910 00 88 66"
+  // (3-2-2-2, tipico de fijos), no se reconocia en absoluto).
+  //
+  // Dos alternativas en vez de un prefijo opcional con \b delante: cuando
+  // el prefijo "+34"/"0034" esta presente y pegado al numero sin espacio
+  // ("+34612345678"), el "4" del prefijo y el primer digito del numero son
+  // ambos caracteres \w, asi que \b NO detecta ningun limite ahi (un limite
+  // de palabra solo existe en la transicion \w/no-\w) y el numero entero no
+  // casaba. Cuando SI hay prefijo reconocido no hace falta exigir \b (el
+  // propio prefijo ya da contexto de sobra); solo se exige \b en la
+  // alternativa SIN prefijo, para no cazar un tramo de 9 digitos en medio
+  // de una tirada mas larga de digitos sueltos.
+  {
+    id: "telefono",
+    etiqueta: "[TELÉFONO]",
+    re: /(?:\(?(?:\+|00)34\)?[ .-]?[6789](?:[ .-]?\d){8}\b)|(?:\b[6789](?:[ .-]?\d){8}\b)/g,
+  },
   // Direcciones postales habituales en contratos. Incluye las formas
   // catalanas/gallegas/vascas mas comunes de "calle" (Carrer, Rúa, Kalea) y
   // "avenida"/"paseo"/"plaza" (Avinguda, Passeig, Plaça, Rambla), no solo las
@@ -446,6 +464,18 @@ const REGLAS_ANONIMIZACION = [
     id: "id_empleado",
     etiqueta: "[ID_EMPLEADO]",
     re: /(?:ID\s+del\s+empleado|Employee\s+ID|Id\.?\s+de\s+empleado|Id\.?\s+empleado)(\s*:?\s*)([A-Za-z0-9][A-Za-z0-9/\-]{1,20})/gi,
+    grupoReemplazo: 2,
+  },
+  // Numero de registro oficial de la empresa de seguridad (p.ej. "DGP:
+  // 1557", el numero de inscripcion en el registro de la Direccion General
+  // de la Policia que toda empresa de seguridad privada española debe
+  // tener y exhibir). Distinto de [REF] (identificador del cliente) y de
+  // [ID_EMPLEADO] (identificador de la persona empleada): este es el
+  // numero de la propia empresa ante la Administracion.
+  {
+    id: "num_registro",
+    etiqueta: "[NUM_REGISTRO]",
+    re: /(?:D\.?G\.?P\.?|Registro\s+DGP|N[uú]mero\s+de\s+registro|N[ºo]\.?\s+de\s+registro|Registro\s+de\s+empresa(?:\s+de\s+seguridad)?|Inscripci[oó]n\s+(?:en\s+el\s+)?registro)(\s*:?\s*)([A-Za-z0-9/\-]{1,20})/gi,
     grupoReemplazo: 2,
   },
   // Nombres de CLIENTE: persona que contrata el servicio, tras cualquiera de
