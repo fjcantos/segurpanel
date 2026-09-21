@@ -192,8 +192,13 @@ const EMPRESAS_CONOCIDAS = [
 // acompañe a un codigo postal, este o no en esta lista) da una cobertura
 // muy alta sin arriesgarse a los falsos positivos de intentar adivinar por
 // patron que es una ciudad y que no.
-const CIUDADES_PROVINCIAS = [
-  // Provincias (nombre oficial y formas cooficiales)
+// Provincias (nombre oficial y formas cooficiales) y comunidades autonomas
+// -> etiqueta [PROVINCIA]. Ojo: varias provincias comparten nombre literal
+// con su propia capital (Madrid, Sevilla, Málaga, Córdoba, Granada,
+// Valencia, Murcia...); esa ambiguedad es inevitable con un simple listado
+// de nombres, y aqui se resuelve a favor de [PROVINCIA] por ser el caso mas
+// habitual en un bloque de direccion ("Provincia: MADRID").
+const PROVINCIAS_COMUNIDADES = [
   "Almería", "Cádiz", "Córdoba", "Granada", "Huelva", "Jaén", "Málaga", "Sevilla",
   "Huesca", "Teruel", "Zaragoza", "Asturias", "Baleares", "Illes Balears",
   "Álava", "Araba", "Vizcaya", "Bizkaia", "Guipúzcoa", "Gipuzkoa",
@@ -205,11 +210,24 @@ const CIUDADES_PROVINCIAS = [
   "La Rioja", "Madrid", "Murcia", "Navarra",
   "Alicante", "Alacant", "Castellón", "Castelló", "Valencia", "València",
   "Ceuta", "Melilla",
-  // Capitales de provincia que no coinciden con el nombre de esta
+  // Comunidades autonomas que no coinciden con el nombre de ninguna
+  // provincia de la lista de arriba (Asturias, Baleares, Cantabria, La
+  // Rioja, Madrid, Murcia y Navarra son a la vez provincia y comunidad
+  // autonoma de una sola provincia, ya cubiertas).
+  "Andalucía", "Aragón", "Canarias", "Castilla-La Mancha", "Castilla la Mancha",
+  "Castilla y León", "Cataluña", "Catalunya", "Comunidad Valenciana",
+  "Comunitat Valenciana", "País Valencià", "Extremadura", "Galicia",
+  "País Vasco", "Euskadi",
+];
+
+// Ciudades/municipios -> etiqueta [CIUDAD]: capitales de provincia cuyo
+// nombre difiere del de esta (por lo que no hay ambiguedad con
+// PROVINCIAS_COMUNIDADES) y los ~90 municipios mas poblados de España
+// (INE) que no son capital de provincia.
+const CIUDADES = [
   "Vitoria-Gasteiz", "Bilbao", "San Sebastián", "Donostia", "Oviedo",
   "Palma", "Palma de Mallorca", "Santander", "Logroño", "Pamplona", "Iruña",
   "Castellón de la Plana", "Las Palmas de Gran Canaria", "Santiago de Compostela",
-  // Municipios mas poblados de España (INE), no capitales de provincia
   "Vigo", "Gijón", "L'Hospitalet de Llobregat", "Elche", "Elx", "Terrassa",
   "Badalona", "Cartagena", "Sabadell", "Jerez de la Frontera", "Móstoles",
   "Alcalá de Henares", "Fuenlabrada", "Leganés", "Getafe", "Alcorcón",
@@ -224,15 +242,32 @@ const CIUDADES_PROVINCIAS = [
   "Manresa", "Rubí", "Orihuela", "Valdemoro", "Alcalá de Guadaíra",
 ];
 
+// Cada nombre admite tambien su forma TODO EN MAYÚSCULAS ("Baleares" y
+// "BALEARES", "Cataluña" y "CATALUÑA"): es habitual que el bloque de
+// direccion o los formularios impresos escriban la provincia/comunidad
+// autonoma en mayusculas. No se generaliza a mayuscula/minuscula libre
+// (case-insensitive completo) para no arriesgarse a que una palabra suelta
+// en minuscula que coincida por casualidad con un topónimo (p.ej. "reus",
+// el verbo) se anonimice por error.
+function formasCiudad(nombre) {
+  const escapar = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const normal = escapar(nombre);
+  const mayus = escapar(nombre.toUpperCase());
+  return normal === mayus ? normal : `(?:${normal}|${mayus})`;
+}
 // Ordenadas de mas larga a mas corta: en una alternancia regex (a|b|c) el
 // motor prueba las opciones en orden y se queda con la PRIMERA que caza en
 // esa posicion (no seguirá probando a ver si hay una mas larga), asi que si
 // "Palma" fuese antes que "Palma de Mallorca" en la lista, "Palma de
 // Mallorca" se cortaria en seco dejando " de Mallorca" sin anonimizar.
-const CIUDADES_PROVINCIAS_ORDENADAS = [...CIUDADES_PROVINCIAS].sort((a, b) => b.length - a.length);
-const PATRON_CIUDADES = CIUDADES_PROVINCIAS_ORDENADAS
-  .map((nombre) => nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-  .join("|");
+function patronLugares(lista) {
+  return [...lista]
+    .sort((a, b) => b.length - a.length)
+    .map(formasCiudad)
+    .join("|");
+}
+const PATRON_PROVINCIAS = patronLugares(PROVINCIAS_COMUNIDADES);
+const PATRON_CIUDADES = patronLugares(CIUDADES);
 
 // Conectores de apellidos compuestos ("del Río", "de la Torre", "van Dijk"),
 // tolerantes a mayuscula/minuscula inicial del conector: en la practica los
@@ -241,13 +276,21 @@ const PATRON_CIUDADES = CIUDADES_PROVINCIAS_ORDENADAS
 // en vez de "Enrique del Río"), y exigir minuscula estricta dejaba a medias
 // justo la parte del apellido que sigue al conector.
 const CONECTOR_APELLIDO = "(?:[Dd]e(?:\\s+la|\\s+los|\\s+las)?|[Dd]el|[Ll]a|[Ll]as|[Ll]os|[Yy]|[Vv]an|[Vv]on|[Dd]er|[Dd]o|[Dd]os|[Dd]as)";
+// Una palabra de un nombre: o bien "Tipo Título" (mayuscula inicial, resto
+// minuscula) o bien TODO EN MAYUSCULAS (2 letras o mas). Esta segunda forma
+// hace falta porque los formularios de contrato piden a menudo el nombre
+// "en letra de molde" (bloque/mayusculas), y la gente lo escribe tal cual
+// se lo piden ("MARIA JOSE FERNANDEZ RUIZ"). Cualquiera de las dos formas
+// sigue exigiendo mayuscula en algun punto de la palabra, que es lo que
+// evita que la regla se coma texto normal de la frase en minuscula.
+const PALABRA_NOMBRE = "(?:[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+|[A-ZÁÉÍÓÚÑ]{2,})";
 // Nombre de pila + hasta 4 palabras mas (apellidos simples o compuestos con
-// conector). La palabra que seigue a un conector reconocido no necesita
+// conector). La palabra que sigue a un conector reconocido no necesita
 // empezar en mayuscula (ver comentario de CONECTOR_APELLIDO); cualquier
-// otra palabra del nombre si debe ir en mayuscula inicial, para no empezar
+// otra palabra del nombre si debe cumplir PALABRA_NOMBRE, para no empezar
 // a comerse texto normal de la frase que sigue.
 const PATRON_NOMBRE =
-  "[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+(?:\\s+" + CONECTOR_APELLIDO + "\\s+[A-Za-zÀ-ÿ]+|\\s+[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+){1,4}";
+  PALABRA_NOMBRE + "(?:\\s+" + CONECTOR_APELLIDO + "\\s+[A-Za-zÀ-ÿ]+|\\s+" + PALABRA_NOMBRE + "){1,4}";
 // Honorifico opcional entre la etiqueta de rol ("Cliente:", "Titular:"...) y
 // el nombre en si ("Cliente: D. Alejandro..."), para no dejarlo colgando.
 const HONORIFICO_OPCIONAL = "(?:D\\.|Dña\\.|Don|Doña|Sr\\.|Sra\\.)?\\s*";
@@ -282,6 +325,7 @@ function disparadoresRol(frases) {
 const CLIENTE_DISPARADORES = disparadoresRol([
   "Nombre y apellidos", "Apellidos y nombre", "Nombre del cliente", "Nombre del titular",
   "Nombre del contratante", "Nombre del abonado", "Datos del cliente", "Datos del titular",
+  "Nombre en letra de molde",
   "El cliente", "El titular", "El abonado", "El contratante", "El suscriptor",
   "Titular", "Abonado", "Asegurado", "Contratante", "Suscriptor", "Cliente",
 ]);
@@ -292,6 +336,11 @@ const EMPLEADO_DISPARADORES = disparadoresRol([
   "Representante legal", "Representado por", "En representación de", "Actuando en representación de",
   "En nombre de", "Por poder", "P.p.", "El comercial", "El técnico", "El instalador",
   "El empleado", "El representante", "El gestor", "El asesor",
+  // Firma/autoria de la parte de la empresa, con distintas redacciones
+  // habituales ("Vendido por:", "Firmado por:", la instalacion "realizada"
+  // o "realizado" por según a que se refiera la frase).
+  "Vendido por", "Realizado por", "Realizada por", "Firmado por",
+  "La instalación será realizada por", "La instalación fue realizada por",
 ]);
 
 const REGLAS_ANONIMIZACION = [
@@ -346,18 +395,32 @@ const REGLAS_ANONIMIZACION = [
       "g"
     ),
   },
-  // Ciudades y provincias de España que aparecen SIN codigo postal delante
-  // (p.ej. "domicilio social en Palma de Mallorca, Baleares", "residente en
-  // Mijas (Málaga)"): la regla "cp" de arriba ya cubre la poblacion cuando
-  // va pegada a un codigo postal, pero el nombre de la provincia que suele
-  // acompañarla despues (", Baleares", ", Málaga"...) no lleva codigo postal
-  // propio y necesita esta regla aparte, basada en el listado cerrado
-  // CIUDADES_PROVINCIAS. Limites de palabra con lookaround (no \b) porque
-  // varias provincias empiezan por vocal acentuada (Álava, Ávila), y \b no
-  // detecta bien el límite cuando el caracter a un lado no es una letra
-  // "\w" ASCII (las vocales acentuadas no lo son).
+  // Provincias y comunidades autonomas de España que aparecen SIN codigo
+  // postal delante (p.ej. "domicilio social en Palma de Mallorca, BALEARES",
+  // "residente en Mijas (Málaga)"): la regla "cp" de arriba ya cubre la
+  // poblacion cuando va pegada a un codigo postal, pero el nombre de la
+  // provincia que suele acompañarla despues (", Baleares", ", CATALUÑA"...)
+  // no lleva codigo postal propio y necesita esta regla aparte, basada en el
+  // listado cerrado PROVINCIAS_COMUNIDADES (admite tanto "Baleares" como
+  // "BALEARES", ver formasCiudad). Va ANTES que la regla "ciudad" de abajo
+  // para que un nombre ambiguo que sea a la vez provincia y capital
+  // homonima (Madrid, Sevilla, Málaga...) se etiquete como [PROVINCIA], el
+  // caso mas habitual en un bloque de direccion.
+  //
+  // Limites de palabra con lookaround (no \b) porque varias provincias
+  // empiezan por vocal acentuada (Álava, Ávila), y \b no detecta bien el
+  // límite cuando el caracter a un lado no es una letra "\w" ASCII (las
+  // vocales acentuadas no lo son).
   {
-    id: "ciudad_provincia",
+    id: "provincia",
+    etiqueta: "[PROVINCIA]",
+    re: new RegExp("(?<![A-Za-zÀ-ÿ])(?:" + PATRON_PROVINCIAS + ")(?![A-Za-zÀ-ÿ])", "g"),
+  },
+  // Ciudades/municipios de España (ver comentario de la regla "provincia"
+  // de arriba: mismo mecanismo, listado CIUDADES en vez de
+  // PROVINCIAS_COMUNIDADES).
+  {
+    id: "ciudad",
     etiqueta: "[CIUDAD]",
     re: new RegExp("(?<![A-Za-zÀ-ÿ])(?:" + PATRON_CIUDADES + ")(?![A-Za-zÀ-ÿ])", "g"),
   },
@@ -372,6 +435,17 @@ const REGLAS_ANONIMIZACION = [
     id: "referencia",
     etiqueta: "[REF]",
     re: /(?:(?:N[uú]mero|N[ºo]\.?)\s+de\s+(?:cliente|abonado|p[oó]liza|contrato|expediente|instalaci[oó]n|serie|orden)|C[oó]digo de cliente|Id de cliente)(\s*:?\s*)([A-Za-z0-9/\-]{3,20})/gi,
+    grupoReemplazo: 2,
+  },
+  // Identificador interno del empleado que instala/vende/firma (distinto de
+  // [REF], que es el identificador del CLIENTE). El propio ID no es un
+  // nombre (puede llevar letras y numeros en cualquier orden/mayuscula), asi
+  // que aqui si es seguro usar "gi": a diferencia de PATRON_NOMBRE, este
+  // patron no depende de exigir mayuscula inicial como salvaguarda.
+  {
+    id: "id_empleado",
+    etiqueta: "[ID_EMPLEADO]",
+    re: /(?:ID\s+del\s+empleado|Employee\s+ID|Id\.?\s+de\s+empleado|Id\.?\s+empleado)(\s*:?\s*)([A-Za-z0-9][A-Za-z0-9/\-]{1,20})/gi,
     grupoReemplazo: 2,
   },
   // Nombres de CLIENTE: persona que contrata el servicio, tras cualquiera de

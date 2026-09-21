@@ -37,6 +37,29 @@ const email = require("./email");
 const backup = require("./backup");
 const formaciones = require("./formaciones");
 
+// Carpeta donde se guarda una copia permanente del PDF de cada analisis
+// avanzado completado (ver apiAnalisisAvanzado), para que el Repositorio
+// pueda ofrecer descargarlo tal cual se genero en su momento sin tener que
+// reconstruirlo. Cuelga de DIR_DATOS (== DATA_DIR en Render, ./data en
+// local), el mismo directorio persistente que ya usa la base de datos y los
+// backups (ver db.js/backup.js), asi que sobrevive a los despliegues.
+const DIR_INFORMES = path.join(db.DIR_DATOS, "informes");
+fs.mkdirSync(DIR_INFORMES, { recursive: true });
+
+function rutaInformeAvanzado(id) {
+  return path.join(DIR_INFORMES, `analisis-avanzado-${id}.pdf`);
+}
+
+// Vacia DIR_INFORMES por completo: se usa junto con db.borrarAnalisisAvanzado()
+// (que borra TODAS las filas de contratos_avanzados de golpe, sin id a id),
+// tanto en el reseteo global de datos de prueba como en el reseteo por
+// pestaña, para no dejar en disco PDFs huerfanos de analisis ya borrados de
+// la base de datos.
+function borrarInformesGuardados() {
+  fs.rmSync(DIR_INFORMES, { recursive: true, force: true });
+  fs.mkdirSync(DIR_INFORMES, { recursive: true });
+}
+
 const PORT = process.env.PORT || 3000;
 const MODEL = "claude-haiku-4-5-20251001";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -641,6 +664,7 @@ async function apiAdminResetDatosPrueba(req, res) {
   }
 
   const eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
+  borrarInformesGuardados();
   enviarJSON(res, 200, {
     ok: true,
     eliminados,
@@ -697,6 +721,7 @@ async function apiAdminResetTabData(req, res) {
     mensaje = `Datos eliminados: ${eliminados} alianza(s) borrada(s) (pendientes, publicadas y descartadas).`;
   } else if (tab === "contratos") {
     eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
+    borrarInformesGuardados();
     mensaje = `Datos eliminados: ${eliminados} contrato(s)/análisis avanzado(s) borrado(s) de Análisis, Repositorio (Contratos y Análisis Avanzados) y Estadísticas.`;
   }
 
@@ -1217,6 +1242,16 @@ async function apiAnalisisAvanzado(req, res) {
       fechaContrato,
     });
     doc.pipe(res);
+    // Copia permanente en disco (ver DIR_INFORMES): el PDFDocument de
+    // pdfkit es un stream de lectura normal, admite mas de un .pipe() sin
+    // duplicar el trabajo de generacion. Un fallo al escribir a disco (p.ej.
+    // sin espacio) no debe romper la descarga en curso, asi que se captura
+    // aparte y solo se registra en el log.
+    const escrituraInforme = fs.createWriteStream(rutaInformeAvanzado(analisisAvanzadoId));
+    escrituraInforme.on("error", (e) =>
+      console.error(`No se pudo guardar el PDF del análisis avanzado ${analisisAvanzadoId} en disco:`, e)
+    );
+    doc.pipe(escrituraInforme);
   } catch (e) {
     console.error("Error en el análisis legal avanzado:", e);
     if (!res.headersSent) {
@@ -2136,6 +2171,24 @@ async function apiRepositorioAvanzadoPdf(req, res, id) {
 
   const fila = db.obtenerAnalisisAvanzadoDetalle(id);
   if (!fila) return enviarJSON(res, 404, { error: "Análisis avanzado no encontrado." });
+
+  // Si se guardo una copia en disco en el momento del analisis (ver
+  // DIR_INFORMES en apiAnalisisAvanzado), se sirve esa copia tal cual en vez
+  // de reconstruir el PDF: es el informe EXACTO que se genero entonces, y
+  // evita rehacer el trabajo. Los analisis avanzados de antes de que
+  // existiera este guardado (o si el fichero se ha perdido) no tienen copia
+  // en disco: se cae al camino antiguo, reconstruyendo el PDF al vuelo a
+  // partir de los datos guardados en la base de datos.
+  const rutaGuardada = rutaInformeAvanzado(fila.id);
+  if (fs.existsSync(rutaGuardada)) {
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="informe-analisis-avanzado-uic-${fila.id}.pdf"`,
+      "Cache-Control": "no-store",
+    });
+    fs.createReadStream(rutaGuardada).pipe(res);
+    return;
+  }
 
   let clausulas = [];
   try {
