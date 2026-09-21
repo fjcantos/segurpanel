@@ -762,6 +762,47 @@ async function apiAdminAuditoria(req, res, query) {
   enviarJSON(res, 200, { registros });
 }
 
+// "Limpiar logs de auditoría" (panel de Super Admin): borra TODO el
+// historial de audit_log, confirmado con la contraseña de quien lo pide
+// (mismo patron que apiAdminResetDatosPrueba). Tras borrar, se registra la
+// propia accion de limpieza como una nueva entrada: asi el log nunca queda
+// completamente vacio sin rastro de quien lo vacio y cuando, que es
+// justo la informacion que mas interesa conservar en un borrado asi.
+async function apiAdminLimpiarAuditoria(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const password = typeof cuerpo.password === "string" ? cuerpo.password : "";
+  if (!auth.verificarPassword(password, sesion.usuario.password_hash)) {
+    return enviarJSON(res, 401, {
+      error: "Contraseña incorrecta.",
+      code: "CREDENCIALES_INVALIDAS",
+    });
+  }
+
+  const eliminados = db.borrarAuditoria();
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "limpiar_auditoria",
+    detail: { eliminados },
+    ip: obtenerIP(req),
+  });
+
+  enviarJSON(res, 200, {
+    ok: true,
+    eliminados,
+    mensaje: `Logs de auditoría eliminados: ${eliminados} registro(s) borrado(s).`,
+  });
+}
+
 /* ================================================================
    API: chat con Claude (protegido por sesion)
    ================================================================ */
@@ -2850,6 +2891,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/audit") return await apiAdminAuditoria(req, res, url.searchParams);
+    if (req.method === "POST" && ruta === "/api/admin/audit/clear") return await apiAdminLimpiarAuditoria(req, res);
 
     if (req.method === "POST") {
       let id = idAprobarSolicitud(ruta);

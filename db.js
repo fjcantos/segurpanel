@@ -887,6 +887,13 @@ function listarAuditoria({ limit, before } = {}) {
   return db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(tope);
 }
 
+// Usado por "Limpiar logs de auditoría" (panel de Super Admin, confirmado
+// con contraseña en server.js): borra TODO el historial de audit_log.
+function borrarAuditoria() {
+  const info = db.prepare("DELETE FROM audit_log").run();
+  return info.changes;
+}
+
 /* ---------- Suscripciones push (notificaciones web) ---------- */
 //
 // Un mismo usuario puede tener varias suscripciones (una por navegador o
@@ -992,6 +999,7 @@ module.exports = {
   actividadTiempoReal,
   registrarAuditoria,
   listarAuditoria,
+  borrarAuditoria,
   guardarSuscripcionPush,
   borrarSuscripcionPush,
   listarSuscripcionesPorUsuario,

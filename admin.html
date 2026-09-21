@@ -197,6 +197,7 @@
       <div class="empty-note" id="notaAuditoriaVacia" style="display:none;">Todavía no hay ninguna acción registrada.</div>
     </div>
     <button class="btn btn-outline" type="button" id="btnCargarMasAuditoria" style="margin-top:10px;">Cargar más</button>
+    <button class="btn btn-danger" type="button" id="btnLimpiarAuditoria" style="margin-top:10px;margin-left:10px;">Limpiar logs de auditoría</button>
   </div>
 
   <div class="card">
@@ -267,6 +268,20 @@
     <div class="modal-actions">
       <button class="btn btn-outline" type="button" id="modalResetDatosCancelar">Cancelar</button>
       <button class="btn btn-danger" type="button" id="modalResetDatosConfirmar">Borrar datos</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalLimpiarAuditoria">
+  <div class="modal">
+    <h3>Limpiar logs de auditoría</h3>
+    <p>Vas a borrar permanentemente <strong>todo el historial del Panel de auditoría</strong> (inicios/cierres de sesión, análisis de contrato, publicación de alianzas, cambios de rol...). Esta acción no se puede deshacer.</p>
+    <label for="modalLimpiarAuditoriaPassword">Confirma tu contraseña de Super Admin</label>
+    <input type="password" id="modalLimpiarAuditoriaPassword" autocomplete="current-password">
+    <div class="modal-error" id="modalLimpiarAuditoriaError"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" id="modalLimpiarAuditoriaCancelar">Cancelar</button>
+      <button class="btn btn-danger" type="button" id="modalLimpiarAuditoriaConfirmar">Borrar logs</button>
     </div>
   </div>
 </div>
@@ -516,6 +531,7 @@
     cambio_rol: 'Cambio de rol',
     reset_datos_tab: 'Reseteo de datos (pestaña)',
     eliminar_alianza: 'Eliminar alianza/noticia',
+    limpiar_auditoria: 'Limpiar logs de auditoría',
   };
 
   function detalleAuditoriaTexto(registro) {
@@ -531,6 +547,8 @@
         return escapeHtml(`${d.usuarioObjetivo || '—'}: ${d.rolAnterior || '—'} → ${d.rolNuevo || '—'}`);
       case 'reset_datos_tab':
         return escapeHtml(`${d.tab || '—'} (${d.eliminados || 0} eliminado(s))`);
+      case 'limpiar_auditoria':
+        return escapeHtml(`${d.eliminados || 0} registro(s) eliminado(s)`);
       case 'eliminar_alianza':
         return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
       default:
@@ -656,6 +674,54 @@
       toast(datos.mensaje || 'Datos de prueba eliminados correctamente.');
     } finally {
       $('modalResetDatosConfirmar').disabled = false;
+    }
+  });
+
+  /* ---------- Panel de auditoria: limpiar logs ---------- */
+  function abrirModalLimpiarAuditoria() {
+    $('modalLimpiarAuditoriaPassword').value = '';
+    $('modalLimpiarAuditoriaError').classList.remove('show');
+    $('modalLimpiarAuditoria').classList.add('show');
+    $('modalLimpiarAuditoriaPassword').focus();
+  }
+  function cerrarModalLimpiarAuditoria() {
+    $('modalLimpiarAuditoria').classList.remove('show');
+  }
+  $('btnLimpiarAuditoria').addEventListener('click', abrirModalLimpiarAuditoria);
+  $('modalLimpiarAuditoriaCancelar').addEventListener('click', cerrarModalLimpiarAuditoria);
+
+  $('modalLimpiarAuditoriaConfirmar').addEventListener('click', async () => {
+    const password = $('modalLimpiarAuditoriaPassword').value;
+    const errorEl = $('modalLimpiarAuditoriaError');
+    errorEl.classList.remove('show');
+    if (!password) {
+      errorEl.textContent = 'Introduce tu contraseña para confirmar.';
+      errorEl.classList.add('show');
+      return;
+    }
+    $('modalLimpiarAuditoriaConfirmar').disabled = true;
+    try {
+      const { ok, status, datos } = await llamar('/api/admin/audit/clear', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      if (!ok) {
+        errorEl.textContent = status === 401
+          ? 'Contraseña incorrecta.'
+          : (datos.error || 'No se pudieron borrar los logs de auditoría.');
+        errorEl.classList.add('show');
+        return;
+      }
+      cerrarModalLimpiarAuditoria();
+      toast(datos.mensaje || 'Logs de auditoría eliminados correctamente.');
+      // Se recarga la tabla desde el principio: tras borrar solo queda (o
+      // no) la propia entrada "Limpiar logs de auditoría" que se acaba de
+      // registrar, y esto lo refleja en pantalla sin esperar a recargar la
+      // pagina entera.
+      auditoriaUltimoId = null;
+      cargarAuditoria();
+    } finally {
+      $('modalLimpiarAuditoriaConfirmar').disabled = false;
     }
   });
 
