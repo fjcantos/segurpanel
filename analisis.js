@@ -409,6 +409,67 @@ function extraerProvinciaYEmpresa(textoOriginal) {
 }
 
 /* ================================================================
+   2b. Deteccion de la fecha de firma/creacion del contrato
+   ================================================================ */
+//
+// Se busca en el texto ORIGINAL (antes de anonimizar: la fecha del contrato
+// no es un dato personal). Reconoce fechas en letras ("a 14 de marzo de
+// 2024") y fechas numericas (14/03/2024 o 14-03-2024). Si aparecen varias
+// fechas plausibles, se usa la que aparece antes en el documento: la fecha
+// de firma suele ir al principio (encabezado) o en el bloque de firmas al
+// final, pero casi siempre antes que fechas incidentales sueltas en el
+// cuerpo del contrato. Devuelve null si no encuentra ninguna.
+const NOMBRES_MES = [
+  "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+const INDICE_MES = NOMBRES_MES.reduce((acc, nombre, i) => {
+  if (nombre) acc[nombre] = i;
+  return acc;
+}, {});
+
+function fechaContratoEsPlausible(dia, mes, anio) {
+  if (!(mes >= 1 && mes <= 12)) return false;
+  if (!(dia >= 1 && dia <= 31)) return false;
+  const anioActual = new Date().getFullYear();
+  return anio >= 1995 && anio <= anioActual + 1;
+}
+
+function formatearFechaContrato(dia, mes, anio) {
+  return `${dia} de ${NOMBRES_MES[mes]} de ${anio}`;
+}
+
+function extraerFechaContrato(textoOriginal) {
+  if (!textoOriginal) return null;
+  const candidatas = [];
+
+  const reLarga = /\b(\d{1,2})\s+de\s+([a-zñ]+)\s+de\s+(\d{4})\b/gi;
+  let m;
+  while ((m = reLarga.exec(textoOriginal))) {
+    const dia = parseInt(m[1], 10);
+    const mes = INDICE_MES[m[2].toLowerCase()];
+    const anio = parseInt(m[3], 10);
+    if (mes && fechaContratoEsPlausible(dia, mes, anio)) {
+      candidatas.push({ indice: m.index, texto: formatearFechaContrato(dia, mes, anio) });
+    }
+  }
+
+  const reCorta = /\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g;
+  while ((m = reCorta.exec(textoOriginal))) {
+    const dia = parseInt(m[1], 10);
+    const mes = parseInt(m[2], 10);
+    const anio = parseInt(m[3], 10);
+    if (fechaContratoEsPlausible(dia, mes, anio)) {
+      candidatas.push({ indice: m.index, texto: formatearFechaContrato(dia, mes, anio) });
+    }
+  }
+
+  if (candidatas.length === 0) return null;
+  candidatas.sort((a, b) => a.indice - b.indice);
+  return candidatas[0].texto;
+}
+
+/* ================================================================
    2c. Deteccion automatica de Hogar/Negocio
    ================================================================ */
 //
@@ -740,17 +801,56 @@ function etiquetaNivelGlobal(nivelGlobal) {
   }
 }
 
-// Margenes de los informes PDF (analisis basico y avanzado). El margen
-// derecho es mayor que el resto porque anchoUtil = pageWidth - left - right
-// se usa como ancho maximo de todos los bloques de texto: con un margen
-// derecho pequeno, el texto quedaba pegado (o se salia por) el borde fisico
-// de la pagina en algunos lectores de PDF. El resto de margenes se dejan en
-// 50pt, el valor original.
-const MARGENES_PDF = { top: 50, bottom: 50, left: 50, right: 70 };
+// Color corporativo aproximado de cada empresa conocida (EMPRESAS_CONOCIDAS
+// en 2a), usado para el circulo identificativo de la cabecera del informe.
+// Sector Alarm usa dos colores de marca (negro y rojo): se dibuja como
+// circulo negro con borde rojo en vez de partir el circulo en dos.
+const COLOR_EMPRESA_DEFECTO = "#9aa0a6"; // gris: empresa no detectada
+const COLORES_EMPRESA = {
+  "Verisure": { relleno: "#CC0000" },
+  "Sector Alarm": { relleno: "#111111", borde: "#CC0000" },
+  "Sicor": { relleno: "#0b5e2e" },
+  "Segurma": { relleno: "#e8720c" },
+  "ADT": { relleno: "#0033a0" },
+  "Seguridad 3D": { relleno: "#f2c200" },
+  "Grupo Control": { relleno: "#7c2035" },
+  "Trablisa": { relleno: "#0a1f52" },
+  "MPA/Prosegur": { relleno: "#c9a227" },
+};
 
-// Cabecera comun (logo UIC, titulo, fecha y linea separadora) para ambos
-// informes; devuelve la posicion Y donde empieza el cuerpo del documento.
-function dibujarCabecera(doc, anchoUtil, titulo) {
+function colorEmpresa(empresa) {
+  return COLORES_EMPRESA[empresa] || { relleno: COLOR_EMPRESA_DEFECTO };
+}
+
+// Badge Hogar/Negocio de la cabecera. Colores distintos de los de riesgo
+// (verde/amarillo/naranja/rojo) para que no se confundan con la puntuacion.
+function colorTipoContrato(tipo) {
+  if (tipo === "hogar") return { fondo: "#dbeafe", texto: "#1e3a8a", etiqueta: "HOGAR" };
+  if (tipo === "negocio") return { fondo: "#ede9fe", texto: "#5b21b6", etiqueta: "NEGOCIO" };
+  return { fondo: GRIS_CLARO, texto: GRIS, etiqueta: "Tipo no detectado" };
+}
+
+// Margenes de los informes PDF (analisis basico y avanzado): 50pt en los
+// cuatro lados. anchoUtil = pageWidth - left - right se usa como ancho
+// maximo de todos los bloques de texto del informe, y toda llamada a
+// doc.text() de contenido variable (parrafos, nombres de empresa, fechas...)
+// debe pasar ese `width` explicitamente: sin el, pdfkit no envuelve el texto
+// y lo dibuja en una sola linea que se sale por el borde de la pagina.
+const MARGENES_PDF = { top: 50, bottom: 50, left: 50, right: 50 };
+
+// Cabecera comun (logo UIC, titulo, fecha, empresa detectada con su color
+// corporativo, tipo de contrato y fecha del contrato, y linea separadora)
+// para ambos informes; deja doc.y en la posicion donde empieza el cuerpo.
+//
+// meta = { empresa, tipo, fechaContrato }: los tres pueden venir vacios
+// (documento sin empresa/tipo/fecha detectados), en cuyo caso se muestra un
+// circulo gris, un badge "Tipo no detectado" y el texto "Fecha no detectada"
+// respectivamente, en vez de omitir la fila.
+function dibujarCabecera(doc, anchoUtil, titulo, meta = {}) {
+  const { empresa, tipo, fechaContrato } = meta;
+  const xInfo = doc.page.margins.left + 150;
+  const anchoInfo = anchoUtil - 150;
+
   if (fs.existsSync(LOGO_PATH)) {
     doc.image(LOGO_PATH, doc.page.margins.left, doc.page.margins.top, { width: 130 });
   }
@@ -758,33 +858,70 @@ function dibujarCabecera(doc, anchoUtil, titulo) {
     .fillColor(NEGRO)
     .font("Helvetica-Bold")
     .fontSize(18)
-    .text(titulo, doc.page.margins.left + 150, doc.page.margins.top + 6, {
-      width: anchoUtil - 150,
-    });
+    .text(titulo, xInfo, doc.page.margins.top + 4, { width: anchoInfo });
   doc
     .fillColor(ROJO)
     .font("Helvetica-Bold")
     .fontSize(11)
-    .text("UIC · Unidad de Inteligencia de Competencia", doc.page.margins.left + 150, doc.page.margins.top + 30, {
-      width: anchoUtil - 150,
-    });
+    .text("UIC · Unidad de Inteligencia de Competencia", xInfo, doc.page.margins.top + 26, { width: anchoInfo });
 
   const fecha = new Intl.DateTimeFormat("es-ES", { dateStyle: "long", timeStyle: "short" }).format(new Date());
   doc
     .fillColor(GRIS)
     .font("Helvetica")
     .fontSize(9)
-    .text(`Fecha del análisis: ${fecha}`, doc.page.margins.left + 150, doc.page.margins.top + 48, {
-      width: anchoUtil - 150,
-    });
+    .text(`Fecha del análisis: ${fecha}`, xInfo, doc.page.margins.top + 44, { width: anchoInfo });
 
-  doc.moveTo(doc.page.margins.left, doc.page.margins.top + 85)
-    .lineTo(doc.page.width - doc.page.margins.right, doc.page.margins.top + 85)
+  /* ---- Fila de metadatos del contrato: circulo de color corporativo +
+     nombre de empresa, badge Hogar/Negocio a la derecha ---- */
+  const yMeta = doc.page.margins.top + 60;
+  const { relleno: colorCirculo, borde: bordeCirculo } = colorEmpresa(empresa);
+  const rCirculo = 5;
+  const cxCirculo = xInfo + rCirculo;
+  const cyCirculo = yMeta + 6;
+  doc.circle(cxCirculo, cyCirculo, rCirculo).fillColor(colorCirculo).fill();
+  if (bordeCirculo) {
+    doc.circle(cxCirculo, cyCirculo, rCirculo).lineWidth(1.2).strokeColor(bordeCirculo).stroke();
+  }
+
+  const xEmpresa = xInfo + rCirculo * 2 + 8;
+  const anchoBadgeTipo = 100;
+  const anchoEmpresa = anchoInfo - (xEmpresa - xInfo) - anchoBadgeTipo - 10;
+  doc
+    .fillColor(NEGRO)
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .text(empresa || "Empresa no detectada", xEmpresa, yMeta, { width: anchoEmpresa });
+
+  const { fondo: fondoTipo, texto: textoTipo, etiqueta: etiquetaTipo } = colorTipoContrato(tipo);
+  const xBadgeTipo = xInfo + anchoInfo - anchoBadgeTipo;
+  doc.roundedRect(xBadgeTipo, yMeta - 3, anchoBadgeTipo, 17, 8).fillColor(fondoTipo).fill();
+  doc
+    .fillColor(textoTipo)
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .text(etiquetaTipo, xBadgeTipo, yMeta + 1, { width: anchoBadgeTipo, align: "center" });
+
+  /* ---- Fecha del propio contrato (distinta de la fecha del analisis) ---- */
+  doc
+    .fillColor(GRIS)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(`Fecha del contrato: ${fechaContrato || "Fecha no detectada"}`, xInfo, yMeta + 20, { width: anchoInfo });
+
+  doc.moveTo(doc.page.margins.left, doc.page.margins.top + 100)
+    .lineTo(doc.page.width - doc.page.margins.right, doc.page.margins.top + 100)
     .lineWidth(1.5)
     .strokeColor(ROJO)
     .stroke();
 
-  doc.y = doc.page.margins.top + 100;
+  // Reseteo defensivo de doc.x: la ultima llamada a .text() de arriba deja
+  // el cursor en la columna junto al logo (xInfo), no en el margen
+  // izquierdo. Cualquier .text() del cuerpo del informe que omita el
+  // argumento x (llamada de la forma .text(str, {options})) heredaria esa
+  // x en vez de partir del margen, desbordando el texto por la derecha.
+  doc.x = doc.page.margins.left;
+  doc.y = doc.page.margins.top + 115;
 }
 
 // Pie de pagina comun, repetido en todas las paginas ya generadas del
@@ -812,12 +949,9 @@ function dibujarPiePagina(doc, anchoUtil, texto) {
 
 // Crea el PDFDocument del informe y lo devuelve ya cerrado (doc.end() ya se
 // ha llamado); quien invoque esta funcion solo tiene que hacer doc.pipe(res).
-function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, conteosAnonimizacion, totalAnonimizado }) {
+function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, conteosAnonimizacion, totalAnonimizado, empresa, tipo, fechaContrato }) {
   const doc = new PDFDocument({
     size: "A4",
-    // Margen derecho mayor que el resto: da un colchon extra para que el
-    // texto justificado a ancho completo (anchoUtil, calculado a partir de
-    // este margen) nunca quede pegado al borde fisico de la pagina.
     margins: MARGENES_PDF,
     bufferPages: true, // necesario para volver a paginas anteriores y anadir el pie de pagina
     info: { Title: "Informe de análisis de contrato - UIC" },
@@ -825,7 +959,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
 
   const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  dibujarCabecera(doc, anchoUtil, "Informe de análisis de contrato");
+  dibujarCabecera(doc, anchoUtil, "Informe de análisis de contrato", { empresa, tipo, fechaContrato });
 
   /* ---- Nota de anonimizacion ---- */
   doc
@@ -836,6 +970,14 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
       totalAnonimizado > 0
         ? `Antes de este análisis se anonimizaron automáticamente ${totalAnonimizado} dato(s) sensible(s) del documento original (nombres, DNI/NIE/NIF/CIF, direcciones, teléfonos, emails, datos bancarios y/o nombres de empresa). Este informe no contiene datos personales ni logotipos de terceros.`
         : "No se detectaron datos personales identificables en el documento. Este informe no contiene datos personales ni logotipos de terceros.",
+      // x e y explicitos: sin ellos pdfkit interpreta la llamada como la
+      // forma de 2 argumentos .text(str, options) y NO reposiciona doc.x,
+      // heredando la x en la que quedo dibujarCabecera() (la columna de
+      // texto junto al logo, no el margen izquierdo) — con el ancho
+      // completo de la pagina (anchoUtil) eso desbordaba muy por la
+      // derecha. Ver misma correccion en generarInformePDFAvanzado.
+      doc.page.margins.left,
+      doc.y,
       { width: anchoUtil }
     );
   doc.moveDown(1.2);
@@ -849,7 +991,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
     .fillColor(ROJO)
     .font("Helvetica-Bold")
     .fontSize(30)
-    .text(`${puntuacionGlobal}/10`, doc.page.margins.left + 20, cajaY + 15, { continued: false });
+    .text(`${puntuacionGlobal}/10`, doc.page.margins.left + 20, cajaY + 15, { width: 120, continued: false });
 
   const { fondo, texto } = colorNivel(nivel);
   const badgeAncho = 110;
@@ -879,7 +1021,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
   doc.y = cajaY + cajaAlto + 20;
 
   /* ---- Listado de clausulas ---- */
-  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(13).text("Cláusulas detectadas", doc.page.margins.left);
+  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(13).text("Cláusulas detectadas", doc.page.margins.left, doc.y, { width: anchoUtil });
   doc.moveDown(0.5);
 
   if (clausulas.length === 0) {
@@ -958,7 +1100,7 @@ function generarInformePDF({ nombreArchivo, clausulas, puntuacionGlobal, nivel, 
 // Informe legal avanzado: analisis clausula por clausula generado por Claude
 // (analizarConIA), con explicacion en lenguaje sencillo, base legal y una
 // barra de color por nivel de riesgo (verde/amarillo/naranja/rojo).
-function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas, totalAnonimizado }) {
+function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas, totalAnonimizado, empresa, tipo, fechaContrato }) {
   const doc = new PDFDocument({
     size: "A4",
     margins: MARGENES_PDF,
@@ -968,7 +1110,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
 
   const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  dibujarCabecera(doc, anchoUtil, "Análisis legal avanzado del contrato");
+  dibujarCabecera(doc, anchoUtil, "Análisis legal avanzado del contrato", { empresa, tipo, fechaContrato });
 
   doc
     .fillColor(GRIS)
@@ -979,6 +1121,11 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
         ? `Antes de este análisis se anonimizaron automáticamente ${totalAnonimizado} dato(s) sensible(s) del documento original. `
         : "") +
         "Análisis elaborado con asistencia de inteligencia artificial (Claude, de Anthropic), basado en la Ley 5/2014 de Seguridad Privada, la LGDCU, la LCGC, el Código Civil español y el RGPD/LOPDGDD. Es un análisis orientativo y no sustituye el asesoramiento de un abogado colegiado.",
+      // Ver comentario en generarInformePDF: x e y explicitos para que no
+      // herede la x en la que quedo dibujarCabecera() y se salga por la
+      // derecha con el ancho completo de la pagina.
+      doc.page.margins.left,
+      doc.y,
       { width: anchoUtil }
     );
   doc.moveDown(1.2);
@@ -992,7 +1139,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
     .fillColor(NEGRO)
     .font("Helvetica-Bold")
     .fontSize(30)
-    .text(`${puntuacionGlobal}/10`, doc.page.margins.left + 20, cajaY + 15);
+    .text(`${puntuacionGlobal}/10`, doc.page.margins.left + 20, cajaY + 15, { width: 120 });
 
   const nivelTexto = etiquetaNivelGlobal(nivelGlobal);
   const { color: colorGlobal } = colorRiesgo(nivelGlobal);
@@ -1016,7 +1163,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
   doc.y = cajaY + cajaAlto + 20;
 
   /* ---- Listado de clausulas ---- */
-  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(13).text("Cláusulas analizadas", doc.page.margins.left);
+  doc.fillColor(NEGRO).font("Helvetica-Bold").fontSize(13).text("Cláusulas analizadas", doc.page.margins.left, doc.y, { width: anchoUtil });
   doc.moveDown(0.5);
 
   if (clausulas.length === 0) {
@@ -1099,6 +1246,7 @@ module.exports = {
   anonimizarTexto,
   anonimizarResumenIA,
   extraerProvinciaYEmpresa,
+  extraerFechaContrato,
   detectarTipoContrato,
   detectarClausulas,
   analizarConIA,

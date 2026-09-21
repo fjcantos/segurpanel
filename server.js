@@ -886,6 +886,9 @@ async function apiAnalisis(req, res) {
     // ningun dato personal: el texto guardado es el que ya paso por
     // anonimizarTexto).
     const { provincia, empresa } = analisis.extraerProvinciaYEmpresa(textoOriginal);
+    // Igual que provincia/empresa: se busca en el texto ORIGINAL (la fecha
+    // de firma no es un dato personal) para mostrarla en la cabecera del PDF.
+    const fechaContrato = analisis.extraerFechaContrato(textoOriginal);
 
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
     const { clausulas, puntuacionGlobal, nivel } = analisis.detectarClausulas(textoAnonimizado);
@@ -983,6 +986,9 @@ async function apiAnalisis(req, res) {
       puntuacionGlobal,
       nivel,
       totalAnonimizado,
+      empresa,
+      tipo,
+      fechaContrato,
     });
     doc.pipe(res);
   } catch (e) {
@@ -1108,6 +1114,7 @@ async function apiAnalisisAvanzado(req, res) {
     // apiAnalisis.
     const { provincia, empresa } = analisis.extraerProvinciaYEmpresa(textoOriginal);
     const { tipo, certeza: tipoDetectadoConCerteza } = analisis.detectarTipoContrato(textoOriginal);
+    const fechaContrato = analisis.extraerFechaContrato(textoOriginal);
 
     const { texto: textoAnonimizado, total: totalAnonimizado } = analisis.anonimizarTexto(textoOriginal);
     const analisisIA = await analisis.analizarConIA(textoAnonimizado);
@@ -1121,6 +1128,7 @@ async function apiAnalisisAvanzado(req, res) {
       provincia,
       empresa,
       tipo,
+      fechaContrato,
       puntuacion: puntuacionGlobal,
       nivelGlobal,
       resumenGeneral,
@@ -1204,6 +1212,9 @@ async function apiAnalisisAvanzado(req, res) {
       nivelGlobal,
       clausulas,
       totalAnonimizado,
+      empresa,
+      tipo,
+      fechaContrato,
     });
     doc.pipe(res);
   } catch (e) {
@@ -2145,6 +2156,9 @@ async function apiRepositorioAvanzadoPdf(req, res, id) {
     nivelGlobal: fila.nivel_global,
     clausulas,
     totalAnonimizado: fila.total_anonimizado,
+    empresa: fila.empresa,
+    tipo: fila.tipo,
+    fechaContrato: fila.fecha_contrato,
   });
   doc.pipe(res);
 }

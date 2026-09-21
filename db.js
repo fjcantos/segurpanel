@@ -148,6 +148,7 @@ db.exec(`
     provincia          TEXT,
     empresa            TEXT,
     tipo               TEXT,
+    fecha_contrato     TEXT,
     puntuacion         INTEGER,
     nivel_global       TEXT,
     resumen_general    TEXT,
@@ -188,6 +189,9 @@ if (!columnaExiste("contract_stats", "texto_anonimizado")) {
 }
 if (!columnaExiste("users", "can_install_app")) {
   db.exec("ALTER TABLE users ADD COLUMN can_install_app INTEGER NOT NULL DEFAULT 0");
+}
+if (!columnaExiste("contratos_avanzados", "fecha_contrato")) {
+  db.exec("ALTER TABLE contratos_avanzados ADD COLUMN fecha_contrato TEXT");
 }
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
@@ -640,6 +644,7 @@ function registrarAnalisisAvanzado({
   provincia,
   empresa,
   tipo,
+  fechaContrato,
   puntuacion,
   nivelGlobal,
   resumenGeneral,
@@ -651,13 +656,14 @@ function registrarAnalisisAvanzado({
   const info = db
     .prepare(
       `INSERT INTO contratos_avanzados
-        (provincia, empresa, tipo, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, texto_anonimizado, user_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (provincia, empresa, tipo, fecha_contrato, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, texto_anonimizado, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       provincia || null,
       empresa || null,
       tipo === "hogar" || tipo === "negocio" ? tipo : null,
+      fechaContrato || null,
       Number.isFinite(puntuacion) ? puntuacion : null,
       nivelGlobal || null,
       resumenGeneral || null,
