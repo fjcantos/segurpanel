@@ -1052,6 +1052,18 @@
     background: var(--card);
   }
 
+  .repo-avz-pendientes-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--warn) 14%, var(--card));
+    border: 1px solid var(--warn);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.88rem;
+    color: var(--heading);
+  }
+  .repo-avz-pendientes-banner .btn-export { margin: 0; }
+
   .repo-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; }
   .repo-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
   .repo-card-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -2097,6 +2109,11 @@
 
     <div id="repoVistaAvanzados" hidden>
       <p class="chart-sub">Análisis legal cláusula por cláusula elaborado con IA, guardado automáticamente cada vez que se genera desde la pestaña «Análisis Avanzado».</p>
+
+      <div class="repo-avz-pendientes-banner" id="repoAvzPendientesBanner" hidden>
+        <span id="repoAvzPendientesTexto"></span>
+        <button type="button" class="btn-export" id="btnReintentarPendientesAvz">↻ Reintentar guardado</button>
+      </div>
 
       <div class="compare-legend" id="repoLegendAvz" hidden></div>
 
@@ -5529,6 +5546,44 @@
     } catch (e) {
       lista.innerHTML = '<div class="empty-note">No se pudo conectar con el servidor.</div>';
     }
+    cargarPendientesRepositorioAvz();
+  }
+
+  // Analisis avanzados que se completaron (el usuario ya recibio su PDF) pero
+  // cuyo guardado automatico en este Repositorio fallo en su momento: se
+  // avisa aqui para que un admin pueda reintentar el guardado con un clic,
+  // sin tener que volver a pasar el contrato por la IA.
+  const repoAvzPendientesBanner = document.getElementById('repoAvzPendientesBanner');
+  const btnReintentarPendientesAvz = document.getElementById('btnReintentarPendientesAvz');
+
+  async function cargarPendientesRepositorioAvz() {
+    try {
+      const { ok, datos } = await llamarAPI('/api/repositorio-avanzado/pendientes');
+      const pendientes = (ok && datos.pendientes) || [];
+      if (pendientes.length === 0) {
+        repoAvzPendientesBanner.hidden = true;
+        return;
+      }
+      document.getElementById('repoAvzPendientesTexto').textContent =
+        `⚠ ${pendientes.length} análisis avanzado(s) completado(s) no se guardaron automáticamente en el Repositorio.`;
+      repoAvzPendientesBanner.hidden = false;
+    } catch (e) {
+      repoAvzPendientesBanner.hidden = true;
+    }
+  }
+
+  if (btnReintentarPendientesAvz) {
+    btnReintentarPendientesAvz.addEventListener('click', async () => {
+      btnReintentarPendientesAvz.disabled = true;
+      btnReintentarPendientesAvz.textContent = 'Reintentando…';
+      try {
+        await llamarAPI('/api/repositorio-avanzado/pendientes/reintentar', { method: 'POST' });
+      } finally {
+        btnReintentarPendientesAvz.disabled = false;
+        btnReintentarPendientesAvz.textContent = '↻ Reintentar guardado';
+        await cargarRepositorioAvanzado();
+      }
+    });
   }
 
   const btnExportRepositorioAvz = document.getElementById('btnExportRepositorioAvz');
@@ -5774,8 +5829,13 @@
         return;
       }
 
-      setAdvStatus('');
-      renderResumenAvanzado(JSON.parse(decodeBase64Utf8(cabeceraResumen)));
+      const resumen = JSON.parse(decodeBase64Utf8(cabeceraResumen));
+      setAdvStatus(
+        resumen.guardadoEnRepositorio === false
+          ? 'Informe generado. Aviso: no se ha podido guardar automáticamente en el Repositorio; un administrador puede reintentarlo desde ahí.'
+          : ''
+      );
+      renderResumenAvanzado(resumen);
     } catch (e) {
       if (e.name === 'AbortError') {
         setAdvStatus('El análisis está tardando más de 3 minutos y se ha cancelado. El servicio de IA puede estar saturado: inténtalo de nuevo en unos minutos.', 'error');

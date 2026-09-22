@@ -192,6 +192,14 @@ db.exec(`
     created_at         TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS contratos_avanzados_pendientes (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload_json       TEXT NOT NULL,
+    error_mensaje      TEXT,
+    intentos           INTEGER NOT NULL DEFAULT 0,
+    created_at         TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
@@ -779,27 +787,114 @@ function registrarAnalisisAvanzado({
   textoAnonimizado,
   userId,
 }) {
+  const insertar = (uid) =>
+    db
+      .prepare(
+        `INSERT INTO contratos_avanzados
+          (provincia, empresa, tipo, fecha_contrato, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, texto_anonimizado, user_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        provincia || null,
+        empresa || null,
+        tipo === "hogar" || tipo === "negocio" ? tipo : null,
+        fechaContrato || null,
+        Number.isFinite(puntuacion) ? puntuacion : null,
+        nivelGlobal || null,
+        resumenGeneral || null,
+        JSON.stringify(clausulas || []),
+        Number.isFinite(totalAnonimizado) ? totalAnonimizado : null,
+        cifrado.cifrar(textoAnonimizado || null),
+        uid || null,
+        ahoraISO()
+      );
+
+  try {
+    return Number(insertar(userId).lastInsertRowid);
+  } catch (e) {
+    // FK contratos_avanzados.user_id -> users(id): si el usuario que lanzo el
+    // analisis se elimino entre el inicio de la peticion (ya autenticada) y
+    // este guardado (el analisis con IA puede tardar decenas de segundos), la
+    // insercion con ese user_id viola la FK. El analisis en si sigue siendo
+    // valido: se guarda igual, sin usuario, en vez de perderlo.
+    if (userId && /FOREIGN KEY/i.test(e.message || "")) {
+      return Number(insertar(null).lastInsertRowid);
+    }
+    throw e;
+  }
+}
+
+// Cola de reintento para analisis avanzados cuyo guardado en
+// contratos_avanzados fallo (disco lleno, fila corrupta, etc.): apiAnalisisAvanzado
+// entrega el PDF al usuario igualmente y encola aqui el analisis completo para
+// que un super_admin/admin pueda reintentar el guardado desde el Repositorio
+// (ver apiRepositorioAvanzadoPendientes* en server.js) sin tener que repetir
+// la llamada a la IA.
+function registrarAnalisisAvanzadoPendiente(payload, errorMensaje) {
+  const paraGuardar = { ...payload, textoAnonimizado: cifrado.cifrar(payload.textoAnonimizado || null) };
   const info = db
     .prepare(
-      `INSERT INTO contratos_avanzados
-        (provincia, empresa, tipo, fecha_contrato, puntuacion, nivel_global, resumen_general, clausulas_json, total_anonimizado, texto_anonimizado, user_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO contratos_avanzados_pendientes (payload_json, error_mensaje, intentos, created_at)
+       VALUES (?, ?, 0, ?)`
     )
-    .run(
-      provincia || null,
-      empresa || null,
-      tipo === "hogar" || tipo === "negocio" ? tipo : null,
-      fechaContrato || null,
-      Number.isFinite(puntuacion) ? puntuacion : null,
-      nivelGlobal || null,
-      resumenGeneral || null,
-      JSON.stringify(clausulas || []),
-      Number.isFinite(totalAnonimizado) ? totalAnonimizado : null,
-      cifrado.cifrar(textoAnonimizado || null),
-      userId || null,
-      ahoraISO()
-    );
+    .run(JSON.stringify(paraGuardar), errorMensaje || null, ahoraISO());
   return Number(info.lastInsertRowid);
+}
+
+function listarAnalisisAvanzadoPendientes() {
+  return db
+    .prepare(
+      `SELECT id, payload_json, error_mensaje, intentos, created_at
+       FROM contratos_avanzados_pendientes
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all();
+}
+
+function borrarAnalisisAvanzadoPendiente(id) {
+  db.prepare("DELETE FROM contratos_avanzados_pendientes WHERE id = ?").run(id);
+}
+
+// Usado junto con borrarAnalisisAvanzado() en los reseteos (global y por
+// pestaña "contratos"): sin esto, un reseteo dejaria en la cola analisis
+// pendientes de guardar que ya no tienen sentido reintentar.
+function borrarAnalisisAvanzadoPendientes() {
+  db.prepare("DELETE FROM contratos_avanzados_pendientes").run();
+}
+
+function marcarReintentoFallidoPendiente(id, errorMensaje) {
+  db.prepare("UPDATE contratos_avanzados_pendientes SET intentos = intentos + 1, error_mensaje = ? WHERE id = ?").run(
+    errorMensaje || null,
+    id
+  );
+}
+
+// Reintenta guardar en contratos_avanzados un analisis avanzado de la cola
+// de pendientes, sin volver a llamar a la IA (el analisis ya se hizo: solo
+// se reintenta la escritura en la base de datos). Con exito, retira la fila
+// de la cola; si vuelve a fallar, deja constancia del intento y el error
+// para el siguiente reintento.
+function reintentarAnalisisAvanzadoPendiente(id) {
+  const fila = db.prepare("SELECT * FROM contratos_avanzados_pendientes WHERE id = ?").get(id);
+  if (!fila) return { ok: false, error: "No encontrado" };
+
+  let payload;
+  try {
+    payload = JSON.parse(fila.payload_json);
+    payload.textoAnonimizado = cifrado.descifrar(payload.textoAnonimizado);
+  } catch (e) {
+    marcarReintentoFallidoPendiente(id, "Datos pendientes corruptos: " + e.message);
+    return { ok: false, error: e.message };
+  }
+
+  try {
+    const nuevoId = registrarAnalisisAvanzado(payload);
+    borrarAnalisisAvanzadoPendiente(id);
+    return { ok: true, id: nuevoId };
+  } catch (e) {
+    marcarReintentoFallidoPendiente(id, e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 function listarAnalisisAvanzadoResumen() {
@@ -1111,6 +1206,12 @@ module.exports = {
   obtenerAnalisisAvanzadoDetalle,
   clasificarAnalisisAvanzado,
   borrarAnalisisAvanzado,
+  registrarAnalisisAvanzadoPendiente,
+  listarAnalisisAvanzadoPendientes,
+  borrarAnalisisAvanzadoPendiente,
+  borrarAnalisisAvanzadoPendientes,
+  marcarReintentoFallidoPendiente,
+  reintentarAnalisisAvanzadoPendiente,
   estadisticasPorProvincia,
   contarUsuariosActivos,
   registrarVisitaTab,

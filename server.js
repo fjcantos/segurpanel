@@ -852,6 +852,7 @@ async function apiAdminResetDatosPrueba(req, res) {
   }
 
   const eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
+  db.borrarAnalisisAvanzadoPendientes();
   borrarInformesGuardados();
   enviarJSON(res, 200, {
     ok: true,
@@ -909,6 +910,7 @@ async function apiAdminResetTabData(req, res) {
     mensaje = `Datos eliminados: ${eliminados} alianza(s) borrada(s) (pendientes, publicadas y descartadas).`;
   } else if (tab === "contratos") {
     eliminados = db.borrarContractStats() + db.borrarAnalisisAvanzado();
+    db.borrarAnalisisAvanzadoPendientes();
     borrarInformesGuardados();
     mensaje = `Datos eliminados: ${eliminados} contrato(s)/análisis avanzado(s) borrado(s) de Análisis, Repositorio (Contratos y Análisis Avanzados) y Estadísticas.`;
   }
@@ -1378,7 +1380,16 @@ async function apiAnalisisAvanzado(req, res) {
     // modelo reformulase o citase algo del contexto.
     const { resumenGeneral, puntuacionGlobal, nivelGlobal, clausulas } = analisis.anonimizarResumenIA(analisisIA);
 
-    const analisisAvanzadoId = db.registrarAnalisisAvanzado({
+    // El guardado en el Repositorio debe ocurrir SIEMPRE antes de entregar el
+    // PDF (para que "Analisis Avanzados" refleje cada analisis completado),
+    // pero un fallo al guardar (disco lleno, fila corrupta, etc.) no debe
+    // dejar al usuario sin su informe: se registra el error y el analisis
+    // completo se encola en contratos_avanzados_pendientes para que un
+    // super_admin/admin pueda reintentar el guardado despues (ver
+    // /api/repositorio-avanzado/pendientes) sin repetir la llamada a la IA.
+    let analisisAvanzadoId = null;
+    let errorGuardado = null;
+    const payloadAnalisis = {
       provincia,
       empresa,
       tipo,
@@ -1390,21 +1401,36 @@ async function apiAnalisisAvanzado(req, res) {
       totalAnonimizado,
       textoAnonimizado,
       userId: sesion.usuario.id,
-    });
+    };
+    try {
+      analisisAvanzadoId = db.registrarAnalisisAvanzado(payloadAnalisis);
+    } catch (e) {
+      errorGuardado = e;
+      console.error("Error guardando el análisis avanzado en el Repositorio:", e);
+      try {
+        db.registrarAnalisisAvanzadoPendiente(payloadAnalisis, e.message);
+      } catch (e2) {
+        console.error("Error encolando el análisis avanzado pendiente de reintento:", e2);
+      }
+    }
 
     registrarAuditoriaSegura({
       userId: sesion.usuario.id,
       email: sesion.usuario.email,
-      action: "analisis_avanzado",
-      detail: { analisisAvanzadoId, empresa, tipo },
+      action: errorGuardado ? "analisis_avanzado_error_guardado" : "analisis_avanzado",
+      detail: errorGuardado
+        ? { empresa, tipo, error: errorGuardado.message }
+        : { analisisAvanzadoId, empresa, tipo },
       ip: obtenerIP(req),
     });
 
     // Aviso por email si este analisis avanzado tiene clausulas distintas al
     // anterior de la misma empresa+tipo (mismo patron que apiAnalisis con
-    // construirRepositorioCompleto, aqui con la version avanzada).
+    // construirRepositorioCompleto, aqui con la version avanzada). Solo
+    // aplica si el guardado anterior tuvo exito: sin id no hay nada que
+    // localizar en el repositorio.
     let cambios = null;
-    if (empresa) {
+    if (empresa && analisisAvanzadoId) {
       try {
         const repositorioAvanzado = construirRepositorioAvanzadoCompleto();
         const actual = repositorioAvanzado.find((c) => c.id === analisisAvanzadoId);
@@ -1440,6 +1466,7 @@ async function apiAnalisisAvanzado(req, res) {
       totalAnonimizado,
       clausulas,
       cambios,
+      guardadoEnRepositorio: !errorGuardado,
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 
@@ -1475,12 +1502,17 @@ async function apiAnalisisAvanzado(req, res) {
     // pdfkit es un stream de lectura normal, admite mas de un .pipe() sin
     // duplicar el trabajo de generacion. Un fallo al escribir a disco (p.ej.
     // sin espacio) no debe romper la descarga en curso, asi que se captura
-    // aparte y solo se registra en el log.
-    const escrituraInforme = fs.createWriteStream(rutaInformeAvanzado(analisisAvanzadoId));
-    escrituraInforme.on("error", (e) =>
-      console.error(`No se pudo guardar el PDF del análisis avanzado ${analisisAvanzadoId} en disco:`, e)
-    );
-    doc.pipe(escrituraInforme);
+    // aparte y solo se registra en el log. Sin analisisAvanzadoId (el
+    // guardado en el Repositorio falló, ver más arriba) no hay fila con la
+    // que asociar esta copia, así que se omite: el PDF sigue llegando al
+    // usuario por el pipe de arriba.
+    if (analisisAvanzadoId) {
+      const escrituraInforme = fs.createWriteStream(rutaInformeAvanzado(analisisAvanzadoId));
+      escrituraInforme.on("error", (e) =>
+        console.error(`No se pudo guardar el PDF del análisis avanzado ${analisisAvanzadoId} en disco:`, e)
+      );
+      doc.pipe(escrituraInforme);
+    }
   } catch (e) {
     console.error("Error en el análisis legal avanzado:", e);
     if (!res.headersSent) {
@@ -2505,6 +2537,70 @@ async function apiRepositorioAvanzadoPdf(req, res, id) {
   doc.pipe(res);
 }
 
+// Analisis avanzados cuyo guardado en contratos_avanzados fallo en su
+// momento (ver apiAnalisisAvanzado): el usuario ya recibio su PDF, pero el
+// analisis no aparece en "Analisis Avanzados" hasta que se reintenta el
+// guardado desde aqui. Devuelve solo los metadatos basicos (sin el texto
+// anonimizado completo, que no hace falta para decidir si reintentar).
+async function apiRepositorioAvanzadoPendientesGet(req, res) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const pendientes = db.listarAnalisisAvanzadoPendientes().map((p) => {
+    let payload = {};
+    try {
+      payload = JSON.parse(p.payload_json) || {};
+    } catch (e) {
+      payload = {};
+    }
+    return {
+      id: p.id,
+      empresa: payload.empresa || null,
+      tipo: payload.tipo || null,
+      provincia: payload.provincia || null,
+      fecha: p.created_at,
+      intentos: p.intentos,
+      error: p.error_mensaje,
+    };
+  });
+
+  enviarJSON(res, 200, { pendientes });
+}
+
+// Reintenta guardar en contratos_avanzados cada analisis avanzado encolado
+// en contratos_avanzados_pendientes (sin volver a llamar a la IA: el
+// analisis ya se hizo, solo se reintenta la escritura en la base de datos).
+// Los que tengan exito se retiran de la cola; los que sigan fallando se
+// quedan con el intento y el error actualizados para el siguiente reintento.
+async function apiRepositorioAvanzadoPendientesReintentar(req, res) {
+  const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
+  if (!sesion) return;
+
+  const pendientes = db.listarAnalisisAvanzadoPendientes();
+  let guardados = 0;
+  let fallidos = 0;
+
+  for (const p of pendientes) {
+    const resultado = db.reintentarAnalisisAvanzadoPendiente(p.id);
+    if (resultado.ok) {
+      guardados++;
+    } else {
+      fallidos++;
+      console.error(`Error reintentando guardar el análisis avanzado pendiente ${p.id}:`, resultado.error);
+    }
+  }
+
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "analisis_avanzado_reintento_guardado",
+    detail: { total: pendientes.length, guardados, fallidos },
+    ip: obtenerIP(req),
+  });
+
+  enviarJSON(res, 200, { total: pendientes.length, guardados, fallidos });
+}
+
 /* ================================================================
    API: alianzas entre empresas de alarmas y otros sectores
    ================================================================ */
@@ -3133,6 +3229,12 @@ async function manejarPeticion(req, res) {
     }
 
     if (req.method === "GET" && ruta === "/api/repositorio-avanzado") return await apiRepositorioAvanzadoGet(req, res, url.searchParams);
+    if (req.method === "GET" && ruta === "/api/repositorio-avanzado/pendientes") {
+      return await apiRepositorioAvanzadoPendientesGet(req, res);
+    }
+    if (req.method === "POST" && ruta === "/api/repositorio-avanzado/pendientes/reintentar") {
+      return await apiRepositorioAvanzadoPendientesReintentar(req, res);
+    }
     if (req.method === "POST") {
       const idTipoAvz = idClasificarRepositorioAvanzado(ruta);
       if (idTipoAvz !== null) return await apiRepositorioAvanzadoClasificar(req, res, idTipoAvz);
