@@ -180,6 +180,14 @@ const EMPRESAS_CONOCIDAS = [
   "Grupo Control", "Trablisa", "MPA", "Prosegur",
 ];
 
+// Empresas terceras (ajenas al sector de alarmas) que aparecen a veces en los
+// contratos como colaboradoras/referidoras (p.ej. comparadores de tarifas de
+// suministros energéticos que se venden junto con la alarma). Igual que
+// EMPRESAS_CONOCIDAS de arriba, pero con su propia etiqueta [EMPRESA_TERCERA]
+// para no confundirlas ni con la empresa de seguridad contratante
+// ([EMPRESA_SEGURIDAD]) ni con una razón social genérica ([EMPRESA]).
+const EMPRESAS_TERCERAS_CONOCIDAS = ["Selectra"];
+
 // Ciudades y provincias de España: las 50 provincias (con sus formas
 // cooficiales donde aplica: Alacant/Alicante, Girona, Lleida, Ourense, A
 // Coruña, Araba/Álava, Gipuzkoa, Bizkaia...), sus capitales cuando difieren
@@ -291,6 +299,11 @@ const PALABRA_NOMBRE = "(?:[A-ZÁÉÍÓÚÑ][a-zà-ÿ]+|[A-ZÁÉÍÓÚÑ]{2,})";
 // a comerse texto normal de la frase que sigue.
 const PATRON_NOMBRE =
   PALABRA_NOMBRE + "(?:\\s+" + CONECTOR_APELLIDO + "\\s+[A-Za-zÀ-ÿ]+|\\s+" + PALABRA_NOMBRE + "){1,4}";
+// Nombre/razón social de una sola palabra (p.ej. una marca como "SELECTRA",
+// o un nombre de pila suelto): PATRON_NOMBRE exige 2 o mas palabras, asi que
+// para triggers que puedan ir seguidos de una unica palabra hace falta esta
+// variante que admite tambien PALABRA_NOMBRE a solas.
+const PATRON_NOMBRE_O_PALABRA = "(?:" + PATRON_NOMBRE + "|" + PALABRA_NOMBRE + ")";
 // Honorifico opcional entre la etiqueta de rol ("Cliente:", "Titular:"...) y
 // el nombre en si ("Cliente: D. Alejandro..."), para no dejarlo colgando.
 const HONORIFICO_OPCIONAL = "(?:D\\.|Dña\\.|Don|Doña|Sr\\.|Sra\\.)?\\s*";
@@ -328,6 +341,21 @@ const CLIENTE_DISPARADORES = disparadoresRol([
   "Nombre en letra de molde",
   "El cliente", "El titular", "El abonado", "El contratante", "El suscriptor",
   "Titular", "Abonado", "Asegurado", "Contratante", "Suscriptor", "Cliente",
+  // Formulas de saludo de las cartas comerciales dirigidas al cliente
+  // ("Estimado/a JOSE HURTADO CRUZ:"), con el nombre pegado directamente al
+  // saludo (a diferencia de "Te agradecemos...", que va aparte en la regla
+  // "saludo_cliente" de mas abajo porque el nombre no va pegado al disparador).
+  "Estimado/a", "Estimado", "Estimada", "Apreciado/a", "Apreciado", "Apreciada",
+]);
+
+// Disparadores para el nombre de la empresa tercera (no de seguridad) que
+// asesora/colabora en la venta (p.ej. "Tu asesor de seguridad es: SELECTRA").
+// Frases mas especificas que el generico "Asesor" de EMPLEADO_DISPARADORES,
+// para no confundir a la empresa colaboradora con un asesor persona fisica.
+const EMPRESA_TERCERA_DISPARADORES = disparadoresRol([
+  "Tu asesor de seguridad es", "Asesor de seguridad es", "Asesor de seguridad",
+  "Empresa colaboradora", "Entidad colaboradora", "Compañía colaboradora",
+  "En colaboración con",
 ]);
 
 const EMPLEADO_DISPARADORES = disparadoresRol([
@@ -478,6 +506,17 @@ const REGLAS_ANONIMIZACION = [
     re: /(?:D\.?G\.?P\.?|Registro\s+DGP|N[uú]mero\s+de\s+registro|N[ºo]\.?\s+de\s+registro|Registro\s+de\s+empresa(?:\s+de\s+seguridad)?|Inscripci[oó]n\s+(?:en\s+el\s+)?registro)(\s*:?\s*)([A-Za-z0-9/\-]{1,20})/gi,
     grupoReemplazo: 2,
   },
+  // Numero de autorizacion administrativa/ministerial de la empresa de
+  // seguridad (p.ej. "Autorización Ministerial nº 3082", el numero que toda
+  // empresa de seguridad privada española debe exhibir junto al DGP).
+  // Distinto de [NUM_REGISTRO] (registro DGP): esta es la autorizacion para
+  // operar, no el numero de inscripcion en el registro.
+  {
+    id: "num_autorizacion",
+    etiqueta: "[NUM_AUTORIZACIÓN]",
+    re: /(?:N[uú]mero\s+de\s+autorizaci[oó]n(?:\s+administrativa)?|N[ºo]\.?\s+de\s+autorizaci[oó]n|Autorizaci[oó]n(?:\s+administrativa)?(?:\s+ministerial)?(?:\s+del\s+Ministerio\s+del\s+Interior)?(?:\s+de\s+la\s+Direcci[oó]n\s+General\s+de\s+la\s+Polic[ií]a)?)\s*(?:n[ºo°]\.?|n[uú]m(?:ero)?\.?)?\s*:?\s*([A-Za-z0-9/\-]{1,15})/gi,
+    grupoReemplazo: 1,
+  },
   // Nombres de CLIENTE: persona que contrata el servicio, tras cualquiera de
   // las etiquetas habituales con las que un contrato de alarmas identifica
   // a esa parte. Admite un honorifico opcional entre la etiqueta y el
@@ -523,6 +562,38 @@ const REGLAS_ANONIMIZACION = [
     ),
     grupoReemplazo: 2,
   },
+  // Nombre de la empresa TERCERA (ajena a la empresa de seguridad) que
+  // asesora o colabora en la venta (p.ej. "Tu asesor de seguridad es:
+  // SELECTRA"). A diferencia de "cliente"/"empleado"/"nombre" de arriba, el
+  // dato que sigue al disparador puede ser una unica palabra (marca comercial
+  // de una sola palabra), de ahi PATRON_NOMBRE_O_PALABRA en vez de
+  // PATRON_NOMBRE.
+  {
+    id: "empresa_tercera",
+    etiqueta: "[EMPRESA_TERCERA]",
+    re: new RegExp(
+      "(?:" + EMPRESA_TERCERA_DISPARADORES + ")(\\s*:?\\s*)" +
+        HONORIFICO_OPCIONAL +
+        "(" + PATRON_NOMBRE_O_PALABRA + ")",
+      "g"
+    ),
+    grupoReemplazo: 2,
+  },
+  // Nombre propio en el saludo inicial de las cartas comerciales, cuando no
+  // va pegado al disparador sino mas adelante en la misma frase (p.ej. "Te
+  // agradecemos tu confianza, JOSE HURTADO CRUZ."). El hueco entre el
+  // disparador y el nombre se acota a una sola frase (sin punto ni salto de
+  // linea de por medio) y a un maximo de 80 caracteres, para no cruzar por
+  // error a la frase siguiente.
+  {
+    id: "saludo_cliente",
+    etiqueta: "[CLIENTE]",
+    re: new RegExp(
+      "(?:Te|Le)\\s+(?:agradecemos|damos las gracias)[^.\\n]{0,80}?,?\\s*(" + PATRON_NOMBRE + ")(?=[.,\\n]|$)",
+      "g"
+    ),
+    grupoReemplazo: 1,
+  },
   // Razon social por etiqueta explicita (antes de la regla generica S.L./S.A.
   // para que capture tambien nombres comerciales que no llevan esos sufijos)
   {
@@ -540,13 +611,53 @@ const REGLAS_ANONIMIZACION = [
     etiqueta: "[EMPRESA]",
     re: /\b[A-ZÁÉÍÓÚÑ][\wÀ-ÿ&.,'\- ]{1,60}?,?\s+S\.?\s?(?:L\.?U?\.?|A\.?U?\.?|C\.?|COOP\.?)\b/g,
   },
+  // Red de seguridad final: una linea completa formada UNICAMENTE por 2 a 4
+  // palabras en MAYUSCULAS (p.ej. "JOSE HURTADO CRUZ" en su propia linea, tal
+  // como aparece en el bloque de destinatario/direccion de muchas cartas
+  // comerciales, SIN ninguna etiqueta de rol delante que ya la hubiera
+  // capturado la regla "cliente" de mas arriba). Va la ULTIMA de todas
+  // porque es la mas generica: si el nombre ya llevaba una etiqueta de rol
+  // explicita, las reglas anteriores ya lo habran sustituido y esta regla no
+  // encontrara nada que hacer en esa linea (el texto ya contiene "[CLIENTE]"
+  // en vez del nombre). Se excluye una lista cerrada de cabeceras de
+  // contrato habituales en mayusculas ("CONTRATO", "CLAUSULA"...) para no
+  // confundirlas con el nombre de una persona.
+  {
+    id: "nombre_linea_mayusculas",
+    etiqueta: "[CLIENTE]",
+    re: /^[ \t]*([A-ZÁÉÍÓÚÑ]{2,}(?:[ \t]+[A-ZÁÉÍÓÚÑ]{2,}){1,3})[ \t]*$/gm,
+    grupoReemplazo: 1,
+    filtro: (coincidencia) => {
+      const primeraPalabra = coincidencia[1].split(/\s+/)[0];
+      return !PALABRAS_CABECERA_EXCLUIDAS.has(primeraPalabra);
+    },
+  },
 ];
+
+// Primeras palabras de cabeceras/titulos habituales de un contrato en
+// mayusculas ("CONTRATO DE PRESTACIÓN DE SERVICIOS", "CONDICIONES
+// GENERALES"...), para que la regla "nombre_linea_mayusculas" de arriba no
+// las confunda con el nombre de una persona por el simple hecho de ir en
+// mayusculas y ocupar toda la linea.
+const PALABRAS_CABECERA_EXCLUIDAS = new Set([
+  "CONTRATO", "CONDICIONES", "CONDICION", "CLAUSULA", "CLÁUSULA", "CLAUSULAS", "CLÁUSULAS",
+  "ANEXO", "ANEXOS", "ARTICULO", "ARTÍCULO", "ARTICULOS", "ARTÍCULOS",
+  "CAPITULO", "CAPÍTULO", "TITULO", "TÍTULO", "SEGURIDAD", "ALARMA", "ALARMAS",
+  "SERVICIO", "SERVICIOS", "DATOS", "PROTECCION", "PROTECCIÓN", "GENERALES",
+  "PARTICULARES", "DECLARACION", "DECLARACIÓN", "RESPONSABLE", "TRATAMIENTO",
+  "INSTALACION", "INSTALACIÓN", "MANTENIMIENTO", "FACTURA", "PRESUPUESTO",
+  "RECIBO", "ANEXO1", "PAGINA", "PÁGINA",
+]);
 
 // La empresa de seguridad/alarmas contratante recibe una etiqueta propia,
 // distinta de [EMPRESA] (razon social generica de terceros), para que quede
 // igual de anonima pero identificable como "la empresa de seguridad" en el
 // informe sin revelar cual es.
 const ETIQUETA_EMPRESA_SEGURIDAD = "[EMPRESA_SEGURIDAD]";
+// Ver comentario de EMPRESAS_TERCERAS_CONOCIDAS en la seccion 2 de arriba:
+// empresas ajenas al sector de alarmas (comparadores de suministros, etc.)
+// que colaboran/refieren la venta, con su propia etiqueta.
+const ETIQUETA_EMPRESA_TERCERA = "[EMPRESA_TERCERA]";
 
 function anonimizarTexto(texto) {
   let resultado = texto;
@@ -574,9 +685,33 @@ function anonimizarTexto(texto) {
     if (n > 0) conteos.empresaSeguridad = (conteos.empresaSeguridad || 0) + n;
   });
 
+  // Mismo mecanismo que arriba, para empresas terceras conocidas (p.ej.
+  // "Selectra") que puedan aparecer sueltas en el texto sin ningun disparador
+  // delante (la regla "empresa_tercera" de REGLAS_ANONIMIZACION solo cubre el
+  // caso con disparador, p.ej. "Tu asesor de seguridad es: ...").
+  EMPRESAS_TERCERAS_CONOCIDAS.forEach((nombreEmpresa) => {
+    const re = new RegExp(
+      "\\b" +
+        nombreEmpresa.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+        "\\b(?:(?:\\s+[A-ZÁÉÍÓÚÑ][\\wÀ-ÿ]*){0,2}[\\s,]+S\\.?\\s?(?:L\\.?U?\\.?|A\\.?U?\\.?|C\\.?|COOP\\.?)\\.?)?",
+      "gi"
+    );
+    let n = 0;
+    resultado = resultado.replace(re, () => {
+      n++;
+      return ETIQUETA_EMPRESA_TERCERA;
+    });
+    if (n > 0) conteos.empresaTercera = (conteos.empresaTercera || 0) + n;
+  });
+
   REGLAS_ANONIMIZACION.forEach((regla) => {
     let n = 0;
     resultado = resultado.replace(regla.re, (...args) => {
+      // El filtro (si existe) descarta coincidencias que, aun cumpliendo el
+      // patron, se sabe que no son el dato buscado (p.ej. una cabecera de
+      // contrato en mayusculas que no es el nombre de una persona). Se deja
+      // el texto tal cual y no se cuenta como anonimizado.
+      if (regla.filtro && !regla.filtro(args)) return args[0];
       n++;
       if (regla.grupoReemplazo) {
         // Sustituye solo el grupo capturado (p.ej. el nombre tras "Titular:")
@@ -1552,21 +1687,49 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
   const anchoTexto = anchoUtil - anchoBarra - 12;
 
   clausulas.forEach((clausula) => {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - 100) doc.addPage();
-
-    const inicioBloque = doc.y;
     const xTexto = doc.page.margins.left + anchoBarra + 12;
     const { color: colorBarra, etiqueta } = colorRiesgo(clausula.riesgo);
     const anchoTitulo = anchoTexto - 90;
     const tituloTexto = `Cláusula ${clausula.numero} · ${clausula.titulo}`;
-    // Altura real del titulo con el ancho que va a ocupar: si es largo y
-    // ocupa dos lineas, la explicacion debe bajar en proporcion o queda
-    // solapada visualmente con la segunda linea del titulo.
+    const baseLegalTexto = `Base legal: ${clausula.baseLegal}`;
+
+    // Mide la altura COMPLETA del bloque (titulo + explicacion + base legal)
+    // ANTES de dibujar nada, para decidir aqui mismo si hace falta un salto
+    // de pagina: la explicacion la genera la IA y puede ocupar varias
+    // lineas, asi que un umbral fijo (como el "quedan 100pt" que habia antes)
+    // se queda corto para clausulas largas. Si en vez de esto se deja que
+    // pdfkit desborde el bloque a mitad de dibujo, el salto de pagina ocurre
+    // solo en mitad de las llamadas a .text(), pero la barra de color y la
+    // linea separadora de mas abajo se calculan con "inicioBloque" (la
+    // posicion en la pagina VIEJA) y se dibujan ya con doc.page apuntando a
+    // la pagina NUEVA: el rectangulo de color sale con una altura enorme (o
+    // negativa) en un sitio que no corresponde, tapando el texto que acaba
+    // de fluir a la pagina nueva. Forzando aqui el salto ANTES de dibujar
+    // nada, todo el bloque queda siempre en una sola pagina.
     doc.font("Helvetica-Bold").fontSize(11);
     const altoTitulo = doc.heightOfString(tituloTexto, { width: anchoTitulo });
+    doc.font("Helvetica").fontSize(9.5);
+    const altoExplicacion = doc.heightOfString(clausula.explicacion || "", { width: anchoTexto });
+    const lineHeightExplicacion = doc.currentLineHeight();
+    doc.font("Helvetica-Oblique").fontSize(8.5);
+    const altoBaseLegal = doc.heightOfString(baseLegalTexto, { width: anchoTexto });
+    const lineHeightBaseLegal = doc.currentLineHeight();
+    const alturaBloque =
+      Math.max(altoTitulo, 14) + 5 +
+      altoExplicacion + lineHeightExplicacion * 0.2 +
+      altoBaseLegal + lineHeightBaseLegal * 1.6 + 6;
+
+    if (doc.y + alturaBloque > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      doc.x = doc.page.margins.left;
+    }
+
+    const inicioBloque = doc.y;
 
     doc
       .fillColor(NEGRO)
+      .font("Helvetica-Bold")
+      .fontSize(11)
       .text(tituloTexto, xTexto, inicioBloque, { width: anchoTitulo });
 
     doc
@@ -1585,7 +1748,7 @@ function generarInformePDFAvanzado({ resumenGeneral, puntuacionGlobal, nivelGlob
       .fillColor("#888888")
       .font("Helvetica-Oblique")
       .fontSize(8.5)
-      .text(`Base legal: ${clausula.baseLegal}`, xTexto, doc.y, { width: anchoTexto });
+      .text(baseLegalTexto, xTexto, doc.y, { width: anchoTexto });
 
     const finBloque = doc.y + doc.currentLineHeight() + 6;
 
