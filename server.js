@@ -64,10 +64,24 @@ function borrarInformesGuardados() {
 
 const PORT = process.env.PORT || 3000;
 // Base publica de la app, usada para construir enlaces absolutos en emails
-// (p.ej. el aviso de nueva solicitud de acceso). En local cae a
-// localhost:PORT; en produccion (Render) conviene definir APP_URL con la
-// URL real, o los enlaces de los emails apuntarian a localhost.
-const APP_URL = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
+// (aviso de nueva solicitud de acceso, enlace de recuperacion de
+// contraseña). Orden de preferencia:
+//   1. APP_URL / BASE_URL: configuracion manual explicita (cualquiera de
+//      los dos nombres, por si el proveedor de hosting o quien despliega usa
+//      uno u otro).
+//   2. RENDER_EXTERNAL_URL: Render la define automaticamente en todo
+//      servicio web con la URL publica real (p.ej.
+//      https://segurpanel.onrender.com) sin necesidad de configurar nada;
+//      sirve de deteccion automatica en produccion sin depender de que
+//      alguien recuerde fijar APP_URL a mano.
+//   3. http://localhost:PORT: uso local, unico caso en el que no hay URL
+//      publica real.
+const APP_URL = (
+  process.env.APP_URL ||
+  process.env.BASE_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  `http://localhost:${PORT}`
+).replace(/\/+$/, "");
 const MODEL = "claude-haiku-4-5-20251001";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MAX_TURNOS_HISTORIAL = 12; // limita el contexto que se reenvia a la API
@@ -3570,9 +3584,14 @@ servidor.listen(PORT, () => {
     );
   }
 
-  if (process.env.NODE_ENV === "production" && !process.env.APP_URL) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    !process.env.APP_URL &&
+    !process.env.BASE_URL &&
+    !process.env.RENDER_EXTERNAL_URL
+  ) {
     console.warn(
-      `AVISO: APP_URL no está configurada. Los enlaces en emails (p.ej. el aviso de nueva solicitud de acceso) usarán ${APP_URL}, que no es una URL pública válida.`
+      `AVISO: APP_URL/BASE_URL no están configuradas y no se detectó RENDER_EXTERNAL_URL. Los enlaces en emails (p.ej. el aviso de nueva solicitud de acceso o el de recuperación de contraseña) usarán ${APP_URL}, que no es una URL pública válida.`
     );
   }
 
