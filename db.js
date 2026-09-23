@@ -349,6 +349,47 @@ function actualizarPuedeInstalarApp(userId, canInstallApp) {
   );
 }
 
+// Borrado permanente de una cuenta (solo cuentas ya desactivadas, ver
+// apiAdminDeleteUser en server.js). Con "PRAGMA foreign_keys = ON" activado,
+// borrar la fila de `users` directamente fallaria por violacion de clave
+// foranea en cuanto ese usuario tuviera cualquier fila relacionada en otra
+// tabla, asi que hay que deshacer esas referencias primero, en una unica
+// transaccion (todo o nada):
+//   - Columnas NOT NULL REFERENCES users(id): no se pueden dejar a NULL, hay
+//     que borrar esas filas (sessions, tab_visits, two_factor_codes,
+//     push_subscriptions, password_resets). Son datos propios de la cuenta
+//     que desaparece con ella.
+//   - Columnas NULLABLE REFERENCES users(id): se ponen a NULL en vez de
+//     borrar la fila que las contiene, porque esas filas SI tienen valor por
+//     si mismas (un contrato analizado, una alianza revisada, un log de
+//     auditoria...) y no deben desaparecer solo porque quien las creo se
+//     elimine despues.
+function eliminarUsuario(userId) {
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM tab_visits WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM two_factor_codes WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(userId);
+
+    db.prepare("UPDATE users SET approved_by = NULL WHERE approved_by = ?").run(userId);
+    db.prepare("UPDATE access_requests SET resolved_by = NULL WHERE resolved_by = ?").run(userId);
+    db.prepare("UPDATE alianzas SET reviewed_by = NULL WHERE reviewed_by = ?").run(userId);
+    db.prepare("UPDATE contract_stats SET user_id = NULL WHERE user_id = ?").run(userId);
+    db.prepare("UPDATE contratos_avanzados SET user_id = NULL WHERE user_id = ?").run(userId);
+    db.prepare("UPDATE company_notes SET updated_by = NULL WHERE updated_by = ?").run(userId);
+    db.prepare("UPDATE audit_log SET user_id = NULL WHERE user_id = ?").run(userId);
+
+    const info = db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    db.exec("COMMIT");
+    return info.changes;
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
 function registrarIntentoFallido(userId) {
   const usuario = buscarUsuarioPorId(userId);
   const intentos = (usuario.failed_attempts || 0) + 1;
@@ -1253,6 +1294,7 @@ module.exports = {
   actualizarRol,
   actualizarEstado,
   actualizarPuedeInstalarApp,
+  eliminarUsuario,
   registrarIntentoFallido,
   limpiarIntentosFallidos,
   ipBloqueadaHasta,

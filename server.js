@@ -1002,6 +1002,38 @@ async function apiAdminSetInstallApp(req, res, id) {
   enviarJSON(res, 200, { usuario: usuarioPublico(db.buscarUsuarioPorId(id)) });
 }
 
+// Borrado permanente de una cuenta desde el panel de gestion de usuarios.
+// Solo permitido sobre cuentas ya DESACTIVADAS (defensa en profundidad: el
+// boton correspondiente en admin.html tampoco se muestra para active/
+// pending), para que desactivar siga siendo el paso previo obligatorio antes
+// de un borrado que no se puede deshacer.
+async function apiAdminDeleteUser(req, res, id) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const objetivo = db.buscarUsuarioPorId(id);
+  if (!objetivo) return enviarJSON(res, 404, { error: "Usuario no encontrado." });
+
+  if (objetivo.id === sesion.usuario.id) {
+    return enviarJSON(res, 400, { error: "No puedes eliminar tu propia cuenta." });
+  }
+  if (objetivo.status !== "disabled") {
+    return enviarJSON(res, 400, { error: "Solo se pueden eliminar cuentas desactivadas." });
+  }
+
+  db.eliminarUsuario(id);
+
+  registrarAuditoriaSegura({
+    userId: sesion.usuario.id,
+    email: sesion.usuario.email,
+    action: "usuario_eliminado",
+    detail: { usuarioEliminado: objetivo.email },
+    ip: obtenerIP(req),
+  });
+
+  enviarJSON(res, 200, { ok: true });
+}
+
 async function apiAdminResetPassword(req, res, id) {
   const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
@@ -3374,6 +3406,7 @@ const idRolUsuario = RUTA_CON_ID("/api/admin/users", "/role");
 const idEstadoUsuario = RUTA_CON_ID("/api/admin/users", "/status");
 const idInstallAppUsuario = RUTA_CON_ID("/api/admin/users", "/install-app");
 const idResetPasswordUsuario = RUTA_CON_ID("/api/admin/users", "/reset-password");
+const idEliminarUsuario = RUTA_CON_ID("/api/admin/users", "/delete");
 const idPublicarAlianza = RUTA_CON_ID("/api/alianzas", "/publicar");
 const idDescartarAlianza = RUTA_CON_ID("/api/alianzas", "/descartar");
 const idEliminarAlianza = RUTA_CON_ID("/api/alianzas", "/eliminar");
@@ -3443,6 +3476,8 @@ async function manejarPeticion(req, res) {
       if (id !== null) return await apiAdminSetInstallApp(req, res, id);
       id = idResetPasswordUsuario(ruta);
       if (id !== null) return await apiAdminResetPassword(req, res, id);
+      id = idEliminarUsuario(ruta);
+      if (id !== null) return await apiAdminDeleteUser(req, res, id);
     }
     if (req.method === "POST" && ruta === "/api/admin/reset-test-data") return await apiAdminResetDatosPrueba(req, res);
     if (req.method === "POST" && ruta === "/api/admin/reset-tab-data") return await apiAdminResetTabData(req, res);

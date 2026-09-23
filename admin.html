@@ -453,6 +453,9 @@
               ? `<button class="btn btn-ok" data-activar="${u.id}">Activar</button>`
               : ''}
           <button class="btn btn-outline" data-reset="${u.id}">Clave temporal</button>
+          ${u.status === 'disabled'
+            ? `<button class="btn btn-danger" data-eliminar="${u.id}" data-email="${escapeHtml(u.email)}" title="Eliminar usuario permanentemente">🗑️</button>`
+            : ''}
         </td>`;
       tbody.appendChild(tr);
     }
@@ -471,6 +474,9 @@
     });
     tbody.querySelectorAll('[data-instalar-app]').forEach(chk => {
       chk.addEventListener('change', () => cambiarInstalarApp(chk.dataset.instalarApp, chk.checked, chk));
+    });
+    tbody.querySelectorAll('[data-eliminar]').forEach(btn => {
+      btn.addEventListener('click', () => eliminarUsuario(btn.dataset.eliminar, btn.dataset.email));
     });
   }
 
@@ -522,6 +528,14 @@
     mostrarClaveTemporal('Clave temporal asignada', datos.tempPassword);
   }
 
+  async function eliminarUsuario(id, email) {
+    if (!confirm(`¿Estás seguro de que quieres eliminar permanentemente a ${email}? Esta acción no se puede deshacer.`)) return;
+    const { ok, datos } = await llamar(`/api/admin/users/${id}/delete`, { method: 'POST' });
+    if (!ok) { toast(datos.error || 'No se pudo eliminar el usuario.', true); return; }
+    toast('Usuario eliminado permanentemente.');
+    cargarUsuarios();
+  }
+
   /* ---------- Panel de auditoria ---------- */
   const ETIQUETAS_ACCION_AUDITORIA = {
     login: 'Inicio de sesión',
@@ -532,6 +546,7 @@
     reset_datos_tab: 'Reseteo de datos (pestaña)',
     eliminar_alianza: 'Eliminar alianza/noticia',
     limpiar_auditoria: 'Limpiar logs de auditoría',
+    usuario_eliminado: 'Eliminar usuario',
   };
 
   function detalleAuditoriaTexto(registro) {
@@ -551,6 +566,8 @@
         return escapeHtml(`${d.eliminados || 0} registro(s) eliminado(s)`);
       case 'eliminar_alianza':
         return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
+      case 'usuario_eliminado':
+        return escapeHtml(d.usuarioEliminado || '—');
       default:
         return escapeHtml(JSON.stringify(d));
     }
