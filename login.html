@@ -253,8 +253,56 @@
         </button>
       </form>
 
+      <button type="button" class="link" id="irOlvide">¿Olvidaste tu contraseña?</button>
       <button type="button" class="link" id="irSolicitar">¿No tienes acceso? Solicítalo aquí</button>
       <div class="msg" id="msgLogin"></div>
+    </section>
+
+    <!-- ===== OLVIDASTE TU CONTRASENA (pedir enlace por email) ===== -->
+    <section class="view" id="viewOlvide">
+      <span class="domain-badge">Solo correos @verisure.es</span>
+      <h1 class="title">Recuperar contraseña</h1>
+      <p class="subtitle">Te enviaremos un enlace para restablecer tu contraseña. Caduca en 30 minutos.</p>
+
+      <form id="formOlvide">
+        <label for="olvideEmail">Correo</label>
+        <input type="email" id="olvideEmail" name="email" placeholder="nombre.apellido@verisure.es" required>
+
+        <button type="submit" class="primary" id="btnOlvide">
+          <span class="spinner"></span><span class="btn-text">Enviar enlace</span>
+        </button>
+      </form>
+
+      <button type="button" class="link" id="irLoginDesdeOlvide">Volver a iniciar sesión</button>
+      <div class="msg" id="msgOlvide"></div>
+    </section>
+
+    <!-- ===== RESTABLECER CONTRASENA (desde el enlace del email) ===== -->
+    <section class="view" id="viewRestablecer">
+      <h1 class="title">Restablece tu contraseña</h1>
+      <p class="subtitle">Elige una contraseña nueva para tu cuenta.</p>
+
+      <form id="formRestablecer">
+        <label for="resetPassword">Contraseña nueva</label>
+        <div class="pw-row">
+          <input type="password" id="resetPassword" name="newPassword" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="resetPassword">MOSTRAR</button>
+        </div>
+        <div class="hint">Mínimo 8 caracteres, con al menos una mayúscula y un número.</div>
+
+        <label for="resetPassword2">Repite la contraseña nueva</label>
+        <div class="pw-row">
+          <input type="password" id="resetPassword2" name="newPassword2" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" data-target="resetPassword2">MOSTRAR</button>
+        </div>
+
+        <button type="submit" class="primary" id="btnRestablecer">
+          <span class="spinner"></span><span class="btn-text">Cambiar contraseña</span>
+        </button>
+      </form>
+
+      <button type="button" class="link" id="irLoginDesdeRestablecer">Volver a iniciar sesión</button>
+      <div class="msg" id="msgRestablecer"></div>
     </section>
 
     <!-- ===== SOLICITAR ACCESO ===== -->
@@ -352,8 +400,16 @@
   const $ = (id) => document.getElementById(id);
   const vistas = {
     login: $('viewLogin'), solicitar: $('viewSolicitar'), cambiar: $('viewCambiar'),
-    verificar2fa: $('viewVerificar2FA'),
+    verificar2fa: $('viewVerificar2FA'), olvide: $('viewOlvide'), restablecer: $('viewRestablecer'),
   };
+
+  // Enlace de "Restablecer contraseña" del email: ?token=... en la URL. Se
+  // oculta la vista de login de inmediato (antes de validar el token con el
+  // servidor) para no mostrar el formulario de login ni un instante mientras
+  // se decide si el enlace es valido.
+  const parametrosURL = new URLSearchParams(window.location.search);
+  const tokenRestablecer = parametrosURL.get('token');
+  if (tokenRestablecer) vistas.login.classList.remove('active');
 
   function mostrarVista(nombre) {
     Object.values(vistas).forEach(v => v.classList.remove('active'));
@@ -387,6 +443,9 @@
 
   $('irSolicitar').addEventListener('click', () => { ocultarMensaje('msgLogin'); mostrarVista('solicitar'); });
   $('irLogin').addEventListener('click', () => { ocultarMensaje('msgSolicitar'); mostrarVista('login'); });
+  $('irOlvide').addEventListener('click', () => { ocultarMensaje('msgLogin'); mostrarVista('olvide'); });
+  $('irLoginDesdeOlvide').addEventListener('click', () => { ocultarMensaje('msgOlvide'); mostrarVista('login'); });
+  $('irLoginDesdeRestablecer').addEventListener('click', () => { window.location.href = '/'; });
 
   async function llamar(url, opciones) {
     const respuesta = await fetch(url, {
@@ -458,17 +517,38 @@
     }, 150);
   }
 
-  /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ---------- */
-  (async () => {
-    const { ok, datos } = await llamar('/api/auth/me');
-    if (ok && datos.usuario) {
-      if (datos.usuario.mustChangePassword) {
-        mostrarVista('cambiar');
-      } else {
-        window.location.href = '/';
+  /* ---------- Comprobar si ya hay sesion (p.ej. cambio de password pendiente) ----------
+     Se omite por completo si viene un enlace de restablecimiento (?token=...):
+     ese flujo tiene prioridad aunque el navegador conserve una sesion previa. */
+  if (!tokenRestablecer) {
+    (async () => {
+      const { ok, datos } = await llamar('/api/auth/me');
+      if (ok && datos.usuario) {
+        if (datos.usuario.mustChangePassword) {
+          mostrarVista('cambiar');
+        } else {
+          window.location.href = '/';
+        }
+      } else if (parametrosURL.get('passwordRestablecida') === '1') {
+        mostrarMensaje('msgLogin', 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.', 'ok');
+        // Limpia el parametro de la URL para que un refresco no repita el aviso.
+        window.history.replaceState({}, '', '/');
       }
-    }
-  })();
+    })();
+  }
+
+  /* ---------- Restablecer contraseña (enlace del email) ---------- */
+  if (tokenRestablecer) {
+    (async () => {
+      const { ok, datos } = await llamar('/api/auth/validate-reset-token?token=' + encodeURIComponent(tokenRestablecer));
+      if (ok && datos.valid) {
+        mostrarVista('restablecer');
+      } else {
+        mostrarVista('olvide');
+        mostrarMensaje('msgOlvide', 'El enlace de recuperación no es válido o ha caducado. Solicita uno nuevo.', 'error');
+      }
+    })();
+  }
 
   /* ---------- Login ---------- */
   // Estado del segundo paso (2FA), guardado entre el submit de formLogin y
@@ -547,6 +627,58 @@
       mostrarMensaje('msgSolicitar', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
     } finally {
       conCargaBoton($('btnSolicitar'), false);
+    }
+  });
+
+  /* ---------- Olvidaste tu contraseña: pedir enlace por email ---------- */
+  $('formOlvide').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgOlvide');
+    conCargaBoton($('btnOlvide'), true);
+    try {
+      const { ok, datos } = await llamar('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('olvideEmail').value }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgOlvide', datos.error || 'No se pudo procesar la solicitud.', 'error');
+        return;
+      }
+      mostrarMensaje('msgOlvide', datos.mensaje || 'Si el correo existe, te hemos enviado un enlace.', 'ok');
+      $('formOlvide').reset();
+    } catch (err) {
+      mostrarMensaje('msgOlvide', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+    } finally {
+      conCargaBoton($('btnOlvide'), false);
+    }
+  });
+
+  /* ---------- Restablecer contraseña (enlace del email) ---------- */
+  $('formRestablecer').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje('msgRestablecer');
+
+    if ($('resetPassword').value !== $('resetPassword2').value) {
+      mostrarMensaje('msgRestablecer', 'Las dos contraseñas no coinciden.', 'error');
+      return;
+    }
+
+    conCargaBoton($('btnRestablecer'), true);
+    try {
+      const { ok, datos } = await llamar('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token: tokenRestablecer, newPassword: $('resetPassword').value }),
+      });
+      if (!ok) {
+        mostrarMensaje('msgRestablecer', datos.error || 'No se pudo restablecer la contraseña.', 'error');
+        conCargaBoton($('btnRestablecer'), false);
+        return;
+      }
+      // Exito: vuelve al login (sin el token en la URL) con mensaje de exito.
+      window.location.href = '/?passwordRestablecida=1';
+    } catch (err) {
+      mostrarMensaje('msgRestablecer', 'No se pudo conectar con el servidor. Comprueba tu conexión.', 'error');
+      conCargaBoton($('btnRestablecer'), false);
     }
   });
 

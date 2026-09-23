@@ -343,6 +343,109 @@ async function apiRequestAccess(req, res) {
   });
 }
 
+/* ---------- Recuperacion de contraseña ("Olvidaste tu contraseña") ---------- */
+
+// Fire-and-forget, igual que notificarSolicitudAccesoSegura: apiForgotPassword
+// siempre responde el mismo mensaje generico, asi que un fallo de envio aqui
+// nunca debe alterar esa respuesta.
+function notificarRecuperacionSegura(usuario, enlace) {
+  email
+    .enviarEmailRecuperacion(usuario, enlace)
+    .catch((e) => console.error("Error enviando email de recuperación de contraseña:", e));
+}
+
+// Responde SIEMPRE el mismo mensaje generico, exista o no esa cuenta y este
+// activa o no: revelar la diferencia permitiria a un atacante enumerar
+// correos validos. Solo si el usuario existe y esta activo se genera de
+// verdad un token y se envia el email.
+async function apiForgotPassword(req, res) {
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const correo = auth.normalizarEmail(cuerpo.email);
+  if (!auth.esCorreoPermitido(correo)) {
+    return enviarJSON(res, 400, { error: `Solo se admiten correos @${auth.DOMINIO_PERMITIDO}.` });
+  }
+
+  const usuario = db.buscarUsuarioPorEmail(correo);
+  if (usuario && usuario.status === "active") {
+    const token = auth.generarTokenRecuperacion();
+    db.crearTokenRecuperacion({ userId: usuario.id, tokenHash: auth.hashTokenRecuperacion(token) });
+    const enlace = `${APP_URL}/reset-password?token=${token}`;
+    notificarRecuperacionSegura(usuario, enlace);
+    registrarAuditoriaSegura({
+      userId: usuario.id,
+      email: usuario.email,
+      action: "solicitud_recuperacion_password",
+      ip: obtenerIP(req),
+    });
+  }
+
+  return enviarJSON(res, 200, {
+    mensaje: "Si el correo está registrado y la cuenta está activa, te hemos enviado un enlace de recuperación. Caduca en 30 minutos.",
+  });
+}
+
+// Comprobacion ligera para la pantalla de "nueva contraseña": permite
+// avisar de un enlace caducado o ya usado ANTES de que el usuario rellene
+// el formulario, sin gastar el token (eso solo ocurre en apiResetPassword).
+async function apiValidateResetToken(req, res, query) {
+  const token = query.get("token") || "";
+  const registro = token ? db.buscarTokenRecuperacionVigente(auth.hashTokenRecuperacion(token)) : null;
+  enviarJSON(res, 200, { valid: !!registro });
+}
+
+async function apiResetPassword(req, res) {
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const token = typeof cuerpo.token === "string" ? cuerpo.token : "";
+  const nueva = typeof cuerpo.newPassword === "string" ? cuerpo.newPassword : "";
+
+  const registro = token ? db.buscarTokenRecuperacionVigente(auth.hashTokenRecuperacion(token)) : null;
+  if (!registro) {
+    return enviarJSON(res, 400, {
+      error: "El enlace de recuperación no es válido o ha caducado. Solicita uno nuevo.",
+      code: "TOKEN_INVALIDO",
+    });
+  }
+
+  const errorPolitica = auth.validarPoliticaRecuperacion(nueva);
+  if (errorPolitica) return enviarJSON(res, 400, { error: errorPolitica });
+
+  const usuario = db.buscarUsuarioPorId(registro.user_id);
+  if (!usuario || usuario.status !== "active") {
+    return enviarJSON(res, 400, { error: "No se pudo restablecer la contraseña." });
+  }
+
+  // El token se marca usado ANTES de tocar la contraseña: si algo falla a
+  // mitad de la escritura, es preferible que el enlace quede inservible (el
+  // usuario pide uno nuevo) a que quede reutilizable indefinidamente.
+  db.marcarTokenRecuperacionUsado(registro.id);
+  db.actualizarPassword(usuario.id, auth.hashearPassword(nueva), { mustChangePassword: false });
+  // Rota todas las sesiones abiertas de esta cuenta: si alguien mas tenia
+  // acceso con la contraseña antigua (el motivo mas probable de este
+  // restablecimiento), queda desconectado de inmediato.
+  db.revocarSesionesDeUsuario(usuario.id);
+
+  registrarAuditoriaSegura({
+    userId: usuario.id,
+    email: usuario.email,
+    action: "password_restablecida",
+    ip: obtenerIP(req),
+  });
+
+  enviarJSON(res, 200, { ok: true, mensaje: "Contraseña actualizada. Ya puedes iniciar sesión." });
+}
+
 // Registra un intento de login fallido contra la IP de origen (rate
 // limiting independiente del bloqueo por cuenta de arriba) y, si eso
 // dispara un bloqueo NUEVO (no si ya estaba bloqueada de un intento
@@ -3284,8 +3387,14 @@ async function manejarPeticion(req, res) {
     if (esLectura && (ruta === "/" || ruta === "/index.html")) return await servirApp(req, res);
     if (esLectura && ruta === "/admin") return await servirAdmin(req, res);
     if (esLectura && ruta === "/login.html") return await servirLogin(res);
+    if (esLectura && ruta === "/reset-password") return await servirLogin(res);
 
     if (req.method === "POST" && ruta === "/api/auth/request-access") return await apiRequestAccess(req, res);
+    if (req.method === "POST" && ruta === "/api/auth/forgot-password") return await apiForgotPassword(req, res);
+    if (req.method === "GET" && ruta === "/api/auth/validate-reset-token") {
+      return await apiValidateResetToken(req, res, url.searchParams);
+    }
+    if (req.method === "POST" && ruta === "/api/auth/reset-password") return await apiResetPassword(req, res);
     if (req.method === "POST" && ruta === "/api/auth/login") return await apiLogin(req, res);
     if (req.method === "POST" && ruta === "/api/auth/verify-2fa") return await apiVerificar2FA(req, res);
     if (req.method === "POST" && ruta === "/api/auth/resend-2fa") return await apiReenviar2FA(req, res);

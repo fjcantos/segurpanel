@@ -78,6 +78,20 @@ function validarPolitica(password) {
   return null;
 }
 
+// Politica del formulario de "restablecer contraseña" (enlace por email):
+// minimo 8 caracteres, con al menos una mayuscula y un numero. Se pidio
+// explicitamente asi para este flujo; es distinta de validarPolitica
+// (cambio de contraseña ya autenticado), que exige 10+ caracteres.
+function validarPoliticaRecuperacion(password) {
+  if (typeof password !== "string" || password.length < 8) {
+    return "La contraseña debe tener al menos 8 caracteres.";
+  }
+  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return "La contraseña debe incluir al menos una mayúscula y un número.";
+  }
+  return null;
+}
+
 function generarPasswordTemporal() {
   // 12 caracteres, alfabeto sin ambiguedades (sin 0/O, 1/l/I), + 2 digitos
   // garantizados al final para cumplir siempre la politica de contrasenas.
@@ -261,6 +275,21 @@ function verificarTokenPendiente2FA(token) {
   }
 }
 
+/* ---------- Recuperacion de contraseña ("Olvidaste tu contraseña") ----------
+   El token viaja en claro en el enlace del email; en la base de datos solo
+   se guarda su hash (SHA-256, igual que hashCodigo2FA), asi que una fuga de
+   la base de datos no permite a nadie restablecer contraseñas ajenas. */
+
+const DURACION_RECUPERACION_MINUTOS = 30;
+
+function generarTokenRecuperacion() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function hashTokenRecuperacion(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
 /* ---------- Siembra del Super Admin ---------- */
 //
 // Sin esto habria un problema de "huevo y gallina": nadie podria aprobar la
@@ -303,6 +332,7 @@ module.exports = {
   hashearPassword,
   verificarPassword,
   validarPolitica,
+  validarPoliticaRecuperacion,
   generarPasswordTemporal,
   esCorreoPermitido,
   normalizarEmail,
@@ -317,5 +347,8 @@ module.exports = {
   hashCodigo2FA,
   crearTokenPendiente2FA,
   verificarTokenPendiente2FA,
+  generarTokenRecuperacion,
+  hashTokenRecuperacion,
+  DURACION_RECUPERACION_MINUTOS,
   asegurarSuperAdmin,
 };

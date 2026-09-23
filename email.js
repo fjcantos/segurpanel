@@ -477,6 +477,57 @@ async function enviarEmailReporteDiario({ fecha, alianzas, ofertas }) {
 }
 
 /* ================================================================
+   Recuperacion de contraseña ("Olvidaste tu contraseña")
+   ================================================================ */
+
+function construirHtmlRecuperacion({ enlace }) {
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Recuperación de contraseña</p>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 20px;color:#4a0015;font-size:14px;line-height:1.5;">
+        Hemos recibido una solicitud para restablecer tu contraseña de SegurPanel. Pulsa el botón para elegir una contraseña nueva. El enlace caduca en 30 minutos.
+      </p>
+      <p style="text-align:center;margin:0 0 20px;">
+        <a href="${escapeHtml(enlace)}" style="display:inline-block;padding:12px 24px;background:#8B0026;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;">Restablecer contraseña</a>
+      </p>
+      <p style="margin:0;color:#8a7680;font-size:12px;word-break:break-all;">Si el botón no funciona, copia y pega este enlace en tu navegador: ${escapeHtml(enlace)}</p>
+      <p style="margin:20px 0 0;color:#8a7680;font-size:12px;">
+        Si no has solicitado este cambio, ignora este correo: tu contraseña actual seguirá funcionando.
+      </p>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que el resto de avisos: apiForgotPassword en
+// server.js siempre responde el mismo mensaje generico al solicitante
+// (evita revelar si el correo existe), asi que un fallo de envio aqui no
+// debe alterar esa respuesta.
+async function enviarEmailRecuperacion(usuario, enlace) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: usuario.email,
+      subject: "SegurPanel - Recupera tu contraseña",
+      html: construirHtmlRecuperacion({ enlace }),
+    });
+  } catch (e) {
+    console.error("Error enviando email de recuperación de contraseña:", e.message || e);
+  }
+}
+
+/* ================================================================
    Notificacion de nueva solicitud de acceso
    ================================================================ */
 
@@ -532,4 +583,5 @@ module.exports = {
   enviarEmailActividadSospechosa,
   enviarEmailReporteDiario,
   enviarEmailSolicitudAcceso,
+  enviarEmailRecuperacion,
 };

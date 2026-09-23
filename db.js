@@ -149,6 +149,20 @@ db.exec(`
     created_at     TEXT NOT NULL
   );
 
+  -- Tokens de un solo uso para "¿Olvidaste tu contraseña?" (ver auth.js/
+  -- server.js). Igual que two_factor_codes, solo se guarda el hash del
+  -- token (nunca el token en claro, que es el que viaja en el enlace del
+  -- email): asi una fuga de la base de datos no permite restablecer
+  -- contraseñas ajenas.
+  CREATE TABLE IF NOT EXISTS password_resets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    token_hash  TEXT NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS push_subscriptions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(id),
@@ -224,6 +238,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_two_factor_codes_user ON two_factor_codes(user_id, used, expires_at);
   CREATE INDEX IF NOT EXISTS idx_ip_login_attempts_ip ON ip_login_attempts(ip, created_at);
   CREATE INDEX IF NOT EXISTS idx_ip_blocks_ip ON ip_blocks(ip, blocked_until);
+  CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash, used, expires_at);
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_contratos_avanzados_empresa_tipo ON contratos_avanzados(empresa, tipo);
@@ -433,6 +448,33 @@ function incrementarIntentosCodigo2FA(id) {
 
 function marcarCodigo2FAUsado(id) {
   db.prepare("UPDATE two_factor_codes SET used = 1 WHERE id = ?").run(id);
+}
+
+/* ---------- Tokens de recuperacion de contraseña ("Olvidaste tu contraseña") ----------
+   Igual que los codigos 2FA: crear un token nuevo invalida (marca como
+   usados) los tokens previos sin usar de ese mismo usuario, para que solo
+   el ultimo enlace enviado por email sea valido aunque el usuario pida
+   varios seguidos. */
+
+const DURACION_RECUPERACION_MINUTOS = 30;
+
+function crearTokenRecuperacion({ userId, tokenHash }) {
+  db.prepare("UPDATE password_resets SET used = 1 WHERE user_id = ? AND used = 0").run(userId);
+  const expiraEn = new Date(Date.now() + DURACION_RECUPERACION_MINUTOS * 60 * 1000).toISOString();
+  const info = db
+    .prepare("INSERT INTO password_resets (user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .run(userId, tokenHash, expiraEn, ahoraISO());
+  return Number(info.lastInsertRowid);
+}
+
+function buscarTokenRecuperacionVigente(tokenHash) {
+  return db
+    .prepare("SELECT * FROM password_resets WHERE token_hash = ? AND used = 0 AND expires_at > ? ORDER BY id DESC LIMIT 1")
+    .get(tokenHash, ahoraISO());
+}
+
+function marcarTokenRecuperacionUsado(id) {
+  db.prepare("UPDATE password_resets SET used = 1 WHERE id = ?").run(id);
 }
 
 /* ---------- Solicitudes de acceso ---------- */
@@ -1220,6 +1262,9 @@ module.exports = {
   incrementarIntentosCodigo2FA,
   marcarCodigo2FAUsado,
   MAX_INTENTOS_CODIGO_2FA,
+  crearTokenRecuperacion,
+  buscarTokenRecuperacionVigente,
+  marcarTokenRecuperacionUsado,
   crearSolicitudAcceso,
   solicitudPendientePorEmail,
   listarSolicitudes,
