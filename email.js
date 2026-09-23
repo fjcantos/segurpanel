@@ -8,9 +8,21 @@
 // el log y se ignora en silencio: nunca debe romper la ingesta del scraper.
 
 const nodemailer = require("nodemailer");
+const path = require("path");
 
 const DESTINATARIOS_ALIANZAS = ["fjose.cantos@verisure.es", "calvorotador@gmail.com"];
 const DESTINATARIOS_CAMBIOS_CLAUSULAS = ["fjose.cantos@verisure.es"];
+const EMAIL_SUPER_ADMIN_PRINCIPAL = "fjose.cantos@verisure.es";
+
+// Logo UIC usado en las exportaciones a Excel/PDF (ver server.js); los
+// emails que lo llevan lo adjuntan como imagen embebida (Content-ID) en vez
+// de enlazarlo por URL, porque no hay ningun hosting publico para servirlo.
+const RUTA_LOGO_UIC = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
+const CID_LOGO_UIC = "logo-uic-segurpanel";
+
+function adjuntoLogoUIC() {
+  return { filename: "logo-uic.png", path: RUTA_LOGO_UIC, cid: CID_LOGO_UIC };
+}
 
 let transportador = null;
 let avisoCredencialesMostrado = false;
@@ -268,8 +280,6 @@ async function enviarEmailIPBloqueada({ ip, intentos, bloqueadaHasta, destinatar
    Aviso de inicio de sesion desde un dispositivo o IP nuevos
    ================================================================ */
 
-const EMAIL_SUPER_ADMIN_PRINCIPAL = "fjose.cantos@verisure.es";
-
 function construirHtmlDispositivoNuevo({ usuario, ip, userAgent, fecha }) {
   const fechaTexto = new Date(fecha || Date.now()).toLocaleString("es-ES", {
     dateStyle: "long",
@@ -383,6 +393,136 @@ async function enviarEmailActividadSospechosa({ usuario, ruta, intentos, ip, fec
   }
 }
 
+/* ================================================================
+   Reporte diario (09:00) de los scrapers de la Raspberry Pi
+   ================================================================ */
+//
+// `alianzas` y `ofertas` son, cada uno, o bien null (el scraper no ha
+// llamado ni una sola vez hoy a /api/alianzas/sync o /api/ofertas/sync,
+// ver db.ultimaEjecucionScraperHoy) o bien la fila de scraper_runs de su
+// ULTIMA ejecucion de hoy: { encontradas, enviadas, errores, created_at }.
+
+function bloqueEjecucionScraperHtml(titulo, ejecucion) {
+  if (!ejecucion) {
+    return `
+      <div style="margin:0 0 20px;padding:14px 16px;background:#fdf1f1;border-left:4px solid #c0392b;border-radius:6px;">
+        <p style="margin:0 0 4px;color:#4a0015;font-size:14px;font-weight:700;">${escapeHtml(titulo)}</p>
+        <p style="margin:0;color:#c0392b;font-size:13px;">No se ejecutó hoy (no llegó ninguna sincronización a SegurPanel).</p>
+      </div>`;
+  }
+
+  const hora = new Date(ejecucion.created_at).toLocaleString("es-ES", { timeStyle: "short" });
+  const errores = ejecucion.errores ? ejecucion.errores.split("\n").filter(Boolean) : [];
+  const colorBorde = errores.length ? "#c0392b" : "#2e8b57";
+  const fondoBloque = errores.length ? "#fdf1f1" : "#f2faf5";
+
+  return `
+    <div style="margin:0 0 20px;padding:14px 16px;background:${fondoBloque};border-left:4px solid ${colorBorde};border-radius:6px;">
+      <p style="margin:0 0 6px;color:#4a0015;font-size:14px;font-weight:700;">${escapeHtml(titulo)} — ejecutado a las ${escapeHtml(hora)}</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:13px;">Encontradas: <strong>${escapeHtml(String(ejecucion.encontradas))}</strong> · Enviadas a SegurPanel: <strong>${escapeHtml(String(ejecucion.enviadas))}</strong></p>
+      ${
+        errores.length
+          ? `<p style="margin:8px 0 2px;color:#c0392b;font-size:13px;font-weight:700;">Errores durante la ejecución:</p>${listaHtml(errores)}`
+          : `<p style="margin:0;color:#2e8b57;font-size:13px;">Sin errores.</p>`
+      }
+    </div>`;
+}
+
+function construirHtmlReporteDiario({ fecha, alianzas, ofertas }) {
+  const fechaTexto = new Date(fecha || Date.now()).toLocaleString("es-ES", { dateStyle: "long" });
+  const todoOk = !!alianzas && !!ofertas && !alianzas.errores && !ofertas.errores;
+  const badge = todoOk
+    ? `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#2e8b57;color:#fff;font-size:12px;font-weight:700;">OK</span>`
+    : `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#c0392b;color:#fff;font-size:12px;font-weight:700;">CON INCIDENCIAS</span>`;
+
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;display:flex;align-items:center;gap:14px;">
+      <img src="cid:${CID_LOGO_UIC}" alt="UIC" style="height:40px;width:auto;display:block;" />
+      <div>
+        <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Reporte diario de scrapers — ${escapeHtml(fechaTexto)}</p>
+      </div>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 20px;color:#4a0015;font-size:14px;">Estado general: ${badge}</p>
+      ${bloqueEjecucionScraperHtml("Scraper Alianzas", alianzas)}
+      ${bloqueEjecucionScraperHtml("Scraper Precios/Ofertas", ofertas)}
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente todos los días a las 09:00</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que el resto de emails automaticos: nunca debe
+// romper el programador diario (ver reportes.js) si falla el envio.
+async function enviarEmailReporteDiario({ fecha, alianzas, ofertas }) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: EMAIL_SUPER_ADMIN_PRINCIPAL,
+      subject: `SegurPanel - Reporte diario de scrapers (${new Date(fecha || Date.now()).toLocaleDateString("es-ES")})`,
+      html: construirHtmlReporteDiario({ fecha, alianzas, ofertas }),
+      attachments: [adjuntoLogoUIC()],
+    });
+  } catch (e) {
+    console.error("Error enviando el reporte diario de scrapers:", e.message || e);
+  }
+}
+
+/* ================================================================
+   Notificacion de nueva solicitud de acceso
+   ================================================================ */
+
+function construirHtmlSolicitudAcceso({ correo, name, message, enlaceAdmin }) {
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Nueva solicitud de acceso</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;line-height:1.5;">
+        Alguien ha solicitado acceso a SegurPanel y está pendiente de tu aprobación.
+      </p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Correo:</strong> ${escapeHtml(correo)}</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Nombre:</strong> ${escapeHtml(name || "—")}</p>
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;"><strong>Motivo:</strong> ${escapeHtml(message || "—")}</p>
+      <a href="${escapeHtml(enlaceAdmin)}" style="display:inline-block;padding:12px 24px;background:#8B0026;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;">Ir al panel de administración</a>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que el resto: nunca debe romper apiRequestAccess
+// si falla el envio (el solicitante ya recibio su confirmacion en pantalla,
+// y la solicitud ya quedo guardada en access_requests de todos modos).
+async function enviarEmailSolicitudAcceso({ correo, name, message, enlaceAdmin }) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: EMAIL_SUPER_ADMIN_PRINCIPAL,
+      subject: `SegurPanel - Nueva solicitud de acceso: ${correo}`,
+      html: construirHtmlSolicitudAcceso({ correo, name, message, enlaceAdmin }),
+    });
+  } catch (e) {
+    console.error("Error enviando email de solicitud de acceso:", e.message || e);
+  }
+}
+
 module.exports = {
   enviarEmailAlianzasNuevas,
   enviarEmailCambioClausulas,
@@ -390,4 +530,6 @@ module.exports = {
   enviarEmailIPBloqueada,
   enviarEmailDispositivoNuevo,
   enviarEmailActividadSospechosa,
+  enviarEmailReporteDiario,
+  enviarEmailSolicitudAcceso,
 };

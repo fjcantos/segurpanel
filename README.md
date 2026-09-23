@@ -159,6 +159,7 @@ vez por consola — ver detalle en [DOCUMENTACION.md](DOCUMENTACION.md#autentica
 | `JWT_SECRET` | Recomendada en producción | Secreto para firmar las sesiones JWT (HS256). Si no se define, se genera uno aleatorio la primera vez y se guarda en `DATA_DIR/.jwt-secret`. |
 | `ENCRYPTION_KEY` | Recomendada en producción | Clave para cifrar en reposo (AES-256-GCM) los campos más sensibles de SQLite: el texto ya anonimizado de los contratos analizados y el detalle de los logs de auditoría. Sin ella, esos campos se guardan sin cifrar (con un aviso en consola); los valores guardados antes de definirla se siguen leyendo con normalidad después. |
 | `SCRAPER_TOKEN` | Necesaria si se usan los scrapers | Secreto compartido que autentica las peticiones de `scraper_alianzas.py` y `scraper_precios.py` a `POST /api/alianzas/sync` y `POST /api/ofertas/sync`. Sin ella, ambos endpoints responden `503`. |
+| `APP_URL` | Recomendada en producción | URL pública de la app (p.ej. `https://tu-app.onrender.com`), usada para construir enlaces absolutos en emails automáticos (aviso de nueva solicitud de acceso → enlace a `/admin`). Sin ella se usa `http://localhost:PORT`, que no funciona como enlace fuera del propio servidor. |
 | `UNSPLASH_ACCESS_KEY` | No | Clave de la API de Unsplash para las fotos de fondo de las diapositivas de Formaciones. Sin ella, Formaciones sigue funcionando (iconos y diseño corporativo) pero sin fotos. |
 | `HTTPS_CERT_FILE` / `HTTPS_KEY_FILE` | No | Rutas a certificados `.pem` propios. Si se definen, `server.js` levanta HTTPS directamente en vez de HTTP (alternativa a usar un proxy inverso). |
 | `NODE_ENV` | No | Si se define como `production` sin HTTPS configurado (ni certificados propios ni proxy detectable), el servidor avisa por consola al arrancar. |
@@ -181,6 +182,7 @@ vez por consola — ver detalle en [DOCUMENTACION.md](DOCUMENTACION.md#autentica
    - `JWT_SECRET` — un secreto largo y aleatorio.
    - `ENCRYPTION_KEY` — otro secreto largo y aleatorio, distinto del anterior, para cifrar los campos sensibles de la base de datos.
    - `SCRAPER_TOKEN` — si vas a conectar los scrapers de la Raspberry Pi.
+   - `APP_URL` — la URL pública que te asigna Render (o tu dominio propio), para que los enlaces de los emails automáticos apunten al sitio real.
    - `UNSPLASH_ACCESS_KEY` — opcional.
    - `NODE_ENV=production`.
 6. **HTTPS:** Render ya sirve el servicio por HTTPS de forma automática

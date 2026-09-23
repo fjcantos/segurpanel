@@ -36,6 +36,7 @@ const analisis = require("./analisis");
 const push = require("./push");
 const email = require("./email");
 const backup = require("./backup");
+const reportes = require("./reportes");
 const formaciones = require("./formaciones");
 
 // Carpeta donde se guarda una copia permanente del PDF de cada analisis
@@ -62,6 +63,11 @@ function borrarInformesGuardados() {
 }
 
 const PORT = process.env.PORT || 3000;
+// Base publica de la app, usada para construir enlaces absolutos en emails
+// (p.ej. el aviso de nueva solicitud de acceso). En local cae a
+// localhost:PORT; en produccion (Render) conviene definir APP_URL con la
+// URL real, o los enlaces de los emails apuntarian a localhost.
+const APP_URL = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
 const MODEL = "claude-haiku-4-5-20251001";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MAX_TURNOS_HISTORIAL = 12; // limita el contexto que se reenvia a la API
@@ -284,6 +290,15 @@ function servirAdmin(req, res) {
    API: autenticacion
    ================================================================ */
 
+// Fire-and-forget: la solicitud ya ha quedado guardada en access_requests
+// (db.crearSolicitudAcceso) pase lo que pase con el email, asi que un fallo
+// de envio nunca debe alterar la respuesta que ya recibio el solicitante.
+function notificarSolicitudAccesoSegura({ correo, name, message }) {
+  email
+    .enviarEmailSolicitudAcceso({ correo, name, message, enlaceAdmin: `${APP_URL}/admin` })
+    .catch((e) => console.error("Error enviando email de solicitud de acceso:", e));
+}
+
 async function apiRequestAccess(req, res) {
   let cuerpo;
   try {
@@ -322,6 +337,7 @@ async function apiRequestAccess(req, res) {
   }
 
   db.crearSolicitudAcceso({ email, name, message });
+  notificarSolicitudAccesoSegura({ correo: email, name, message });
   return enviarJSON(res, 200, {
     mensaje: "Solicitud enviada. Un administrador la revisará y te asignará una clave temporal.",
   });
@@ -2831,6 +2847,21 @@ function alianzaValida(a) {
   );
 }
 
+// Lee y normaliza los campos opcionales que los scrapers (Raspberry Pi)
+// mandan junto al lote de alianzas/ofertas, y que sirven solo para el
+// reporte diario de las 09:00 (ver db.registrarEjecucionScraper / reportes.js):
+// `encontradas` (total detectado en la ejecucion, antes de filtrar lo ya
+// conocido) y `errores` (avisos no fatales durante el scraping, p.ej. Google
+// News sin responder para alguna empresa). Ninguno de los dos afecta a que
+// la sincronizacion se acepte o no: son solo metadatos informativos.
+function metadatosEjecucionScraper(cuerpo, totalRecibido) {
+  const encontradas = Number.isFinite(cuerpo.encontradas) ? cuerpo.encontradas : totalRecibido;
+  const errores = Array.isArray(cuerpo.errores)
+    ? cuerpo.errores.filter((e) => typeof e === "string" && e.trim()).slice(0, 20)
+    : [];
+  return { encontradas, erroresTexto: errores.length ? errores.join("\n").slice(0, 4000) : null };
+}
+
 async function apiAlianzasSync(req, res) {
   const tokenEsperado = process.env.SCRAPER_TOKEN;
   if (!tokenEsperado) {
@@ -2851,7 +2882,10 @@ async function apiAlianzasSync(req, res) {
   }
 
   const lista = Array.isArray(cuerpo.alianzas) ? cuerpo.alianzas : [];
+  const { encontradas, erroresTexto } = metadatosEjecucionScraper(cuerpo, lista.length);
+
   if (lista.length === 0) {
+    db.registrarEjecucionScraper({ tipo: "alianzas", encontradas, enviadas: 0, errores: erroresTexto });
     return enviarJSON(res, 200, { insertadas: 0, mensaje: "Sin alianzas nuevas que sincronizar." });
   }
   if (lista.length > MAX_ALIANZAS_POR_SYNC) {
@@ -2860,11 +2894,18 @@ async function apiAlianzasSync(req, res) {
 
   const validas = lista.filter(alianzaValida);
   if (validas.length === 0) {
+    db.registrarEjecucionScraper({
+      tipo: "alianzas",
+      encontradas,
+      enviadas: 0,
+      errores: [erroresTexto, "Ninguna alianza del envío tiene un formato válido."].filter(Boolean).join("\n"),
+    });
     return enviarJSON(res, 400, { error: "Ninguna alianza del envío tiene un formato válido." });
   }
 
   const { count } = db.insertarAlianzasPendientes(validas);
   notificarAlianzasNuevas(count);
+  db.registrarEjecucionScraper({ tipo: "alianzas", encontradas, enviadas: count, errores: erroresTexto });
   enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
 }
 
@@ -2934,7 +2975,10 @@ async function apiOfertasSync(req, res) {
   }
 
   const lista = Array.isArray(cuerpo.ofertas) ? cuerpo.ofertas : [];
+  const { encontradas, erroresTexto } = metadatosEjecucionScraper(cuerpo, lista.length);
+
   if (lista.length === 0) {
+    db.registrarEjecucionScraper({ tipo: "ofertas", encontradas, enviadas: 0, errores: erroresTexto });
     return enviarJSON(res, 200, { insertadas: 0, mensaje: "Sin ofertas que sincronizar." });
   }
   if (lista.length > MAX_OFERTAS_POR_SYNC) {
@@ -2943,10 +2987,17 @@ async function apiOfertasSync(req, res) {
 
   const validas = lista.filter(ofertaValida);
   if (validas.length === 0) {
+    db.registrarEjecucionScraper({
+      tipo: "ofertas",
+      encontradas,
+      enviadas: 0,
+      errores: [erroresTexto, "Ninguna oferta del envío tiene un formato válido."].filter(Boolean).join("\n"),
+    });
     return enviarJSON(res, 400, { error: "Ninguna oferta del envío tiene un formato válido." });
   }
 
   const { count } = db.insertarOfertas(validas);
+  db.registrarEjecucionScraper({ tipo: "ofertas", encontradas, enviadas: count, errores: erroresTexto });
   enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
 }
 
@@ -3372,11 +3423,13 @@ if (certFile && keyFile) {
 }
 
 backup.iniciarProgramador();
+reportes.iniciarProgramador();
 
 servidor.listen(PORT, () => {
   const protocolo = certFile && keyFile ? "https" : "http";
   console.log(`SegurPanel escuchando en ${protocolo}://localhost:${PORT}/`);
   console.log(`Backup automático diario a las 02:00 en ${backup.DIR_BACKUPS} (últimos 7).`);
+  console.log("Reporte diario de scrapers a las 09:00 a fjose.cantos@verisure.es.");
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn(
@@ -3405,6 +3458,12 @@ servidor.listen(PORT, () => {
   if (!process.env.UNSPLASH_ACCESS_KEY) {
     console.warn(
       "AVISO: UNSPLASH_ACCESS_KEY no está configurada. Las presentaciones de Formaciones se generarán sin imágenes de fondo hasta que la definas."
+    );
+  }
+
+  if (process.env.NODE_ENV === "production" && !process.env.APP_URL) {
+    console.warn(
+      `AVISO: APP_URL no está configurada. Los enlaces en emails (p.ej. el aviso de nueva solicitud de acceso) usarán ${APP_URL}, que no es una URL pública válida.`
     );
   }
 

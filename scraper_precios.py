@@ -33,6 +33,13 @@ Comportamiento:
     se ejecuta el scraper. A diferencia de las alianzas, las ofertas no
     pasan por revisión manual: SegurPanel se queda, por empresa, con la
     promoción detectada más reciente.
+  - SIEMPRE llama a /api/ofertas/sync al final de la ejecución, aunque no se
+    haya detectado ninguna promoción (con la lista vacía): es la única forma
+    que tiene el servidor de saber que el scraper se ejecutó hoy, para el
+    reporte diario por email de las 09:00 (ver DOCUMENTACION.md). Junto al
+    envío se informa también de cuántas promociones se detectaron en total y
+    de los avisos no fatales (p.ej. Google News sin responder para alguna
+    empresa).
 
 Argumentos de línea de comandos:
   --force-send  No hace ninguna búsqueda nueva: envía a SegurPanel todas las
@@ -132,6 +139,21 @@ OFERTAS_JSON = os.environ.get("OFERTAS_JSON", os.path.join(RUTA_SCRIPT, "ofertas
 SYNC_URL = os.environ.get("SEGURPANEL_OFERTAS_SYNC_URL", "")
 SYNC_TOKEN = os.environ.get("SEGURPANEL_SCRAPER_TOKEN", "")
 NUM_OFERTAS_TEST = 3
+MAX_ERRORES_REPORTADOS = 20  # tope de avisos que se envian a SegurPanel por ejecucion
+
+# Avisos no fatales recogidos durante ESTA ejecucion (Google News sin
+# responder, RSS invalido, etc.): se envian junto al lote a SegurPanel para
+# que el reporte diario de las 09:00 pueda mostrar "hubo errores" aunque el
+# scraper no haya llegado a fallar del todo. Se reinicia en cada `main()`.
+ERRORES_EJECUCION = []
+
+
+def avisar(mensaje):
+    """Registra un aviso no fatal: lo imprime en stderr (como antes) y lo
+    guarda para incluirlo en el proximo envio a SegurPanel."""
+    print(f"[aviso] {mensaje}", file=sys.stderr)
+    if len(ERRORES_EJECUCION) < MAX_ERRORES_REPORTADOS:
+        ERRORES_EJECUCION.append(mensaje)
 
 
 # ---------------------------------------------------------------------------
@@ -194,13 +216,13 @@ def buscar_ofertas_de_empresa(alarma):
     try:
         data = descargar(url)
     except (urllib.error.URLError, TimeoutError) as e:
-        print(f"[aviso] Google News no respondió para «{alarma}»: {e}", file=sys.stderr)
+        avisar(f"Google News no respondió para «{alarma}»: {e}")
         return []
 
     try:
         root = ET.fromstring(data)
     except ET.ParseError as e:
-        print(f"[aviso] RSS inválido para «{alarma}»: {e}", file=sys.stderr)
+        avisar(f"RSS inválido para «{alarma}»: {e}")
         return []
 
     encontradas = []
@@ -258,13 +280,23 @@ def guardar_ofertas_json(ofertas):
 # Envio a SegurPanel
 # ---------------------------------------------------------------------------
 
-def sincronizar_con_segurpanel(ofertas):
+def sincronizar_con_segurpanel(ofertas, encontradas=None, errores=None):
+    """Envia `ofertas` (puede ser una lista vacia: sirve igualmente de aviso
+    de "el scraper se ha ejecutado hoy" para el reporte diario de SegurPanel)
+    junto con metadatos informativos opcionales: `encontradas` (total
+    detectado en esta ejecucion) y `errores` (avisos no fatales recogidos
+    durante la busqueda)."""
     if not SYNC_URL or not SYNC_TOKEN:
         print("[info] SEGURPANEL_OFERTAS_SYNC_URL / SEGURPANEL_SCRAPER_TOKEN no configurados: "
               "las ofertas detectadas se han guardado en OFERTAS_JSON pero no se han enviado.")
         return False
 
-    cuerpo = json.dumps({"ofertas": ofertas}).encode("utf-8")
+    payload = {"ofertas": ofertas}
+    if encontradas is not None:
+        payload["encontradas"] = encontradas
+    if errores:
+        payload["errores"] = errores
+    cuerpo = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         SYNC_URL,
         data=cuerpo,
@@ -353,11 +385,13 @@ def main():
     guardar_ofertas_json(todas_detectadas)
 
     print(f"[info] {len(todas_detectadas)} promociones actuales detectadas en total.")
+    if not todas_detectadas:
+        print("[info] No se ha detectado ninguna promoción vigente en esta ejecución: se avisa a SegurPanel igualmente (lista vacía) para el reporte diario.")
 
-    if todas_detectadas:
-        sincronizar_con_segurpanel(todas_detectadas)
-    else:
-        print("[info] No se ha detectado ninguna promoción vigente en esta ejecución. No se envía nada.")
+    # Se llama SIEMPRE, aunque `todas_detectadas` este vacia: es la senal que
+    # usa SegurPanel para saber que el scraper se ha ejecutado hoy (ver
+    # db.registrarEjecucionScraper en el servidor).
+    sincronizar_con_segurpanel(todas_detectadas, encontradas=len(todas_detectadas), errores=ERRORES_EJECUCION)
 
 
 if __name__ == "__main__":

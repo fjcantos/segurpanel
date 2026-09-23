@@ -29,6 +29,13 @@ Comportamiento:
   - Si hay alianzas nuevas, las envía a SegurPanel (POST /api/alianzas/sync)
     para que entren como pendientes de revisión del Super Admin, que activa
     el punto rojo de notificación en la pestaña "Alianzas".
+  - SIEMPRE llama a /api/alianzas/sync al final de la ejecución, aunque no
+    haya ninguna alianza nueva que enviar (con la lista vacía): es la única
+    forma que tiene el servidor de saber que el scraper se ejecutó hoy, para
+    el reporte diario por email de las 09:00 (ver DOCUMENTACION.md). Junto al
+    envío se informa también de cuántas alianzas se detectaron en total esta
+    ejecución y de los avisos no fatales (p.ej. Google News sin responder
+    para alguna empresa), aunque no se hayan enviado alianzas.
   - Si SegurPanel no está configurado (o no responde), las nuevas alianzas
     quedan igualmente guardadas en el cache local y se reintentará el envío
     en la siguiente ejecución (se vuelven a considerar "nuevas" hasta que
@@ -170,6 +177,21 @@ ALIANZAS_JSON = os.environ.get("ALIANZAS_JSON", os.path.join(RUTA_SCRIPT, "alian
 SYNC_URL = os.environ.get("SEGURPANEL_SYNC_URL", "")
 SYNC_TOKEN = os.environ.get("SEGURPANEL_SCRAPER_TOKEN", "")
 NUM_ALIANZAS_TEST = 3
+MAX_ERRORES_REPORTADOS = 20  # tope de avisos que se envian a SegurPanel por ejecucion
+
+# Avisos no fatales recogidos durante ESTA ejecucion (Google News sin
+# responder, RSS invalido, etc.): se envian junto al lote a SegurPanel para
+# que el reporte diario de las 09:00 pueda mostrar "hubo errores" aunque el
+# scraper no haya llegado a fallar del todo. Se reinicia en cada `main()`.
+ERRORES_EJECUCION = []
+
+
+def avisar(mensaje):
+    """Registra un aviso no fatal: lo imprime en stderr (como antes) y lo
+    guarda para incluirlo en el proximo envio a SegurPanel."""
+    print(f"[aviso] {mensaje}", file=sys.stderr)
+    if len(ERRORES_EJECUCION) < MAX_ERRORES_REPORTADOS:
+        ERRORES_EJECUCION.append(mensaje)
 
 
 # ---------------------------------------------------------------------------
@@ -237,13 +259,13 @@ def buscar_en_google_news(alarma):
     try:
         data = descargar(url)
     except (urllib.error.URLError, TimeoutError) as e:
-        print(f"[aviso] Google News no respondió para «{alarma}»: {e}", file=sys.stderr)
+        avisar(f"Google News no respondió para «{alarma}»: {e}")
         return []
 
     try:
         root = ET.fromstring(data)
     except ET.ParseError as e:
-        print(f"[aviso] RSS inválido para «{alarma}»: {e}", file=sys.stderr)
+        avisar(f"RSS inválido para «{alarma}»: {e}")
         return []
 
     encontradas = []
@@ -291,7 +313,7 @@ def buscar_en_sala_prensa(alarma, url_pagina):
     try:
         html = descargar(url_pagina).decode("utf-8", errors="ignore")
     except (urllib.error.URLError, TimeoutError) as e:
-        print(f"[aviso] No se pudo consultar la web oficial de «{alarma}» ({url_pagina}): {e}", file=sys.stderr)
+        avisar(f"No se pudo consultar la web oficial de «{alarma}» ({url_pagina}): {e}")
         return []
 
     encontradas = []
@@ -371,13 +393,23 @@ def guardar_alianzas_json(alianzas):
 # Envio a SegurPanel
 # ---------------------------------------------------------------------------
 
-def sincronizar_con_segurpanel(alianzas):
+def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None):
+    """Envia `alianzas` (puede ser una lista vacia: sirve igualmente de aviso
+    de "el scraper se ha ejecutado hoy" para el reporte diario de SegurPanel)
+    junto con metadatos informativos opcionales: `encontradas` (total
+    detectado en esta ejecucion, antes de filtrar lo ya conocido) y `errores`
+    (avisos no fatales recogidos durante la busqueda)."""
     if not SYNC_URL or not SYNC_TOKEN:
         print("[info] SEGURPANEL_SYNC_URL / SEGURPANEL_SCRAPER_TOKEN no configurados: "
               "las alianzas nuevas se han guardado en el cache local pero no se han enviado.")
         return False
 
-    cuerpo = json.dumps({"alianzas": alianzas}).encode("utf-8")
+    payload = {"alianzas": alianzas}
+    if encontradas is not None:
+        payload["encontradas"] = encontradas
+    if errores:
+        payload["errores"] = errores
+    cuerpo = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         SYNC_URL,
         data=cuerpo,
@@ -478,13 +510,15 @@ def main():
     nuevas = [a for a in todas_detectadas if a["externalId"] not in vistos or a["externalId"] not in enviados]
 
     print(f"[info] {len(todas_detectadas)} alianzas detectadas en total, {len(nuevas)} nuevas o pendientes de envío.")
+    if not nuevas:
+        print("[info] Sin cambios respecto a ejecuciones anteriores: se avisa a SegurPanel igualmente (lista vacía) para el reporte diario.")
 
-    if nuevas:
-        enviado_ok = sincronizar_con_segurpanel(nuevas)
-        if enviado_ok:
-            enviados.update(a["externalId"] for a in nuevas)
-    else:
-        print("[info] Sin cambios respecto a ejecuciones anteriores. No se envía nada.")
+    # Se llama SIEMPRE, aunque `nuevas` este vacia: es la senal que usa
+    # SegurPanel para saber que el scraper se ha ejecutado hoy (ver
+    # db.registrarEjecucionScraper en el servidor).
+    enviado_ok = sincronizar_con_segurpanel(nuevas, encontradas=len(todas_detectadas), errores=ERRORES_EJECUCION)
+    if nuevas and enviado_ok:
+        enviados.update(a["externalId"] for a in nuevas)
 
     vistos.update(a["externalId"] for a in todas_detectadas)
     guardar_cache({"vistos": list(vistos), "enviados": list(enviados)})

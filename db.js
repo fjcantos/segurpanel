@@ -200,6 +200,21 @@ db.exec(`
     created_at         TEXT NOT NULL
   );
 
+  -- Una fila por cada vez que scraper_alianzas.py o scraper_precios.py (en
+  -- la Raspberry Pi) llaman a POST /api/alianzas/sync o /api/ofertas/sync,
+  -- AUNQUE no tengan nada nuevo que enviar ese dia (ver apiAlianzasSync /
+  -- apiOfertasSync en server.js): es la unica forma que tiene el servidor de
+  -- saber "el scraper se ejecutó hoy" en vez de "no encontró nada nuevo",
+  -- para el reporte diario de las 09:00 (ver reportes.js).
+  CREATE TABLE IF NOT EXISTS scraper_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo          TEXT NOT NULL CHECK (tipo IN ('alianzas', 'ofertas')),
+    encontradas   INTEGER NOT NULL DEFAULT 0,
+    enviadas      INTEGER NOT NULL DEFAULT 0,
+    errores       TEXT,
+    created_at    TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON access_requests(status);
   CREATE INDEX IF NOT EXISTS idx_alianzas_status ON alianzas(status);
@@ -212,6 +227,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_contratos_avanzados_empresa_tipo ON contratos_avanzados(empresa, tipo);
+  CREATE INDEX IF NOT EXISTS idx_scraper_runs_tipo_created ON scraper_runs(tipo, created_at DESC);
 `);
 
 // Migracion defensiva: contract_stats se creo en una version anterior sin
@@ -673,6 +689,26 @@ function listarUltimaOfertaPorEmpresa() {
 function fechaUltimaOferta() {
   const fila = db.prepare("SELECT MAX(created_at) AS ultima FROM ofertas").get();
   return (fila && fila.ultima) || null;
+}
+
+/* ---------- Ejecuciones de los scrapers (reporte diario 09:00) ---------- */
+
+function registrarEjecucionScraper({ tipo, encontradas, enviadas, errores }) {
+  db.prepare(
+    `INSERT INTO scraper_runs (tipo, encontradas, enviadas, errores, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(tipo, Number(encontradas) || 0, Number(enviadas) || 0, errores || null, ahoraISO());
+}
+
+// Ultima ejecucion de HOY (dia calendario UTC, igual que ahoraISO()) de este
+// tipo de scraper, o null si no ha llamado a /sync ni una sola vez hoy. Si
+// llamo varias veces (reintentos manuales, --test), se coge la mas
+// reciente.
+function ultimaEjecucionScraperHoy(tipo) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  return db
+    .prepare("SELECT * FROM scraper_runs WHERE tipo = ? AND created_at LIKE ? ORDER BY id DESC LIMIT 1")
+    .get(tipo, `${hoy}%`);
 }
 
 /* ---------- Estadisticas y Repositorio (contract_stats) ---------- */
@@ -1206,6 +1242,8 @@ module.exports = {
   insertarOfertas,
   listarUltimaOfertaPorEmpresa,
   fechaUltimaOferta,
+  registrarEjecucionScraper,
+  ultimaEjecucionScraperHoy,
   registrarContratoAnalizado,
   contarContratosAnalizados,
   contarContratosAnalizadosHoy,

@@ -302,6 +302,13 @@ descuido). Detalle de configuración y cron en
 [README.md](README.md#variables-de-entorno) y en las cabeceras de cada
 script.
 
+Cada llamada a `/sync` (incluso con la lista vacía, cuando no hay nada
+nuevo) queda registrada en la tabla `scraper_runs`, que alimenta el
+**reporte diario por email a las 09:00** (`reportes.js`) a
+`fjose.cantos@verisure.es`: si cada scraper se ejecutó hoy, cuántas
+alianzas/ofertas encontró y envió, y si hubo errores no fatales durante la
+búsqueda (p. ej. Google News sin responder para alguna empresa).
+
 ## Backups y auditoría
 
 - **`backup.js`** copia `segurpanel.db` cada día a las 02:00 (hora local del
@@ -313,3 +320,9 @@ script.
   publicar alianza, cambio de rol) quedan registradas en la tabla SQLite
   `audit_log` y son visibles en el Panel de auditoría de `admin.html`, solo
   para Super Admin.
+- **`reportes.js`** envía cada día a las 09:00 (hora local del servidor) un
+  email a `fjose.cantos@verisure.es` con el resumen de los scrapers de la
+  Raspberry Pi. Mismo patrón que `backup.js` (sin cron externo). También se
+  avisa por email al Super Admin, de forma inmediata, cada vez que alguien
+  solicita acceso a SegurPanel (`POST /api/auth/request-access`), con enlace
+  directo a `/admin` para aprobar o rechazar.
