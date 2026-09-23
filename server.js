@@ -28,6 +28,7 @@ const path = require("path");
 const multer = require("multer");
 const JSZip = require("jszip");
 const ExcelJS = require("exceljs");
+const officeCrypto = require("officecrypto-tool");
 const PDFDocument = require("pdfkit");
 const db = require("./db");
 const auth = require("./auth");
@@ -137,6 +138,34 @@ function redirigir(res, ubicacion) {
    Sesion: helper para exigir autenticacion en una ruta de API
    ================================================================ */
 
+// Cuenta, por usuario y en memoria, los intentos SEGUIDOS de acceder a una
+// accion/pestaña para la que su rol no tiene permiso (rama SIN_PERMISO de
+// abajo). Un contador en memoria (no en base de datos) es suficiente porque
+// es una señal en tiempo real de alguien "probando puertas": una peticion
+// PERMITIDA de por medio corta la racha (se borra la entrada del Map), y un
+// reinicio del servidor tambien la corta, lo cual es aceptable para este
+// proposito. Al superar UMBRAL_ACTIVIDAD_SOSPECHOSA intentos seguidos se
+// avisa por email a todo super_admin activo y se reinicia el contador, para
+// no enviar un email por cada intento siguiente mientras la racha continua.
+const UMBRAL_ACTIVIDAD_SOSPECHOSA = 3;
+const contadoresPermisoDenegado = new Map();
+
+function notificarActividadSospechosaSegura(usuario, req, ip, intentos) {
+  const ruta = `${req.method} ${req.url}`;
+  const destinatarios = db.listarSuperAdminsActivos().map((u) => u.email).filter(Boolean);
+  email
+    .enviarEmailActividadSospechosa({ usuario, ruta, intentos, ip, destinatarios })
+    .catch((e) => console.error("Error enviando email de actividad sospechosa:", e));
+
+  registrarAuditoriaSegura({
+    userId: usuario.id,
+    email: usuario.email,
+    action: "actividad_sospechosa",
+    detail: { ruta, intentos },
+    ip,
+  });
+}
+
 // Comprueba la sesion y responde 401/403 si no procede. Devuelve la sesion
 // ({usuario, jti}) o null (y ya ha respondido) si no se puede continuar.
 function exigirSesion(req, res, { permitirCambioPendiente = false, roles = null } = {}) {
@@ -153,9 +182,18 @@ function exigirSesion(req, res, { permitirCambioPendiente = false, roles = null 
     return null;
   }
   if (roles && !roles.includes(sesion.usuario.role)) {
+    const userId = sesion.usuario.id;
+    const intentos = (contadoresPermisoDenegado.get(userId) || 0) + 1;
+    if (intentos > UMBRAL_ACTIVIDAD_SOSPECHOSA) {
+      contadoresPermisoDenegado.delete(userId);
+      notificarActividadSospechosaSegura(sesion.usuario, req, obtenerIP(req), intentos);
+    } else {
+      contadoresPermisoDenegado.set(userId, intentos);
+    }
     enviarJSON(res, 403, { error: "No tienes permiso para esta acción.", code: "SIN_PERMISO" });
     return null;
   }
+  contadoresPermisoDenegado.delete(sesion.usuario.id);
   return sesion;
 }
 
@@ -318,6 +356,34 @@ function registrarFalloLoginIP(ip) {
   });
 }
 
+// Se llama justo ANTES de crear la sesion completa (auth.crearSesionParaUsuario),
+// tanto si el login no necesita 2FA como tras superarlo, para que la sesion
+// que se esta a punto de crear no cuente ella misma como "ya conocida" al
+// comparar contra el historial en la tabla sessions (ver
+// db.dispositivoConocidoDeUsuario). Fire-and-forget: nunca debe retrasar ni
+// romper el login.
+function notificarSiDispositivoNuevoSegura(req, usuario, ip) {
+  try {
+    const userAgent = (req.headers["user-agent"] || "").slice(0, 300);
+    if (db.dispositivoConocidoDeUsuario(usuario.id, ip, userAgent)) return;
+
+    const fecha = new Date();
+    email
+      .enviarEmailDispositivoNuevo({ usuario, ip, userAgent, fecha })
+      .catch((e) => console.error("Error enviando email de dispositivo nuevo:", e));
+
+    registrarAuditoriaSegura({
+      userId: usuario.id,
+      email: usuario.email,
+      action: "login_dispositivo_nuevo",
+      detail: { ip, userAgent },
+      ip,
+    });
+  } catch (e) {
+    console.error("Error comprobando dispositivo nuevo:", e);
+  }
+}
+
 async function apiLogin(req, res) {
   const ip = obtenerIP(req);
 
@@ -412,6 +478,7 @@ async function apiLogin(req, res) {
     });
   }
 
+  notificarSiDispositivoNuevoSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
@@ -476,13 +543,15 @@ async function apiVerificar2FA(req, res) {
   }
 
   db.marcarCodigo2FAUsado(registro.id);
+  const ip = obtenerIP(req);
+  notificarSiDispositivoNuevoSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
     userId: usuario.id,
     email: usuario.email,
     action: "login",
-    ip: obtenerIP(req),
+    ip,
   });
 
   enviarJSON(res, 200, { usuario: usuarioPublico(usuario) }, {
@@ -1977,6 +2046,12 @@ async function apiAdminActividadRetencion(req, res, query) {
 // no vuelve a consultar la base de datos aqui, solo construye el fichero.
 // Por eso no hace falta restringir por rol mas alla de exigir sesion: no
 // expone nada que el cliente no tuviera ya delante.
+//
+// Todo Excel exportado sale cifrado con contraseña de apertura (Microsoft
+// Office ECMA-376 Agile Encryption, via officecrypto-tool): la contraseña es
+// el email de quien lo exporta, para que el archivo solo se pueda abrir
+// sabiendo quien lo generó y quede algo de rastro si circula fuera de la
+// empresa.
 
 const COLOR_VERISURE_BURDEOS = "FF8B0026";
 const COLOR_VERISURE_BURDEOS_SUAVE = "FFF2E3E7";
@@ -2095,12 +2170,14 @@ async function apiExportarExcel(req, res) {
     });
 
     const buffer = await libro.xlsx.writeBuffer();
+    const bufferCifrado = officeCrypto.encrypt(Buffer.from(buffer), { password: sesion.usuario.email });
+
     res.writeHead(200, {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${nombreArchivo}.xlsx"`,
       "Cache-Control": "no-store",
     });
-    res.end(Buffer.from(buffer));
+    res.end(bufferCifrado);
   } catch (e) {
     console.error("Error generando el Excel:", e);
     if (!res.headersSent) enviarJSON(res, 500, { error: "No se pudo generar el archivo Excel." });

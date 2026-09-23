@@ -16,6 +16,7 @@
     "multer": "^2.3.0",
     "node-tesseract-ocr": "^2.2.1",
     "nodemailer": "^10.0.10",
+    "officecrypto-tool": "^0.0.19",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.20.2",
     "pptxgenjs": "^4.0.1",

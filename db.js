@@ -482,6 +482,20 @@ function limpiarSesionesCaducadas() {
   db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(ahoraISO());
 }
 
+// Para el aviso de "nuevo dispositivo" (ver server.js/email.js): true si esa
+// IP y ese user-agent aparecen YA en alguna sesion previa de este usuario
+// (creada por un login anterior), es decir, si es una combinacion conocida.
+// Si no se pudo determinar la IP o el user-agent de la peticion actual, se
+// trata como conocido para no generar avisos falsos por falta de dato.
+function dispositivoConocidoDeUsuario(userId, ip, userAgent) {
+  const ipConocida =
+    !ip || !!db.prepare("SELECT 1 FROM sessions WHERE user_id = ? AND ip = ? LIMIT 1").get(userId, ip);
+  const userAgentConocido =
+    !userAgent ||
+    !!db.prepare("SELECT 1 FROM sessions WHERE user_id = ? AND user_agent = ? LIMIT 1").get(userId, userAgent);
+  return ipConocida && userAgentConocido;
+}
+
 /* ---------- Alianzas (acuerdos entre empresas de alarmas y otros sectores) ---------- */
 //
 // El scraper de la Raspberry Pi (scraper_alianzas.py) envia periodicamente
@@ -1180,6 +1194,7 @@ module.exports = {
   revocarSesion,
   revocarSesionesDeUsuario,
   limpiarSesionesCaducadas,
+  dispositivoConocidoDeUsuario,
   insertarAlianzasPendientes,
   listarAlianzasPorEstado,
   buscarAlianzaPorId,

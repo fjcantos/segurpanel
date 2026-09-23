@@ -2446,7 +2446,10 @@
      El servidor no vuelve a calcular nada: solo recibe {titulo, columnas,
      filas} por cada hoja (ya extraidos/calculados aqui) y los formatea como
      .xlsx con el logo y los colores corporativos (ver apiExportarExcel en
-     server.js). */
+     server.js). El .xlsx que devuelve sale cifrado con contraseña de
+     apertura = el email de la sesion actual, asi que se avisa una vez por
+     descarga para que quien lo abra sepa que clave introducir. */
+  let avisoPasswordExcelMostrado = false;
   async function exportarExcel(boton, nombreArchivo, hojas) {
     const textoOriginal = boton ? boton.textContent : '';
     if (boton) { boton.disabled = true; boton.textContent = 'Generando…'; }
@@ -2472,6 +2475,11 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      if (!avisoPasswordExcelMostrado) {
+        avisoPasswordExcelMostrado = true;
+        const correoSesion = document.getElementById('userBadge')?.title || 'tu email';
+        alert(`El Excel se ha descargado protegido con contraseña de apertura: tu email (${correoSesion}). Úsalo para abrirlo.`);
+      }
     } catch (e) {
       alert('No se pudo conectar con el servidor para generar el Excel.');
     } finally {

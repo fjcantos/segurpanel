@@ -264,9 +264,130 @@ async function enviarEmailIPBloqueada({ ip, intentos, bloqueadaHasta, destinatar
   }
 }
 
+/* ================================================================
+   Aviso de inicio de sesion desde un dispositivo o IP nuevos
+   ================================================================ */
+
+const EMAIL_SUPER_ADMIN_PRINCIPAL = "fjose.cantos@verisure.es";
+
+function construirHtmlDispositivoNuevo({ usuario, ip, userAgent, fecha }) {
+  const fechaTexto = new Date(fecha || Date.now()).toLocaleString("es-ES", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Aviso de seguridad: nuevo dispositivo o conexión</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;line-height:1.5;">
+        Se ha iniciado sesión en SegurPanel con la cuenta <strong>${escapeHtml(usuario.email)}</strong> desde un dispositivo o dirección IP que no se había usado antes con esta cuenta.
+      </p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Usuario:</strong> ${escapeHtml(usuario.name || usuario.email)} (${escapeHtml(usuario.email)})</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Dirección IP:</strong> ${escapeHtml(ip || "desconocida")}</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Fecha y hora:</strong> ${escapeHtml(fechaTexto)}</p>
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;word-break:break-all;"><strong>Navegador/dispositivo:</strong> ${escapeHtml(userAgent || "desconocido")}</p>
+      <p style="margin:16px 0 0;color:#8a7680;font-size:12px;">
+        Si has sido tú, no hace falta ninguna acción. Si no reconoces esta conexión, cambia tu contraseña cuanto antes e informa a un Super Admin.
+      </p>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que el resto de avisos de seguridad: nunca debe
+// romper el flujo de login que lo origina. Destinatarios: el super_admin
+// principal y el propio usuario que ha iniciado sesión (sin duplicar si
+// coinciden).
+async function enviarEmailDispositivoNuevo({ usuario, ip, userAgent, fecha }) {
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  const destinatarios = Array.from(
+    new Set([EMAIL_SUPER_ADMIN_PRINCIPAL, usuario.email].filter(Boolean).map((e) => e.toLowerCase()))
+  );
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: destinatarios.join(", "),
+      subject: `SegurPanel - Nuevo inicio de sesión: ${usuario.email}`,
+      html: construirHtmlDispositivoNuevo({ usuario, ip, userAgent, fecha }),
+    });
+  } catch (e) {
+    console.error("Error enviando email de dispositivo nuevo:", e.message || e);
+  }
+}
+
+/* ================================================================
+   Aviso de actividad sospechosa: intentos seguidos sin permiso
+   ================================================================ */
+
+function construirHtmlActividadSospechosa({ usuario, ruta, intentos, ip, fecha }) {
+  const fechaTexto = new Date(fecha || Date.now()).toLocaleString("es-ES", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+  return `
+<div style="background:#f5eef0;padding:32px 16px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#E8003D,#8B0026);padding:24px 28px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-family:inherit;">SegurPanel</h1>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Aviso de seguridad: actividad sospechosa</p>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;line-height:1.5;">
+        El usuario <strong>${escapeHtml(usuario.email)}</strong> ha intentado acceder
+        <strong>${escapeHtml(String(intentos))} veces seguidas</strong> a una sección para la que su rol
+        (<strong>${escapeHtml(usuario.role || "—")}</strong>) no tiene permiso.
+      </p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Usuario:</strong> ${escapeHtml(usuario.name || usuario.email)} (${escapeHtml(usuario.email)})</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;word-break:break-all;"><strong>Último recurso solicitado:</strong> ${escapeHtml(ruta || "—")}</p>
+      <p style="margin:0 0 4px;color:#4a0015;font-size:14px;"><strong>Dirección IP:</strong> ${escapeHtml(ip || "desconocida")}</p>
+      <p style="margin:0 0 16px;color:#4a0015;font-size:14px;"><strong>Fecha y hora:</strong> ${escapeHtml(fechaTexto)}</p>
+      <p style="margin:16px 0 0;color:#8a7680;font-size:12px;">
+        Revisa el Panel de auditoría si quieres ver el detalle completo de la actividad de este usuario.
+      </p>
+    </div>
+    <div style="padding:16px 28px;background:#faf5f6;border-top:1px solid #f0e2e5;">
+      <p style="margin:0;color:#8a7680;font-size:12px;">SegurPanel · Uso interno · Enviado automáticamente</p>
+    </div>
+  </div>
+</div>`;
+}
+
+// Fire-and-forget, igual que enviarEmailIPBloqueada: nunca debe romper el
+// flujo (exigirSesion) que lo origina. `destinatarios` es la lista de
+// emails de los super_admin activos (la calcula el llamador con
+// db.listarSuperAdminsActivos()).
+async function enviarEmailActividadSospechosa({ usuario, ruta, intentos, ip, fecha, destinatarios }) {
+  if (!Array.isArray(destinatarios) || destinatarios.length === 0) return;
+  const transporte = obtenerTransportador();
+  if (!transporte) return;
+
+  try {
+    await transporte.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: destinatarios.join(", "),
+      subject: `SegurPanel - Actividad sospechosa: ${usuario.email}`,
+      html: construirHtmlActividadSospechosa({ usuario, ruta, intentos, ip, fecha }),
+    });
+  } catch (e) {
+    console.error("Error enviando email de actividad sospechosa:", e.message || e);
+  }
+}
+
 module.exports = {
   enviarEmailAlianzasNuevas,
   enviarEmailCambioClausulas,
   enviarEmailCodigo2FA,
   enviarEmailIPBloqueada,
+  enviarEmailDispositivoNuevo,
+  enviarEmailActividadSospechosa,
 };
