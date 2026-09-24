@@ -12,6 +12,16 @@ superficies, seguros, inmobiliarias, suministros de luz/gas/agua), usando:
   1. Google News (RSS público, sin necesidad de API key).
   2. Webs oficiales / salas de prensa configuradas en SALAS_PRENSA (rellena
      esa lista con las URLs reales que quieras vigilar; vacía por defecto).
+  3. Periódicos económicos (Expansión, El Economista, Cinco Días, El
+     Confidencial, El Español Invertia) y webs especializadas en seguridad
+     (Seguritecnia, Cuadernos de Seguridad, Red Seguridad, Instalaciones y
+     Seguridad, Alarmas, Seguridad Práctica, Byte TI, Protección y
+     Seguridad, Security News, iSecur1ty), vía Google News restringido a
+     cada dominio con "site:" (ver FUENTES_ADICIONALES).
+
+Los socios vigilados en telefonía móvil (PARTNER_SECTORS) cubren todas las
+operadoras: Movistar, Vodafone, Orange, MásMóvil, Yoigo, Digi, Pepephone,
+Lowi, Simyo, Finetwork, Euskaltel, R Cable, Telecable y Jazztel.
 
 Pensado para ejecutarse una vez al día en una Raspberry Pi vía cron. Solo
 usa la librería estándar de Python (urllib, xml.etree, json) para no
@@ -113,7 +123,11 @@ ALARM_COMPANIES = [
 # en server.js): antes de enviar cada alianza se traducen con
 # MAPEO_SECTORES_ENDPOINT, más abajo.
 PARTNER_SECTORS = {
-    "Telefonia movil": ["Movistar", "Vodafone", "Orange", "MásMóvil", "Masmóvil"],
+    "Telefonia movil": [
+        "Movistar", "Vodafone", "Orange", "MásMóvil", "Masmóvil", "Yoigo",
+        "Digi", "Pepephone", "Lowi", "Simyo", "Finetwork", "Euskaltel",
+        "R Cable", "Telecable", "Jazztel",
+    ],
     "Grandes superficies": ["Carrefour", "Leroy Merlin", "El Corte Inglés", "MediaMarkt"],
     "Seguros": ["Mapfre", "AXA", "Allianz", "Generali"],
     "Inmobiliarias": ["idealista", "Fotocasa", "pisos.com"],
@@ -164,6 +178,35 @@ SALAS_PRENSA = {
     "MPA/Prosegur": [],
 }
 
+# Fuente 3: periódicos económicos y webs especializadas en seguridad. En vez
+# de escribir un scraper HTML distinto para cada web (frágil: cualquier
+# rediseño de cualquiera de los 15 sitios rompería su parser), se reutiliza
+# el mismo RSS de Google News restringiendo la búsqueda a cada dominio con
+# el operador "site:". Es el mismo mecanismo que la Fuente 1, más fiable y
+# de mucho menos mantenimiento que parsear el HTML de cada web.
+FUENTES_PRENSA_ECONOMICA = {
+    "Expansión": "expansion.com",
+    "El Economista": "eleconomista.es",
+    "Cinco Días": "cincodias.elpais.com",
+    "El Confidencial": "elconfidencial.com",
+    "El Español Invertia": "invertia.com",
+}
+
+FUENTES_SEGURIDAD = {
+    "Seguritecnia": "seguritecnia.es",
+    "Cuadernos de Seguridad": "cuadernosdeseguridad.com",
+    "Red Seguridad": "redseguridad.es",
+    "Instalaciones y Seguridad": "instalacionesyseguridad.com",
+    "Alarmas": "alarmas.com",
+    "Seguridad Práctica": "seguridadpractica.com",
+    "Byte TI": "byte-ti.es",
+    "Protección y Seguridad": "proteccionyseguridad.com",
+    "Security News": "securitynews.es",
+    "iSecur1ty": "isecur1ty.es",
+}
+
+FUENTES_ADICIONALES = {**FUENTES_PRENSA_ECONOMICA, **FUENTES_SEGURIDAD}
+
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=es&gl=ES&ceid=ES:es"
 USER_AGENT = "Mozilla/5.0 (compatible; SegurPanelScraper/1.0; +https://segurpanel.local)"
 REQUEST_TIMEOUT = 15
@@ -205,6 +248,18 @@ def detectar_socio(texto):
             if empresa.lower() in texto_low:
                 return sector, empresa
     return None, None
+
+
+def detectar_empresa(texto, empresas):
+    """Devuelve la primera de `empresas` que aparece (sin distinguir
+    mayúsculas/minúsculas) en `texto`, o None si ninguna aparece. Se usa con
+    ALARM_COMPANIES para las fuentes adicionales, donde la búsqueda no va
+    restringida a una sola empresa de alarmas (a diferencia de Google News)."""
+    texto_low = texto.lower()
+    for empresa in empresas:
+        if empresa.lower() in texto_low:
+            return empresa
+    return None
 
 
 def detectar_tipo_acuerdo(texto):
@@ -294,6 +349,67 @@ def buscar_en_google_news(alarma):
             "tipoAcuerdo": detectar_tipo_acuerdo(titulo),
             "titular": titulo,
             "fuente": fuente,
+            "url": enlace,
+            "fechaPublicacion": fecha_pub,
+            "fechaDeteccion": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        })
+    return encontradas
+
+
+# ---------------------------------------------------------------------------
+# Fuente 3: periódicos económicos y webs de seguridad (vía Google News,
+# restringido por dominio con "site:")
+# ---------------------------------------------------------------------------
+
+def buscar_en_fuente_adicional(nombre_fuente, dominio):
+    """Busca en Google News, restringido a `dominio` (site:), menciones
+    conjuntas de cualquier empresa de alarmas (ALARM_COMPANIES) y de un
+    acuerdo. A diferencia de buscar_en_google_news (una empresa de alarmas
+    por búsqueda), aquí se consultan todas a la vez para no multiplicar por
+    15 el número de peticiones diarias."""
+    alarmas_or = " OR ".join(f'"{a}"' for a in ALARM_COMPANIES)
+    query = f'site:{dominio} ({alarmas_or}) (acuerdo OR alianza OR convenio OR colaboración OR partnership)'
+    url = GOOGLE_NEWS_RSS.format(query=urllib.parse.quote(query))
+    try:
+        data = descargar(url)
+    except (urllib.error.URLError, TimeoutError) as e:
+        avisar(f"{nombre_fuente} no respondió: {e}")
+        return []
+
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as e:
+        avisar(f"RSS inválido para «{nombre_fuente}»: {e}")
+        return []
+
+    encontradas = []
+    for item in root.findall("./channel/item"):
+        titulo = (item.findtext("title") or "").strip()
+        enlace = (item.findtext("link") or "").strip()
+        fecha_pub = (item.findtext("pubDate") or "").strip()
+
+        if not titulo or not enlace:
+            continue
+
+        if not es_noticia_reciente(fecha_pub):
+            continue  # descarta noticias de mas de DIAS_MAX_NOTICIA dias (o sin fecha fiable)
+
+        alarma = detectar_empresa(titulo, ALARM_COMPANIES)
+        if not alarma:
+            continue  # el titular no menciona a ninguna empresa de alarmas vigilada
+
+        sector, socio = detectar_socio(titulo)
+        if not sector:
+            continue  # la noticia no menciona ningún socio de los sectores vigilados
+
+        encontradas.append({
+            "externalId": generar_id_externo("fuente", nombre_fuente, alarma, enlace),
+            "empresaAlarma": alarma,
+            "sector": normalizar_sector(sector),
+            "socio": socio,
+            "tipoAcuerdo": detectar_tipo_acuerdo(titulo),
+            "titular": titulo,
+            "fuente": nombre_fuente,
             "url": enlace,
             "fechaPublicacion": fecha_pub,
             "fechaDeteccion": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -493,6 +609,10 @@ def main():
         for url_pagina in SALAS_PRENSA.get(alarma, []):
             todas_detectadas.extend(buscar_en_sala_prensa(alarma, url_pagina))
             time.sleep(REQUEST_DELAY_SEGUNDOS)
+
+    for nombre_fuente, dominio in FUENTES_ADICIONALES.items():
+        todas_detectadas.extend(buscar_en_fuente_adicional(nombre_fuente, dominio))
+        time.sleep(REQUEST_DELAY_SEGUNDOS)
 
     # Deduplicar dentro de esta misma ejecución (misma alianza vista por
     # varias fuentes o varias veces en el RSS).
