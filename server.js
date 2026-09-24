@@ -1846,8 +1846,7 @@ async function apiAnalisisAvanzado(req, res) {
 }
 
 /* ================================================================
-   API: formaciones (presentaciones PPTX generadas con IA, protegido
-   por sesion, cualquier rol)
+   API: formaciones (presentaciones PPTX generadas con IA, solo super_admin)
    ================================================================ */
 //
 // Delega en formaciones.js (mismo patron que analisis.js): genera el
@@ -1864,7 +1863,7 @@ function contextoFormacionValido(contexto) {
 }
 
 async function apiFormacionesGenerar(req, res) {
-  const sesion = exigirSesion(req, res);
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
 
   let cuerpo;
@@ -1940,7 +1939,7 @@ function limpiarTrabajosFormacionCaducados() {
 }
 
 async function apiFormacionCompletaIniciar(req, res) {
-  const sesion = exigirSesion(req, res);
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
 
   let cuerpo;
@@ -2004,7 +2003,7 @@ async function apiFormacionCompletaIniciar(req, res) {
 // de otra persona por jobId adivinado). Responde el error y devuelve null
 // si no procede continuar.
 function obtenerTrabajoFormacionDeSesion(req, res, jobId) {
-  const sesion = exigirSesion(req, res);
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return null;
   const trabajo = jobId ? TRABAJOS_FORMACION_COMPLETA.get(jobId) : null;
   if (!trabajo || trabajo.userId !== sesion.usuario.id) {
@@ -2072,7 +2071,7 @@ function ejecutarMulterInfografia(req, res) {
 }
 
 async function apiFormacionInfografia(req, res) {
-  const sesion = exigirSesion(req, res);
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
 
   try {

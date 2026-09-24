@@ -1487,7 +1487,7 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 2l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7z"/></svg>
     Análisis Avanzado
   </button>
-  <button class="tab-btn" data-tab="formaciones">
+  <button class="tab-btn" data-tab="formaciones" data-visible-only="super_admin">
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="3" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13v4"/></svg>
     Formaciones
   </button>
@@ -2186,7 +2186,7 @@
   </section>
 
   <!-- ===== FORMACIONES ===== -->
-  <section id="formaciones" class="tab-content">
+  <section id="formaciones" class="tab-content" data-visible-only="super_admin">
     <h2 class="section-title">Formaciones</h2>
     <p class="section-sub">Genera presentaciones PPTX de formación para el equipo de retención/ventas con IA: diseño corporativo UIC, argumentario y guion listos para usar.</p>
 
@@ -2367,12 +2367,20 @@
   let puedeInstalarApp = false;
 
   // Pestañas ocultas para el rol Retención (analisis financiero/tecnico
-  // de contratos, fuera de su ambito). Se eliminan del DOM por completo
-  // -no solo se ocultan- para que tampoco sean accesibles reactivando la
-  // pestana via ?tab= en la URL o manipulando la consola.
+  // de contratos, fuera de su ambito) y pestañas visibles solo para
+  // Super Admin (p.ej. Formaciones). En ambos casos se eliminan del DOM
+  // por completo -no solo se ocultan- para que tampoco sean accesibles
+  // reactivando la pestana via ?tab= en la URL o manipulando la consola;
+  // el servidor aplica la misma restriccion en las APIs correspondientes
+  // (ver ROLES_ESTADISTICAS/roles: [SUPER_ADMIN] en server.js), asi que
+  // esto es solo para que la UI no las muestre, no la unica barrera.
   function aplicarRestriccionesTabs(role) {
-    if (role !== 'retencion') return;
-    document.querySelectorAll('[data-restricted="retencion"]').forEach(el => el.remove());
+    if (role === 'retencion') {
+      document.querySelectorAll('[data-restricted="retencion"]').forEach(el => el.remove());
+    }
+    if (role !== 'super_admin') {
+      document.querySelectorAll('[data-visible-only="super_admin"]').forEach(el => el.remove());
+    }
   }
 
   async function llamarAPI(url, opciones) {
