@@ -167,7 +167,6 @@
     font-weight: 700;
     letter-spacing: 0.3px;
   }
-  .brand svg { flex-shrink: 0; }
   .brand .accent { color: var(--accent); }
   .topbar-sub {
     font-size: 0.8rem;
@@ -258,9 +257,11 @@
     margin: 0 auto;
     padding: 28px 24px 60px;
   }
-  .tab-content { display: none; animation: fadeIn 0.2s ease; }
+  .tab-content { display: none; }
   .tab-content.active { display: block; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  /* La animacion de entrada (fade + slide) de .tab-content se define mas
+     abajo, junto con la entrada escalonada de tarjetas/filas (ver
+     "Transicion de pestañas" y @keyframes entradaPestana). */
 
   h2.section-title {
     margin: 0 0 4px;
@@ -1314,7 +1315,7 @@
       gap: 10px;
     }
     .brand { font-size: 1.05rem; gap: 8px; }
-    .brand svg { width: 22px; height: 22px; }
+    .brand-logo { width: 24px; height: 24px; }
     .topbar-sub { display: none; }
     .topbar-right { gap: 8px; }
     .user-badge { display: none; }
@@ -1409,6 +1410,279 @@
     .tabs { position: static; }
   }
 
+  /* ================================================================
+     Mejoras de apariencia / UX: transiciones, pantalla de carga, logo
+     animado, busqueda global, notificaciones, atajos de teclado, tour.
+     Todo lo de aqui abajo queda anulado por la regla
+     "prefers-reduced-motion: reduce" de mas abajo (animation-duration/
+     transition-duration a 0.001ms !important sobre "*"), asi que no hace
+     falta duplicar guardas de accesibilidad en cada regla.
+     ================================================================ */
+
+  /* ---------- Transicion de tema mas perceptible (claro/oscuro) ----------
+     html/body ya tenian su propia transicion; aqui se extiende a las
+     superficies que cambian de color con el tema (tarjetas, bordes,
+     inputs, tablas) para que el cambio de tema se perciba como un fundido
+     uniforme en vez de "saltar" en unos sitios y transicionar en otros. */
+  .card, .summary-card, .quicklink, table, th, td, .table-wrap,
+  input, select, textarea, .tab-btn, .theme-toggle, .topbar-icon-btn,
+  .news-item, .alliance-card, .formacion-card, .modal, .reset-modal {
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  /* ---------- Transicion de pestañas: fade + slide mas perceptible ----------
+     Sustituye el fundido sutil que ya traia .tab-content (4px/0.2s) por uno
+     algo mas marcado, y añade una entrada escalonada para tarjetas/filas de
+     tabla dentro de la pestaña recien activada. */
+  .tab-content { animation: entradaPestana 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+  @keyframes entradaPestana {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes entradaTarjeta {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tab-content.active .summary-card,
+  .tab-content.active .quicklinks .quicklink,
+  .tab-content.active .news-item,
+  .tab-content.active .alliance-card,
+  .tab-content.active .formacion-card,
+  .tab-content.active table tbody tr {
+    animation: entradaTarjeta 0.4s ease both;
+  }
+  /* Solo se escalonan las primeras filas/tarjetas de cada pestaña: con
+     listas largas (Comparador, Repositorio...) escalonar cientos de filas
+     alargaria la animacion varios segundos, asi que a partir de la 10ª se
+     usa el mismo retraso corto y aparecen juntas. */
+  .tab-content.active .summary-card:nth-child(1),
+  .tab-content.active .news-item:nth-child(1),
+  .tab-content.active .alliance-card:nth-child(1),
+  .tab-content.active .formacion-card:nth-child(1),
+  .tab-content.active table tbody tr:nth-child(1) { animation-delay: 0.02s; }
+  .tab-content.active .summary-card:nth-child(2),
+  .tab-content.active .news-item:nth-child(2),
+  .tab-content.active .alliance-card:nth-child(2),
+  .tab-content.active .formacion-card:nth-child(2),
+  .tab-content.active table tbody tr:nth-child(2) { animation-delay: 0.05s; }
+  .tab-content.active .summary-card:nth-child(3),
+  .tab-content.active .news-item:nth-child(3),
+  .tab-content.active .alliance-card:nth-child(3),
+  .tab-content.active .formacion-card:nth-child(3),
+  .tab-content.active table tbody tr:nth-child(3) { animation-delay: 0.08s; }
+  .tab-content.active .summary-card:nth-child(4),
+  .tab-content.active .news-item:nth-child(4),
+  .tab-content.active .alliance-card:nth-child(4),
+  .tab-content.active table tbody tr:nth-child(4) { animation-delay: 0.11s; }
+  .tab-content.active .summary-card:nth-child(5),
+  .tab-content.active .news-item:nth-child(5),
+  .tab-content.active .alliance-card:nth-child(5),
+  .tab-content.active table tbody tr:nth-child(5) { animation-delay: 0.14s; }
+  .tab-content.active .news-item:nth-child(6),
+  .tab-content.active table tbody tr:nth-child(6) { animation-delay: 0.17s; }
+  .tab-content.active .news-item:nth-child(n+7),
+  .tab-content.active table tbody tr:nth-child(n+7) { animation-delay: 0.2s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(1) { animation-delay: 0.02s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(2) { animation-delay: 0.05s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(3) { animation-delay: 0.08s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(4) { animation-delay: 0.11s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(5) { animation-delay: 0.14s; }
+  .tab-content.active .quicklinks .quicklink:nth-child(n+6) { animation-delay: 0.17s; }
+
+  /* ---------- Logo UIC animado (brillo/pulso al cargar) ---------- */
+  .brand-logo {
+    width: 30px; height: 30px; object-fit: contain; flex-shrink: 0;
+    border-radius: 6px;
+    animation: logoPulso 2.1s ease-in-out 0.4s 3;
+  }
+  @keyframes logoPulso {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(255,255,255,0)); transform: scale(1); }
+    50% { filter: drop-shadow(0 0 7px rgba(255,255,255,0.65)); transform: scale(1.07); }
+  }
+
+  /* ---------- Pantalla de carga ---------- */
+  #pantallaCarga {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background:
+      radial-gradient(ellipse 900px 600px at 50% -10%, rgba(232,0,61,0.30), transparent 60%),
+      linear-gradient(180deg, #050203 0%, #1a050a 35%, #4a0015 72%, #8B0026 100%);
+    transition: opacity 0.5s ease;
+  }
+  #pantallaCarga.oculta { opacity: 0; pointer-events: none; }
+  #pantallaCarga .carga-logo-halo {
+    width: 108px; height: 108px; border-radius: 26px;
+    background: radial-gradient(circle, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 70%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    animation: cargaLogoPulso 1.6s ease-in-out infinite;
+  }
+  #pantallaCarga .carga-logo-halo img { width: 76px; height: auto; object-fit: contain; filter: drop-shadow(0 4px 14px rgba(0,0,0,0.4)); }
+  @keyframes cargaLogoPulso {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(255,255,255,0)); transform: scale(1); }
+    50% { filter: drop-shadow(0 0 16px rgba(255,255,255,0.5)); transform: scale(1.045); }
+  }
+  #pantallaCarga .carga-texto { color: #fff; font-size: 1rem; font-weight: 700; letter-spacing: 0.3px; }
+  #pantallaCarga .carga-barra-track {
+    width: 220px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.14); overflow: hidden;
+  }
+  #pantallaCarga .carga-barra-fill {
+    height: 100%; width: 30%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--v-red, #E8003D), #ff6b8a);
+    animation: cargaBarraIndeterminada 1.3s ease-in-out infinite;
+  }
+  @keyframes cargaBarraIndeterminada {
+    0% { transform: translateX(-110%); width: 40%; }
+    50% { width: 55%; }
+    100% { transform: translateX(260%); width: 40%; }
+  }
+
+  /* ---------- Botones de icono en la cabecera (busqueda, notificaciones) ---------- */
+  .topbar-icon-btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25);
+    color: #fff; cursor: pointer; flex-shrink: 0; padding: 0;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .topbar-icon-btn:hover { background: rgba(255,255,255,0.2); }
+  .topbar-icon-btn:active { transform: scale(0.92); }
+  .topbar-icon-btn svg { width: 17px; height: 17px; }
+  .notif-badge {
+    position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px;
+    padding: 0 4px; border-radius: 999px; background: var(--v-red, #E8003D); color: #fff;
+    font-size: 0.62rem; font-weight: 800; line-height: 16px; text-align: center;
+    box-shadow: 0 0 0 2px var(--navy);
+  }
+  .notif-badge[hidden] { display: none; }
+
+  /* ---------- Busqueda global ---------- */
+  .search-overlay {
+    position: fixed; inset: 0; z-index: 520; background: rgba(8,4,5,0.6);
+    display: none; align-items: flex-start; justify-content: center; padding: 10vh 16px 20px;
+  }
+  .search-overlay.show { display: flex; }
+  .search-panel {
+    width: 100%; max-width: 560px; max-height: 72vh; display: flex; flex-direction: column;
+    background: var(--card); border-radius: 16px; box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    overflow: hidden; animation: entradaTarjeta 0.22s ease both;
+  }
+  .search-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .search-input-row svg { flex-shrink: 0; color: var(--muted); width: 18px; height: 18px; }
+  #searchInput {
+    flex: 1; border: none; outline: none; background: transparent; color: var(--text);
+    font-size: 1rem; font-family: inherit;
+  }
+  .search-close-btn {
+    border: none; background: var(--fill-subtle); color: var(--muted); border-radius: 8px;
+    padding: 5px 9px; font-size: 0.72rem; font-weight: 700; cursor: pointer; flex-shrink: 0;
+  }
+  .search-results { overflow-y: auto; padding: 8px 0; }
+  .search-group-title {
+    font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--muted); padding: 10px 16px 4px;
+  }
+  .search-result-item {
+    display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+    border: none; background: none; padding: 9px 16px; cursor: pointer; font-family: inherit;
+  }
+  .search-result-item:hover, .search-result-item.is-focused { background: var(--fill-subtle); }
+  .search-result-title { font-size: 0.88rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .search-result-sub { font-size: 0.78rem; color: var(--muted); }
+  .search-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 0.86rem; }
+  /* Resalta brevemente el elemento al que aterriza un resultado de busqueda
+     (fila de tabla, tarjeta, norma...) para que sea facil de localizar. */
+  .search-highlight { animation: resaltadoBusqueda 1.6s ease; }
+  @keyframes resaltadoBusqueda {
+    0%, 15% { background-color: var(--accent-bg); }
+    100% { background-color: transparent; }
+  }
+
+  /* ---------- Notificaciones ---------- */
+  .notif-overlay {
+    position: fixed; inset: 0; z-index: 520; background: transparent;
+    display: none;
+  }
+  .notif-overlay.show { display: block; }
+  .notif-panel {
+    position: absolute; top: 64px; right: 16px; width: 340px; max-width: calc(100vw - 32px);
+    max-height: 70vh; overflow-y: auto; background: var(--card); border-radius: 14px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.45); border: 1px solid var(--border);
+    animation: entradaTarjeta 0.2s ease both;
+  }
+  .notif-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--heading);
+  }
+  .notif-group-title {
+    font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--muted); padding: 12px 16px 4px;
+  }
+  .notif-item {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+    border: none; background: none; padding: 9px 16px; cursor: pointer; font-family: inherit;
+    border-bottom: 1px solid var(--border);
+  }
+  .notif-item:hover { background: var(--fill-subtle); }
+  .notif-item-icon { flex-shrink: 0; font-size: 1rem; }
+  .notif-item-title { font-size: 0.84rem; font-weight: 600; color: var(--text); }
+  .notif-item-sub { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+  .notif-empty { padding: 26px 16px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+
+  /* ---------- Atajos de teclado (tooltip al pulsar Alt) ---------- */
+  #shortcutsHint {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px);
+    z-index: 550; background: var(--navy); color: #fff; border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4); padding: 12px 18px;
+    display: flex; flex-wrap: wrap; gap: 8px 18px; max-width: 90vw;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  #shortcutsHint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #shortcutsHint .shortcut-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; white-space: nowrap; }
+  #shortcutsHint kbd {
+    background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px;
+    padding: 2px 6px; font-size: 0.72rem; font-family: inherit; font-weight: 700;
+  }
+
+  /* ---------- Tour guiado ---------- */
+  #tourOverlay {
+    position: fixed; inset: 0; z-index: 600; display: none;
+  }
+  #tourOverlay.show { display: block; }
+  /* El "foco" se consigue con un box-shadow enorme sobre .tour-spotlight
+     (hueco = el hueco de la pestaña resaltada, resto = velo oscuro), asi
+     que no hace falta una capa de oscurecido aparte. */
+  #tourOverlay .tour-spotlight {
+    position: absolute; border-radius: 12px; box-shadow: 0 0 0 4px var(--v-red, #E8003D), 0 0 0 9999px rgba(5,2,3,0.6);
+    transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+    pointer-events: none;
+  }
+  #tourOverlay .tour-tooltip {
+    position: absolute; max-width: 300px; background: var(--card); color: var(--text);
+    border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); padding: 16px 18px;
+    transition: top 0.25s ease, left 0.25s ease;
+  }
+  #tourOverlay .tour-tooltip h4 { margin: 0 0 6px; color: var(--heading); font-size: 0.98rem; }
+  #tourOverlay .tour-tooltip p { margin: 0 0 12px; font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
+  #tourOverlay .tour-step-count { font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; font-weight: 700; }
+  #tourOverlay .tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #tourOverlay .tour-actions-right { display: flex; gap: 8px; }
+  #tourOverlay button.tour-skip {
+    border: none; background: none; color: var(--muted); font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; padding: 6px 4px; text-decoration: underline;
+  }
+  #tourOverlay button.tour-next {
+    border: none; background: var(--accent); color: #fff; border-radius: 8px; font-weight: 700;
+    padding: 8px 16px; font-size: 0.82rem; cursor: pointer;
+  }
+  #tourOverlay button.tour-next:hover { background: var(--accent-dark); }
+  #tourOverlay .tour-no-mostrar {
+    display: block; margin-top: 10px; font-size: 0.72rem; color: var(--muted); background: none;
+    border: none; text-decoration: underline; cursor: pointer; padding: 0; font-family: inherit;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
   }
@@ -1416,16 +1690,26 @@
 </head>
 <body>
 
+<div id="pantallaCarga">
+  <div class="carga-logo-halo"><img src="assets/LOGO_UIC_limpio.png" alt="UIC"></div>
+  <div class="carga-texto">Cargando SegurPanel…</div>
+  <div class="carga-barra-track"><div class="carga-barra-fill"></div></div>
+</div>
+
 <header class="topbar">
   <div class="brand">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M12 3l7 3v5c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"/>
-      <path d="M9 12l2 2 4-4" stroke="#1f9d55"/>
-    </svg>
+    <img class="brand-logo" src="assets/LOGO_UIC_limpio.png" alt="UIC">
     SegurPanel
   </div>
   <div class="topbar-right">
     <div class="topbar-sub" id="topbarSub">App portátil para alarmas</div>
+    <button class="topbar-icon-btn" id="searchOpenBtn" type="button" aria-label="Buscar en SegurPanel" title="Buscar (Ctrl/Cmd + K)">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="6"/><path d="M17 17l-4-4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="topbar-icon-btn" id="notifBellBtn" type="button" aria-label="Notificaciones" title="Notificaciones" hidden>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8a5 5 0 0110 0c0 3.2 1 4.5 1.5 5H3.5C4 12.5 5 11.2 5 8Z"/><path d="M8 16a2 2 0 004 0"/></svg>
+      <span class="notif-badge" id="notifBadge" hidden>0</span>
+    </button>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar entre modo claro y oscuro"></button>
     <div class="user-menu" id="userMenu" hidden>
       <span class="user-badge" id="userBadge"></span>
@@ -2318,6 +2602,48 @@
   </div>
 </div>
 
+<!-- ===== Busqueda global ===== -->
+<div class="search-overlay" id="searchOverlay">
+  <div class="search-panel">
+    <div class="search-input-row">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="6"/><path d="M17 17l-4-4" stroke-linecap="round"/></svg>
+      <input type="text" id="searchInput" placeholder="Buscar empresas, alianzas, normativa, equipos, contratos…" autocomplete="off">
+      <button type="button" class="search-close-btn" id="searchCloseBtn">Esc</button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
+
+<!-- ===== Notificaciones ===== -->
+<div class="notif-overlay" id="notifOverlay">
+  <div class="notif-panel" id="notifPanel">
+    <div class="notif-panel-header">
+      <span>Notificaciones</span>
+    </div>
+    <div id="notifLista"></div>
+  </div>
+</div>
+
+<!-- ===== Tooltip de atajos de teclado (al mantener pulsado Alt) ===== -->
+<div id="shortcutsHint"></div>
+
+<!-- ===== Tour guiado ===== -->
+<div id="tourOverlay">
+  <div class="tour-spotlight" id="tourSpotlight"></div>
+  <div class="tour-tooltip" id="tourTooltip">
+    <div class="tour-step-count" id="tourStepCount"></div>
+    <h4 id="tourTitulo"></h4>
+    <p id="tourTexto"></p>
+    <div class="tour-actions">
+      <button type="button" class="tour-skip" id="tourSkip">Saltar tour</button>
+      <div class="tour-actions-right">
+        <button type="button" class="tour-next" id="tourNext">Siguiente</button>
+      </div>
+    </div>
+    <button type="button" class="tour-no-mostrar" id="tourNoMostrar">No volver a mostrar</button>
+  </div>
+</div>
+
 <script>
   /* ================================================================
      Tema claro/oscuro: se aplica antes del render en <head> (evita el
@@ -2833,7 +3159,7 @@
     const container = document.getElementById('equiposEmpresaGrid');
     if (!container) return;
     container.innerHTML = EQUIPOS_EMPRESA.map(e => `
-      <div class="company-equip-card">
+      <div class="company-equip-card" data-empresa="${escapeHtml(e.empresa)}">
         <div class="company-equip-head">
           ${swatchHtml(e.empresa, 'offer-swatch')}
           <div>
@@ -3977,6 +4303,7 @@
       // cacheado): no se puede verificar la sesion, pero no se redirige a
       // login para no entrar en bucle. El resto de la app sigue funcionando
       // con lo que ya esta cacheado.
+      ocultarPantallaCarga();
       return;
     }
     if (!ok || !datos.usuario || datos.usuario.mustChangePassword) {
@@ -4027,6 +4354,11 @@
     cargarResumenInicio();
     registrarVisitaTab('inicio');
     configurarNotificacionesPush();
+
+    document.getElementById('notifBellBtn').hidden = false;
+    iniciarNotificaciones();
+    ocultarPantallaCarga();
+    iniciarTourSiPrimeraVez();
   }
 
   function pintarBienvenidaInicio(usuario) {
@@ -4208,6 +4540,9 @@
 
     renderPeriodosAlianzas('alianzasPublicadasPeriodos', datos.publicadas, false);
     renderNoticiasSector(datos.publicadas);
+    // Se guarda en plano para la busqueda global (ver construirIndiceBusqueda):
+    // evita volver a pedir /api/alianzas solo para buscar.
+    ultimasAlianzasPublicadas = PERIODOS_ALIANZAS.flatMap((p) => (datos.publicadas || {})[p.clave] || []);
 
     const spanActualizado = document.getElementById('alianzasUpdated');
     if (spanActualizado) {
@@ -6438,6 +6773,426 @@
     iosHint.classList.remove('show');
     try { localStorage.setItem(CLAVE_AVISO_IOS, '1'); } catch (e) { /* modo privado */ }
   });
+
+  /* ================================================================
+     Pantalla de carga
+     ================================================================ */
+
+  let pantallaCargaOcultada = false;
+  function ocultarPantallaCarga() {
+    if (pantallaCargaOcultada) return;
+    pantallaCargaOcultada = true;
+    const el = document.getElementById('pantallaCarga');
+    if (!el) return;
+    el.classList.add('oculta');
+    setTimeout(() => { el.hidden = true; }, 550);
+  }
+  // Red de seguridad: si algo tarda demasiado (conexion lenta, fallo de red
+  // no capturado en iniciarSesionUI), la pantalla de carga desaparece
+  // igualmente a los 6s para no dejar la app bloqueada detras de ella.
+  setTimeout(ocultarPantallaCarga, 6000);
+
+  /* ================================================================
+     Busqueda global (icono de lupa en la cabecera, o Ctrl/Cmd+K): busca en
+     Comparador (nombre de empresa), Alianzas publicadas, Normativa,
+     Equipos y Repositorio (solo si el rol tiene acceso), agrupando los
+     resultados por seccion. Reutiliza datos que cada pestaña ya tiene en
+     memoria (NORMATIVA_DATA, EQUIPOS_EMPRESA, repoDatosCompletos...) y el
+     mismo normalizador de texto que el buscador de Normativa
+     (normTextoBusqueda), para no reimplementar la busqueda por cada
+     seccion ni volver a pedir nada al servidor salvo Repositorio.
+     ================================================================ */
+
+  let ultimasAlianzasPublicadas = [];
+
+  // Escapa comillas dobles para usar un valor dentro de un selector CSS de
+  // atributo (p.ej. [data-empresa="${cssEscape(nombre)}"]).
+  function cssEscape(str) {
+    return String(str || '').replace(/"/g, '\\"');
+  }
+
+  function irATabYResaltar(tab, selector) {
+    const boton = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (boton) boton.click(); else activateTab(tab);
+    if (!selector) return;
+    setTimeout(() => {
+      const el = document.querySelector(selector);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('search-highlight');
+      setTimeout(() => el.classList.remove('search-highlight'), 1600);
+    }, 80);
+  }
+
+  // Abre la norma correspondiente en el acordeon de Normativa (despliega su
+  // categoria si estaba cerrada, abre el <details> de la norma) y hace scroll.
+  function irANormativaItem(cat, item) {
+    irATabYResaltar('normativa', null);
+    setTimeout(() => {
+      const bloque = document.querySelector(`.norm-category[data-cat="${cssEscape(cat.id)}"]`);
+      if (!bloque) return;
+      const cuerpo = bloque.querySelector('.period-body');
+      if (cuerpo && cuerpo.hidden) {
+        cuerpo.hidden = false;
+        const chevron = bloque.querySelector('.period-chevron');
+        if (chevron) chevron.textContent = '▴';
+      }
+      const detalles = Array.from(bloque.querySelectorAll('.norm-item')).find(
+        (d) => d.querySelector('.norm-item-title')?.textContent === item.titulo
+      );
+      if (!detalles) return;
+      detalles.open = true;
+      detalles.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      detalles.classList.add('search-highlight');
+      setTimeout(() => detalles.classList.remove('search-highlight'), 1600);
+    }, 90);
+  }
+
+  function construirIndiceBusqueda(query) {
+    const q = normTextoBusqueda(query);
+    const grupos = [];
+    if (!q) return grupos;
+
+    // Comparador: una fila de #compareTable por empresa.
+    const filasComparador = Array.from(document.querySelectorAll('#compareTable tbody tr'));
+    const resComparador = filasComparador
+      .map((tr, i) => ({
+        nombre: tr.querySelector('[data-company]')?.dataset.company || '',
+        i,
+        texto: normTextoBusqueda(tr.textContent),
+      }))
+      .filter((r) => r.texto.includes(q))
+      .slice(0, 8)
+      .map((r) => ({
+        titulo: r.nombre || 'Empresa',
+        sub: 'Comparador de empresas',
+        accion: () => irATabYResaltar('comparador', `#compareTable tbody tr:nth-child(${r.i + 1})`),
+      }));
+    if (resComparador.length) grupos.push({ nombre: 'Comparador', items: resComparador });
+
+    // Alianzas ya publicadas (ver cargarAlianzas, que rellena esta variable).
+    const resAlianzas = ultimasAlianzasPublicadas
+      .filter((a) => normTextoBusqueda(`${a.empresaAlarma} ${a.socio} ${a.sector} ${a.tipoAcuerdo || ''} ${a.titular || ''}`).includes(q))
+      .slice(0, 8)
+      .map((a) => ({
+        titulo: `${a.empresaAlarma} · ${a.socio}`,
+        sub: a.tipoAcuerdo || 'Acuerdo detectado',
+        accion: () => irATabYResaltar('alianzas', null),
+      }));
+    if (resAlianzas.length) grupos.push({ nombre: 'Alianzas', items: resAlianzas });
+
+    // Normativa: cada norma dentro de cada categoria (mismo indice que usa
+    // el buscador propio de la pestaña, ver normItemBusqueda).
+    const resNormativa = [];
+    NORMATIVA_DATA.forEach((cat) => {
+      cat.items.forEach((item) => {
+        if (normItemBusqueda(item).includes(q)) {
+          resNormativa.push({ titulo: item.titulo, sub: cat.titulo, accion: () => irANormativaItem(cat, item) });
+        }
+      });
+    });
+    if (resNormativa.length) grupos.push({ nombre: 'Normativa', items: resNormativa.slice(0, 8) });
+
+    // Equipos por empresa de alarmas.
+    const resEquipos = EQUIPOS_EMPRESA
+      .filter((e) => normTextoBusqueda(`${e.empresa} ${e.marca} ${e.equipos.map((x) => x.desc).join(' ')}`).includes(q))
+      .slice(0, 8)
+      .map((e) => ({
+        titulo: e.empresa,
+        sub: e.marca,
+        accion: () => irATabYResaltar('equipos', `.company-equip-card[data-empresa="${cssEscape(e.empresa)}"]`),
+      }));
+    if (resEquipos.length) grupos.push({ nombre: 'Equipos', items: resEquipos });
+
+    // Repositorio: solo si el rol tiene acceso a esa pestaña.
+    if (rolActual === 'super_admin' || rolActual === 'admin') {
+      const resRepo = repoDatosCompletos
+        .filter((c) => normTextoBusqueda(`${c.empresa || ''} ${c.provincia || ''} ${c.tipo || ''}`).includes(q))
+        .slice(0, 8)
+        .map((c) => ({
+          titulo: `${c.empresa || 'Sin identificar'} · ${c.provincia || '—'}`,
+          sub: (c.tipo === 'hogar' ? 'Hogar' : c.tipo === 'negocio' ? 'Negocio' : 'Sin clasificar') + (c.fecha ? ' · ' + new Date(c.fecha).toLocaleDateString('es-ES') : ''),
+          accion: () => irATabYResaltar('repositorio', null),
+        }));
+      if (resRepo.length) grupos.push({ nombre: 'Repositorio', items: resRepo });
+    }
+
+    return grupos;
+  }
+
+  function renderizarResultadosBusqueda(grupos, query) {
+    const cont = document.getElementById('searchResults');
+    if (!query.trim()) {
+      const conRepo = rolActual === 'super_admin' || rolActual === 'admin';
+      cont.innerHTML = `<div class="search-empty">Escribe para buscar en Comparador, Alianzas, Normativa, Equipos${conRepo ? ' y Repositorio' : ''}.</div>`;
+      return;
+    }
+    if (!grupos.length) {
+      cont.innerHTML = `<div class="search-empty">Sin resultados para «${escapeHtml(query)}».</div>`;
+      return;
+    }
+    cont.innerHTML = grupos.map((g) => `
+      <div class="search-group-title">${escapeHtml(g.nombre)}</div>
+      ${g.items.map((it, i) => `
+        <button type="button" class="search-result-item" data-grupo="${escapeHtml(g.nombre)}" data-idx="${i}">
+          <span class="search-result-title">${escapeHtml(it.titulo)}</span>
+          <span class="search-result-sub">${escapeHtml(it.sub || '')}</span>
+        </button>`).join('')}
+    `).join('');
+
+    cont.querySelectorAll('.search-result-item').forEach((btn) => {
+      const g = grupos.find((x) => x.nombre === btn.dataset.grupo);
+      const item = g && g.items[Number(btn.dataset.idx)];
+      if (!item) return;
+      btn.addEventListener('click', () => {
+        cerrarBusquedaGlobal();
+        item.accion();
+      });
+    });
+  }
+
+  let indiceBusquedaTimer = null;
+  function manejarInputBusqueda() {
+    clearTimeout(indiceBusquedaTimer);
+    const valor = document.getElementById('searchInput').value;
+    indiceBusquedaTimer = setTimeout(() => {
+      renderizarResultadosBusqueda(construirIndiceBusqueda(valor), valor);
+    }, 80);
+  }
+
+  function abrirBusquedaGlobal() {
+    document.getElementById('searchOverlay').classList.add('show');
+    const input = document.getElementById('searchInput');
+    input.value = '';
+    renderizarResultadosBusqueda([], '');
+    setTimeout(() => input.focus(), 30);
+    // Precarga Repositorio en segundo plano si el rol tiene acceso y aun no
+    // se ha visitado esa pestaña en esta sesion (repoDatosCompletos vacio):
+    // asi la busqueda encuentra contratos aunque nunca se haya abierto
+    // Repositorio.
+    if ((rolActual === 'super_admin' || rolActual === 'admin') && repoDatosCompletos.length === 0) {
+      cargarRepositorio();
+    }
+  }
+  function cerrarBusquedaGlobal() {
+    document.getElementById('searchOverlay').classList.remove('show');
+  }
+
+  document.getElementById('searchOpenBtn').addEventListener('click', abrirBusquedaGlobal);
+  document.getElementById('searchCloseBtn').addEventListener('click', cerrarBusquedaGlobal);
+  document.getElementById('searchOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'searchOverlay') cerrarBusquedaGlobal();
+  });
+  document.getElementById('searchInput').addEventListener('input', manejarInputBusqueda);
+
+  /* ================================================================
+     Notificaciones en la app (campana de la cabecera): agrega alianzas
+     pendientes de publicar, solicitudes de acceso y alertas de seguridad
+     vía /api/notificaciones (el servidor devuelve lista vacia para roles
+     sin acceso a esos 3 ambitos, todos exclusivos de super_admin). Se
+     recarga cada 30s mientras la sesion esta activa.
+     ================================================================ */
+
+  let notifTimer = null;
+  let ultimasNotificaciones = [];
+  const ICONOS_NOTIF = { alianza: '🤝', solicitud: '👤', alerta: '⚠️' };
+
+  async function cargarNotificaciones() {
+    const { ok, datos } = await llamarAPI('/api/notificaciones');
+    if (!ok) return;
+    ultimasNotificaciones = datos.notificaciones || [];
+    const badge = document.getElementById('notifBadge');
+    const total = ultimasNotificaciones.length;
+    badge.textContent = total > 9 ? '9+' : String(total);
+    badge.hidden = total === 0;
+    if (document.getElementById('notifOverlay').classList.contains('show')) renderNotificaciones();
+  }
+
+  function iniciarNotificaciones() {
+    cargarNotificaciones();
+    clearInterval(notifTimer);
+    notifTimer = setInterval(cargarNotificaciones, 30000);
+  }
+
+  function renderNotificaciones() {
+    const cont = document.getElementById('notifLista');
+    if (!ultimasNotificaciones.length) {
+      cont.innerHTML = '<div class="notif-empty">No tienes notificaciones nuevas.</div>';
+      return;
+    }
+    const grupos = [
+      { clave: 'alianza', titulo: 'Alianzas pendientes de publicar' },
+      { clave: 'solicitud', titulo: 'Solicitudes de acceso' },
+      { clave: 'alerta', titulo: 'Alertas de seguridad' },
+    ];
+    cont.innerHTML = grupos.map((g) => {
+      const items = ultimasNotificaciones.filter((n) => n.tipo === g.clave);
+      if (!items.length) return '';
+      return `
+        <div class="notif-group-title">${escapeHtml(g.titulo)} (${items.length})</div>
+        ${items.map((n, i) => `
+          <button type="button" class="notif-item" data-tipo="${g.clave}" data-idx="${i}">
+            <span class="notif-item-icon">${ICONOS_NOTIF[g.clave] || '🔔'}</span>
+            <span>
+              <div class="notif-item-title">${escapeHtml(n.titulo)}</div>
+              ${n.detalle ? `<div class="notif-item-sub">${escapeHtml(n.detalle)}</div>` : ''}
+            </span>
+          </button>`).join('')}`;
+    }).join('');
+
+    cont.querySelectorAll('.notif-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cerrarNotificaciones();
+        const tipo = btn.dataset.tipo;
+        if (tipo === 'alianza') document.querySelector('.tab-btn[data-tab="alianzas"]')?.click();
+        else window.location.href = '/admin'; // solicitud o alerta: se gestionan desde el panel de administracion
+      });
+    });
+  }
+
+  function abrirNotificaciones() {
+    renderNotificaciones();
+    document.getElementById('notifOverlay').classList.add('show');
+  }
+  function cerrarNotificaciones() {
+    document.getElementById('notifOverlay').classList.remove('show');
+  }
+  document.getElementById('notifBellBtn').addEventListener('click', () => {
+    if (document.getElementById('notifOverlay').classList.contains('show')) cerrarNotificaciones();
+    else abrirNotificaciones();
+  });
+  document.getElementById('notifOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'notifOverlay') cerrarNotificaciones();
+  });
+
+  /* ================================================================
+     Atajos de teclado: Alt+1..7 cambia de pestaña (Inicio..Normativa, solo
+     las que existan para el rol actual); mantener pulsado Alt solo (sin
+     combinarlo con una tecla mapeada) muestra un recordatorio de los
+     atajos disponibles. Ctrl/Cmd+K abre la busqueda global; Escape cierra
+     busqueda/notificaciones/tour, lo que este abierto.
+     ================================================================ */
+
+  const ATAJOS_TAB = { '1': 'inicio', '2': 'comparador', '3': 'ofertas', '4': 'alianzas', '5': 'equipos', '6': 'analisis', '7': 'normativa' };
+  const ETIQUETAS_ATAJOS = { '1': 'Inicio', '2': 'Comparador', '3': 'Ofertas', '4': 'Alianzas', '5': 'Equipos', '6': 'Análisis', '7': 'Normativa' };
+
+  function pintarShortcutsHint() {
+    document.getElementById('shortcutsHint').innerHTML = Object.keys(ATAJOS_TAB)
+      .filter((n) => document.querySelector(`.tab-btn[data-tab="${ATAJOS_TAB[n]}"]`))
+      .map((n) => `<span class="shortcut-item"><kbd>Alt</kbd>+<kbd>${n}</kbd> ${escapeHtml(ETIQUETAS_ATAJOS[n])}</span>`)
+      .join('');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const activo = document.activeElement;
+    const enCampoTexto = activo && (['INPUT', 'TEXTAREA', 'SELECT'].includes(activo.tagName) || activo.isContentEditable);
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      abrirBusquedaGlobal();
+      return;
+    }
+    if (e.key === 'Escape') {
+      cerrarBusquedaGlobal();
+      cerrarNotificaciones();
+      if (tourActivo) saltarTour();
+      return;
+    }
+    if (e.altKey && !e.ctrlKey && !e.metaKey && ATAJOS_TAB[e.key] && !enCampoTexto) {
+      const boton = document.querySelector(`.tab-btn[data-tab="${ATAJOS_TAB[e.key]}"]`);
+      if (boton) { e.preventDefault(); boton.click(); }
+      return;
+    }
+    if (e.key === 'Alt' && !enCampoTexto) {
+      pintarShortcutsHint();
+      document.getElementById('shortcutsHint').classList.add('show');
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Alt') document.getElementById('shortcutsHint').classList.remove('show');
+  });
+  window.addEventListener('blur', () => document.getElementById('shortcutsHint').classList.remove('show'));
+
+  /* ================================================================
+     Tour guiado: solo la primera vez que un usuario entra (localStorage),
+     resalta las pestañas principales con un tooltip explicativo.
+     ================================================================ */
+
+  const TOUR_STORAGE_KEY = 'segurpanel-tour-visto';
+  const TOUR_PASOS = [
+    { tab: 'inicio', titulo: 'Inicio', texto: 'Aquí tienes el resumen del día: alianzas pendientes, alertas y accesos rápidos a las secciones más usadas.' },
+    { tab: 'comparador', titulo: 'Comparador', texto: 'Compara precio, permanencia, equipos y valoración de las principales empresas de alarmas.' },
+    { tab: 'ofertas', titulo: 'Ofertas', texto: 'Promoción comercial vigente detectada más recientemente para cada empresa competidora.' },
+    { tab: 'alianzas', titulo: 'Alianzas', texto: 'Acuerdos entre empresas de alarmas y compañías de otros sectores (móviles, seguros, inmobiliarias...).' },
+    { tab: 'equipos', titulo: 'Equipos', texto: 'Ficha técnica de los equipos de alarma que usa cada empresa competidora.' },
+    { tab: 'analisis', titulo: 'Análisis', texto: 'Sube un contrato y la IA lo analiza, anonimiza y clasifica automáticamente.' },
+    { tab: 'normativa', titulo: 'Normativa', texto: 'Legislación aplicable al sector de la seguridad y las alarmas, con buscador.' },
+  ];
+
+  let tourActivo = false;
+  let tourPasoActual = 0;
+  let tourPasosDisponibles = [];
+
+  function tourMarcarVisto() {
+    try { localStorage.setItem(TOUR_STORAGE_KEY, '1'); } catch (e) { /* localStorage no disponible */ }
+  }
+
+  function iniciarTourSiPrimeraVez() {
+    let visto = null;
+    try { visto = localStorage.getItem(TOUR_STORAGE_KEY); } catch (e) { /* localStorage no disponible */ }
+    if (visto) return;
+    tourPasosDisponibles = TOUR_PASOS.filter((p) => document.querySelector(`.tab-btn[data-tab="${p.tab}"]`));
+    if (!tourPasosDisponibles.length) return;
+    // Pequeña espera para que el resto de la UI (tarjetas, datos) ya este
+    // pintada y el tour no compita visualmente con la carga inicial.
+    setTimeout(() => mostrarPasoTour(0), 900);
+  }
+
+  function mostrarPasoTour(indice) {
+    if (indice >= tourPasosDisponibles.length) { finalizarTour(); return; }
+    tourActivo = true;
+    tourPasoActual = indice;
+    const paso = tourPasosDisponibles[indice];
+    const boton = document.querySelector(`.tab-btn[data-tab="${paso.tab}"]`);
+    if (!boton) { mostrarPasoTour(indice + 1); return; }
+
+    document.getElementById('tourOverlay').classList.add('show');
+
+    const rect = boton.getBoundingClientRect();
+    const spotlight = document.getElementById('tourSpotlight');
+    spotlight.style.top = `${rect.top - 6}px`;
+    spotlight.style.left = `${rect.left - 6}px`;
+    spotlight.style.width = `${rect.width + 12}px`;
+    spotlight.style.height = `${rect.height + 12}px`;
+
+    document.getElementById('tourStepCount').textContent = `Paso ${indice + 1} de ${tourPasosDisponibles.length}`;
+    document.getElementById('tourTitulo').textContent = paso.titulo;
+    document.getElementById('tourTexto').textContent = paso.texto;
+    document.getElementById('tourNext').textContent = indice === tourPasosDisponibles.length - 1 ? 'Finalizar' : 'Siguiente';
+
+    // Posiciona el tooltip debajo de la pestaña resaltada, o encima si no
+    // cabe verticalmente (p.ej. movil en apaisado).
+    const tooltip = document.getElementById('tourTooltip');
+    const tooltipAlto = 170; // estimacion suficiente para no medir tras pintar
+    const arriba = rect.bottom + tooltipAlto + 16 > window.innerHeight;
+    tooltip.style.top = arriba ? `${Math.max(10, rect.top - tooltipAlto - 12)}px` : `${rect.bottom + 14}px`;
+    tooltip.style.left = `${Math.min(Math.max(rect.left, 10), window.innerWidth - 316)}px`;
+
+    boton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+
+  function avanzarTour() { mostrarPasoTour(tourPasoActual + 1); }
+  function saltarTour() { finalizarTour(); }
+  function finalizarTour() {
+    tourActivo = false;
+    document.getElementById('tourOverlay').classList.remove('show');
+    tourMarcarVisto();
+  }
+
+  document.getElementById('tourNext').addEventListener('click', avanzarTour);
+  document.getElementById('tourSkip').addEventListener('click', saltarTour);
+  document.getElementById('tourNoMostrar').addEventListener('click', saltarTour);
+  window.addEventListener('resize', () => { if (tourActivo) mostrarPasoTour(tourPasoActual); });
 
   /* ---------- Acceso directo por URL: /?tab=comparador ----------
      Se espera a que termine iniciarSesionUI() para que, si el rol es

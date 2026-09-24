@@ -1237,7 +1237,9 @@ function sesionesActivasAhora() {
 // ADEMAS de 'login', asi que no se incluye aqui para no duplicar filas).
 function ultimosLogins(limit = 10) {
   const tope = Math.min(Math.max(Number(limit) || 10, 1), 50);
-  return db.prepare("SELECT * FROM audit_log WHERE action = 'login' ORDER BY id DESC LIMIT ?").all(tope);
+  const filas = db.prepare("SELECT * FROM audit_log WHERE action = 'login' ORDER BY id DESC LIMIT ?").all(tope);
+  filas.forEach((f) => { f.detail = cifrado.descifrar(f.detail); }); // mismo criterio que listarAuditoria
+  return filas;
 }
 
 // Cuentas con intentos fallidos de contraseña recientes (aunque ya no esten
@@ -1304,7 +1306,9 @@ function cuentasBloqueadasActivas() {
 // alertas del dashboard.
 function actividadSospechosaReciente(limit = 10) {
   const tope = Math.min(Math.max(Number(limit) || 10, 1), 50);
-  return db.prepare("SELECT * FROM audit_log WHERE action = 'actividad_sospechosa' ORDER BY id DESC LIMIT ?").all(tope);
+  const filas = db.prepare("SELECT * FROM audit_log WHERE action = 'actividad_sospechosa' ORDER BY id DESC LIMIT ?").all(tope);
+  filas.forEach((f) => { f.detail = cifrado.descifrar(f.detail); }); // mismo criterio que listarAuditoria
+  return filas;
 }
 
 // Visitas por pestaña en los ultimos `dias` dias, agregadas por pestaña

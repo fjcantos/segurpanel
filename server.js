@@ -3018,6 +3018,65 @@ async function apiAlianzasGet(req, res) {
   enviarJSON(res, 200, respuesta);
 }
 
+/* ================================================================
+   API: notificaciones en la app (campana de la cabecera)
+   ================================================================ */
+//
+// Agrega, en un solo endpoint, las 3 cosas que un super_admin puede tener
+// pendientes de revisar: alianzas sin publicar, solicitudes de acceso y
+// alertas de seguridad activas (mismo criterio que el dashboard de
+// seguridad: IPs/cuentas bloqueadas y actividad sospechosa reciente). Los
+// demas roles no gestionan ninguno de esos 3 ambitos en ningun otro sitio
+// de la app, asi que reciben la lista vacia en vez de un 403: el icono de
+// la campana es el mismo para todos, simplemente no tiene nada que
+// mostrar fuera de super_admin.
+
+async function apiNotificaciones(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+
+  if (sesion.usuario.role !== auth.ROLES.SUPER_ADMIN) {
+    return enviarJSON(res, 200, { notificaciones: [] });
+  }
+
+  const notificaciones = [];
+
+  for (const a of db.listarAlianzasPorEstado("pending")) {
+    notificaciones.push({
+      tipo: "alianza",
+      titulo: `${a.empresaAlarma} · ${a.socio}`,
+      detalle: a.tipoAcuerdo || "Acuerdo detectado",
+    });
+  }
+
+  for (const s of db.listarSolicitudes("pending")) {
+    notificaciones.push({ tipo: "solicitud", titulo: s.email, detalle: s.name || "Solicitud de acceso" });
+  }
+
+  for (const b of db.ipsBloqueadasActivas()) {
+    notificaciones.push({ tipo: "alerta", titulo: `IP ${b.ip} bloqueada`, detalle: "Demasiados intentos de login fallidos" });
+  }
+  for (const c of db.cuentasBloqueadasActivas()) {
+    notificaciones.push({
+      tipo: "alerta",
+      titulo: `Cuenta bloqueada: ${c.name || c.email}`,
+      detalle: "Demasiados intentos de contraseña incorrecta",
+    });
+  }
+  for (const s of db.actividadSospechosaReciente(5)) {
+    let detalle = "Acceso sin permiso";
+    try {
+      const d = JSON.parse(s.detail || "{}");
+      detalle = `${d.ruta || ""} (${d.intentos || "?"} intentos)`;
+    } catch (e) {
+      /* detalle no parseable: se usa el texto por defecto */
+    }
+    notificaciones.push({ tipo: "alerta", titulo: `Actividad sospechosa: ${s.email || "desconocido"}`, detalle });
+  }
+
+  enviarJSON(res, 200, { notificaciones });
+}
+
 async function apiAlianzasResolver(req, res, id, status) {
   const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
@@ -3615,6 +3674,7 @@ async function manejarPeticion(req, res) {
     }
 
     if (req.method === "GET" && ruta === "/api/alianzas") return await apiAlianzasGet(req, res);
+    if (req.method === "GET" && ruta === "/api/notificaciones") return await apiNotificaciones(req, res);
     if (req.method === "POST" && ruta === "/api/alianzas/sync") return await apiAlianzasSync(req, res);
     if (req.method === "POST" && ruta === "/api/alianzas/nueva") return await apiAlianzasNueva(req, res);
     if (req.method === "POST") {
