@@ -65,8 +65,17 @@ Argumentos de línea de comandos:
 
 Configuración (variables de entorno):
   SEGURPANEL_SYNC_URL      URL completa del endpoint, p.ej.
-                           https://tu-app.onrender.com/api/alianzas/sync
-  SEGURPANEL_SCRAPER_TOKEN Debe coincidir con SCRAPER_TOKEN en el servidor.
+                           https://tu-app.onrender.com/api/alianzas/sync (o
+                           .../api/alianzas/nueva, segun cual use el
+                           servidor).
+  SEGURPANEL_SCRAPER_TOKEN Token a enviar. Se manda tanto en el header
+                           X-Scraper-Token (debe coincidir con SCRAPER_TOKEN
+                           en el servidor, usado por /api/alianzas/sync) como
+                           en "Authorization: Bearer <token>" (debe coincidir
+                           con ALIANZAS_TOKEN, usado por /api/alianzas/nueva),
+                           para que el mismo valor sirva con cualquiera de
+                           los dos endpoints. Alias: SEGURPANEL_TOKEN (se usa
+                           si SEGURPANEL_SCRAPER_TOKEN no esta definida).
   ALIANZAS_CACHE           Ruta del fichero de cache local de IDs (por
                            defecto, alianzas_cache.json junto a este script).
   ALIANZAS_JSON            Ruta del fichero con todas las alianzas detectadas
@@ -218,7 +227,12 @@ RUTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
 ALIANZAS_CACHE = os.environ.get("ALIANZAS_CACHE", os.path.join(RUTA_SCRIPT, "alianzas_cache.json"))
 ALIANZAS_JSON = os.environ.get("ALIANZAS_JSON", os.path.join(RUTA_SCRIPT, "alianzas.json"))
 SYNC_URL = os.environ.get("SEGURPANEL_SYNC_URL", "")
-SYNC_TOKEN = os.environ.get("SEGURPANEL_SCRAPER_TOKEN", "")
+# SEGURPANEL_SCRAPER_TOKEN es el nombre historico de esta variable; se acepta
+# tambien SEGURPANEL_TOKEN como alias por si el servidor se configuro con
+# ALIANZAS_TOKEN (que autentica /api/alianzas/nueva via "Authorization:
+# Bearer", a diferencia de SCRAPER_TOKEN que autentica /api/alianzas/sync via
+# el header a medida X-Scraper-Token; ver sincronizar_con_segurpanel).
+SYNC_TOKEN = os.environ.get("SEGURPANEL_SCRAPER_TOKEN") or os.environ.get("SEGURPANEL_TOKEN", "")
 NUM_ALIANZAS_TEST = 3
 MAX_ERRORES_REPORTADOS = 20  # tope de avisos que se envian a SegurPanel por ejecucion
 
@@ -509,30 +523,93 @@ def guardar_alianzas_json(alianzas):
 # Envio a SegurPanel
 # ---------------------------------------------------------------------------
 
+def _url_es_alianzas_nueva(url):
+    """True si `url` (SEGURPANEL_SYNC_URL) apunta a /api/alianzas/nueva en
+    vez de a /api/alianzas/sync. Ambos endpoints existen en el servidor con
+    formato de payload y autenticacion distintos (ver sincronizar_con_segurpanel
+    y _alianza_a_formato_nueva), asi que hace falta saber cual es el destino
+    para construir el cuerpo de la peticion correctamente."""
+    try:
+        ruta = urllib.parse.urlparse(url).path
+    except ValueError:
+        return False
+    return ruta.rstrip("/").endswith("/alianzas/nueva")
+
+
+def _alianza_a_formato_nueva(a):
+    """Convierte una alianza del formato interno del scraper (camelCase; ver
+    buscar_en_google_news/buscar_en_fuente_adicional/buscar_en_sala_prensa) al
+    formato snake_case que espera /api/alianzas/nueva
+    (normalizarAlianzaNueva en server.js). Ojo: en ese formato "fuente" es la
+    URL de la noticia (no el nombre de la fuente) y "origen" es el nombre
+    legible de la fuente (Google News, Expansión...); es justo al reves de
+    como se llaman internamente "fuente"/"url" en este scraper."""
+    return {
+        "id": a.get("externalId"),
+        "empresa_alarma": a.get("empresaAlarma"),
+        "socio_comercial": a.get("socio"),
+        "sector": a.get("sector"),
+        "tipo_acuerdo": a.get("tipoAcuerdo"),
+        "fecha": a.get("fechaPublicacion"),
+        "fuente": a.get("url"),
+        "titulo": a.get("titular"),
+        "resumen": "",
+        "origen": a.get("fuente"),
+    }
+
+
 def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None):
-    """Envia `alianzas` (puede ser una lista vacia: sirve igualmente de aviso
-    de "el scraper se ha ejecutado hoy" para el reporte diario de SegurPanel)
-    junto con metadatos informativos opcionales: `encontradas` (total
-    detectado en esta ejecucion, antes de filtrar lo ya conocido) y `errores`
-    (avisos no fatales recogidos durante la busqueda)."""
+    """Envia `alianzas` a SEGURPANEL_SYNC_URL, adaptando el formato del
+    cuerpo al endpoint de destino:
+
+    - /api/alianzas/sync: cuerpo {"alianzas": [...]}  (camelCase, tal cual
+      genera este scraper) junto con los metadatos opcionales `encontradas`
+      (total detectado en esta ejecucion, antes de filtrar lo ya conocido) y
+      `errores` (avisos no fatales recogidos durante la busqueda). Acepta una
+      lista vacia: sirve igualmente de aviso de "el scraper se ha ejecutado
+      hoy" para el reporte diario de SegurPanel.
+    - /api/alianzas/nueva: cuerpo = array JSON en snake_case (ver
+      _alianza_a_formato_nueva), sin envolver y sin los metadatos anteriores
+      (ese endpoint no los admite ni registra la ejecucion diaria del
+      scraper). Tampoco acepta una lista vacia (responde 400), asi que si no
+      hay alianzas nuevas no se envia peticion alguna.
+    """
     if not SYNC_URL or not SYNC_TOKEN:
         print("[info] SEGURPANEL_SYNC_URL / SEGURPANEL_SCRAPER_TOKEN no configurados: "
               "las alianzas nuevas se han guardado en el cache local pero no se han enviado.")
         return False
 
-    payload = {"alianzas": alianzas}
-    if encontradas is not None:
-        payload["encontradas"] = encontradas
-    if errores:
-        payload["errores"] = errores
-    cuerpo = json.dumps(payload).encode("utf-8")
+    es_nueva = _url_es_alianzas_nueva(SYNC_URL)
+
+    if es_nueva:
+        if not alianzas:
+            print("[info] Sin alianzas nuevas: no se envía nada a /api/alianzas/nueva "
+                  "(ese endpoint no acepta envíos vacíos ni registra la ejecución diaria del scraper).")
+            return True
+        cuerpo = json.dumps([_alianza_a_formato_nueva(a) for a in alianzas]).encode("utf-8")
+    else:
+        payload = {"alianzas": alianzas}
+        if encontradas is not None:
+            payload["encontradas"] = encontradas
+        if errores:
+            payload["errores"] = errores
+        cuerpo = json.dumps(payload).encode("utf-8")
+
     req = urllib.request.Request(
         SYNC_URL,
         data=cuerpo,
         method="POST",
         headers={
             "Content-Type": "application/json",
+            # Se mandan ambas cabeceras de autenticacion para que el mismo
+            # SEGURPANEL_SCRAPER_TOKEN/SEGURPANEL_TOKEN sirva apunte
+            # SEGURPANEL_SYNC_URL a /api/alianzas/sync (comprueba
+            # X-Scraper-Token contra SCRAPER_TOKEN) o a /api/alianzas/nueva
+            # (comprueba "Authorization: Bearer <token>" contra
+            # ALIANZAS_TOKEN); cada endpoint ignora la cabecera que no le
+            # corresponde.
             "X-Scraper-Token": SYNC_TOKEN,
+            "Authorization": f"Bearer {SYNC_TOKEN}",
         },
     )
     try:
