@@ -1186,6 +1186,88 @@ async function apiAdminAuditoria(req, res, query) {
   enviarJSON(res, 200, { registros });
 }
 
+/* ================================================================
+   API: dashboard de seguridad (solo super_admin)
+   ================================================================ */
+//
+// Agrega en una sola llamada varias fuentes de datos que el resto del
+// sistema ya registraba (sesiones, intentos de login por cuenta/IP,
+// tab_visits, audit_log) para el panel "Dashboard de seguridad" de
+// admin.html: quien esta conectado ahora, ultimos logins, intentos
+// fallidos, que pestañas se usan mas, alertas activas (IPs/cuentas
+// bloqueadas, actividad sospechosa), estado del proceso (memoria, tiempo
+// activo, ultimo backup) y las ultimas acciones de auditoria. No crea
+// ninguna tabla nueva.
+
+const PATRON_ARCHIVO_BACKUP = /^segurpanel-(\d{4}-\d{2}-\d{2})\.db$/;
+
+// Ultimo backup diario disponible (ver backup.js: un fichero por dia, con
+// la fecha en el nombre, se mantienen los ultimos 7). Nunca debe romper el
+// dashboard si el directorio no existe todavia o no hay backups aun.
+function ultimoBackupInfo() {
+  try {
+    const archivos = fs
+      .readdirSync(backup.DIR_BACKUPS)
+      .filter((f) => PATRON_ARCHIVO_BACKUP.test(f))
+      .sort(); // orden lexicografico == cronologico (nombre con fecha ISO)
+    if (!archivos.length) return null;
+    const ultimo = archivos[archivos.length - 1];
+    const stat = fs.statSync(path.join(backup.DIR_BACKUPS, ultimo));
+    return {
+      archivo: ultimo,
+      fecha: PATRON_ARCHIVO_BACKUP.exec(ultimo)[1],
+      creadoEn: stat.mtime.toISOString(),
+      totalBackups: archivos.length,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function sesionActivaPublica(s) {
+  return {
+    id: s.id,
+    userId: s.user_id,
+    email: s.email,
+    name: s.name,
+    role: s.role,
+    ip: s.ip,
+    userAgent: s.user_agent,
+    createdAt: s.created_at,
+    expiresAt: s.expires_at,
+  };
+}
+
+async function apiAdminSecurityDashboard(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const memoria = process.memoryUsage();
+  const aMB = (bytes) => Math.round((bytes / (1024 * 1024)) * 10) / 10;
+
+  enviarJSON(res, 200, {
+    conectadosAhora: db.sesionesActivasAhora().map(sesionActivaPublica),
+    ultimosLogins: db.ultimosLogins(10).map(auditoriaPublica),
+    intentosFallidos: {
+      porCuenta: db.cuentasConIntentosFallidos(),
+      porIp: db.ipsConIntentosFallidosRecientes(),
+    },
+    actividadPestanas: db.conteoVisitasPorTab(30),
+    alertas: {
+      ipsBloqueadas: db.ipsBloqueadasActivas(),
+      cuentasBloqueadas: db.cuentasBloqueadasActivas(),
+      actividadSospechosa: db.actividadSospechosaReciente(10).map(auditoriaPublica),
+    },
+    servidor: {
+      memoriaUsadaMB: aMB(memoria.rss),
+      heapUsadoMB: aMB(memoria.heapUsed),
+      tiempoActivoSegundos: Math.round(process.uptime()),
+      ultimoBackup: ultimoBackupInfo(),
+    },
+    auditoriaReciente: db.listarAuditoria({ limit: 10 }).map(auditoriaPublica),
+  });
+}
+
 // "Limpiar logs de auditoría" (panel de Super Admin): borra TODO el
 // historial de audit_log, confirmado con la contraseña de quien lo pide
 // (mismo patron que apiAdminResetDatosPrueba). Tras borrar, se registra la
@@ -3461,6 +3543,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/audit") return await apiAdminAuditoria(req, res, url.searchParams);
+    if (req.method === "GET" && ruta === "/api/admin/security-dashboard") return await apiAdminSecurityDashboard(req, res);
     if (req.method === "POST" && ruta === "/api/admin/audit/clear") return await apiAdminLimpiarAuditoria(req, res);
 
     if (req.method === "POST") {

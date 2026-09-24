@@ -136,6 +136,39 @@
   .card-danger h2 { color: var(--danger); }
   .card-danger .card-sub { margin-bottom: 16px; }
 
+  /* ---------- Dashboard de seguridad ---------- */
+  .sec-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 20px;
+  }
+  .sec-stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .sec-stat-label {
+    font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.3px; margin-bottom: 4px;
+  }
+  .sec-stat-value { font-size: 1.2rem; font-weight: 700; color: var(--navy); }
+  .sec-stat-value.is-alert { color: var(--danger); }
+  .sec-subgrid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px;
+  }
+  .sec-block h3 { font-size: 0.88rem; color: var(--navy); margin: 0 0 4px; }
+  .sec-block-full { grid-column: 1 / -1; }
+  .sec-bar-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.82rem; }
+  .sec-bar-label { width: 130px; flex-shrink: 0; color: var(--text); }
+  .sec-bar-track { flex: 1; background: var(--bg); border-radius: 999px; height: 10px; overflow: hidden; }
+  .sec-bar-fill { height: 100%; background: var(--green); border-radius: 999px; }
+  .sec-bar-count { width: 34px; text-align: right; color: var(--muted); flex-shrink: 0; }
+  .alert-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 8px; margin-bottom: 6px; font-size: 0.85rem;
+  }
+  .alert-item .alert-icon { flex-shrink: 0; }
+  .alert-danger { background: var(--danger-bg); color: var(--danger); }
+  .alert-warn { background: #fdf1e0; color: var(--warn); }
+
   @media (max-width: 700px) {
     .content { padding: 18px 14px 60px; }
     table { min-width: 640px; }
@@ -156,6 +189,96 @@
 <main class="content">
   <h1 class="page-title">Gestión de usuarios</h1>
   <p class="page-sub">Solicitudes de acceso, roles y estado de las cuentas de SegurPanel.</p>
+
+  <div class="card">
+    <h2>Dashboard de seguridad</h2>
+    <p class="card-sub">Estado en tiempo real de la plataforma. Se actualiza automáticamente cada 20 segundos.</p>
+
+    <div class="sec-grid">
+      <div class="sec-stat">
+        <div class="sec-stat-label">Conectados ahora</div>
+        <div class="sec-stat-value" id="secConectadosNum">—</div>
+      </div>
+      <div class="sec-stat">
+        <div class="sec-stat-label">Memoria usada</div>
+        <div class="sec-stat-value" id="secMemoria">—</div>
+      </div>
+      <div class="sec-stat">
+        <div class="sec-stat-label">Tiempo activo</div>
+        <div class="sec-stat-value" id="secUptime">—</div>
+      </div>
+      <div class="sec-stat">
+        <div class="sec-stat-label">Último backup</div>
+        <div class="sec-stat-value" id="secBackup">—</div>
+      </div>
+    </div>
+
+    <div class="sec-subgrid">
+      <div class="sec-block">
+        <h3>Usuarios conectados ahora</h3>
+        <div class="table-wrap">
+          <table id="tablaSecConectados">
+            <thead><tr><th>Usuario</th><th>Rol</th><th>IP</th><th>Desde</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty-note" id="notaSecConectadosVacia" style="display:none;">Nadie tiene una sesión activa ahora mismo.</div>
+        </div>
+      </div>
+
+      <div class="sec-block">
+        <h3>Últimos logins</h3>
+        <div class="table-wrap">
+          <table id="tablaSecLogins">
+            <thead><tr><th>Usuario</th><th>Fecha</th><th>IP</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty-note" id="notaSecLoginsVacia" style="display:none;">Todavía no hay ningún login registrado.</div>
+        </div>
+      </div>
+
+      <div class="sec-block">
+        <h3>Intentos fallidos</h3>
+        <p class="card-sub" style="margin-bottom:8px;">Por cuenta (contraseña incorrecta) y por IP (última hora).</p>
+        <div class="table-wrap">
+          <table id="tablaSecFallidosCuenta">
+            <thead><tr><th>Usuario</th><th>Intentos</th><th>Bloqueada hasta</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty-note" id="notaSecFallidosCuentaVacia" style="display:none;">Sin intentos fallidos recientes por cuenta.</div>
+        </div>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table id="tablaSecFallidosIp">
+            <thead><tr><th>IP</th><th>Intentos (última hora)</th><th>Último intento</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty-note" id="notaSecFallidosIpVacia" style="display:none;">Sin intentos fallidos recientes por IP.</div>
+        </div>
+      </div>
+
+      <div class="sec-block">
+        <h3>Mapa de actividad — pestañas más usadas</h3>
+        <p class="card-sub" style="margin-bottom:8px;">Últimos 30 días, todos los usuarios.</p>
+        <div id="secMapaActividad"></div>
+        <div class="empty-note" id="notaSecMapaVacia" style="display:none;">Todavía no hay visitas registradas.</div>
+      </div>
+
+      <div class="sec-block sec-block-full">
+        <h3>Alertas activas</h3>
+        <div id="secAlertas"></div>
+        <div class="empty-note" id="notaSecAlertasVacia" style="display:none;">Sin alertas activas ahora mismo.</div>
+      </div>
+
+      <div class="sec-block sec-block-full">
+        <h3>Últimas 10 acciones de auditoría</h3>
+        <div class="table-wrap">
+          <table id="tablaSecAuditoria">
+            <thead><tr><th>Usuario</th><th>Acción</th><th>Detalle</th><th>Fecha</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="card">
     <h2>Solicitudes pendientes <span class="badge-count" id="countPendientes">0</span></h2>
@@ -547,6 +670,14 @@
     eliminar_alianza: 'Eliminar alianza/noticia',
     limpiar_auditoria: 'Limpiar logs de auditoría',
     usuario_eliminado: 'Eliminar usuario',
+    actividad_sospechosa: 'Actividad sospechosa',
+    ip_bloqueada: 'IP bloqueada',
+    login_dispositivo_nuevo: 'Login desde nuevo dispositivo',
+    password_restablecida: 'Contraseña restablecida',
+    solicitud_recuperacion_password: 'Solicitud de recuperación de contraseña',
+    analisis_avanzado: 'Análisis avanzado',
+    analisis_avanzado_error_guardado: 'Análisis avanzado (guardado con error)',
+    analisis_avanzado_reintento_guardado: 'Reintento de análisis avanzado guardado',
   };
 
   function detalleAuditoriaTexto(registro) {
@@ -568,6 +699,12 @@
         return escapeHtml(`${d.empresaAlarma || '—'} · ${d.socio || '—'}`);
       case 'usuario_eliminado':
         return escapeHtml(d.usuarioEliminado || '—');
+      case 'actividad_sospechosa':
+        return escapeHtml(`${d.ruta || '—'} (${d.intentos || '?'} intentos)`);
+      case 'ip_bloqueada':
+        return escapeHtml(`${d.ip || '—'} · ${d.intentos || '?'} intentos · hasta ${d.bloqueadaHasta ? new Date(d.bloqueadaHasta).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—'}`);
+      case 'login_dispositivo_nuevo':
+        return escapeHtml(`${d.ip || '—'} · ${d.userAgent || '—'}`);
       default:
         return escapeHtml(JSON.stringify(d));
     }
@@ -651,6 +788,107 @@
     $('notaActividadRetencionVacia').style.display = tbody.children.length ? 'none' : 'block';
   }
   $('btnCargarMasActividadRetencion').addEventListener('click', () => cargarActividadRetencion(actividadRetencionUltimoId));
+
+  /* ---------- Dashboard de seguridad ----------
+     Un unico endpoint agregado (/api/admin/security-dashboard) alimenta
+     todos los bloques de esta tarjeta; se recarga entero cada 20s mientras
+     la pagina esta abierta, mismo intervalo que "Actividad en tiempo real"
+     de Estadisticas en index.html. Reutiliza ETIQUETAS_ROL, ETIQUETAS_PESTANA,
+     ETIQUETAS_ACCION_AUDITORIA y detalleAuditoriaTexto ya definidos arriba. */
+
+  function formatearFechaHora(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
+  function formatearUptime(segundos) {
+    const s = Math.max(0, Math.round(segundos || 0));
+    const dias = Math.floor(s / 86400);
+    const horas = Math.floor((s % 86400) / 3600);
+    const min = Math.floor((s % 3600) / 60);
+    if (dias > 0) return `${dias}d ${horas}h`;
+    if (horas > 0) return `${horas}h ${min}min`;
+    return `${min}min`;
+  }
+
+  function renderTablaSec(idTabla, idVacia, filas, renderFila) {
+    const tbody = document.querySelector(`#${idTabla} tbody`);
+    tbody.innerHTML = '';
+    for (const f of filas) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = renderFila(f);
+      tbody.appendChild(tr);
+    }
+    if (idVacia) $(idVacia).style.display = filas.length ? 'none' : 'block';
+  }
+
+  async function cargarDashboardSeguridad() {
+    const { ok, datos } = await llamar('/api/admin/security-dashboard');
+    if (!ok) return; // silencioso: un fallo de refresco no debe interrumpir el resto del panel
+
+    const usuariosUnicos = new Set(datos.conectadosAhora.map(s => s.userId)).size;
+    $('secConectadosNum').textContent = usuariosUnicos;
+    $('secMemoria').textContent = `${datos.servidor.memoriaUsadaMB} MB`;
+    $('secUptime').textContent = formatearUptime(datos.servidor.tiempoActivoSegundos);
+    $('secBackup').textContent = datos.servidor.ultimoBackup
+      ? formatearFecha(datos.servidor.ultimoBackup.fecha)
+      : 'Sin backups aún';
+
+    renderTablaSec('tablaSecConectados', 'notaSecConectadosVacia', datos.conectadosAhora, (s) => `
+      <td>${escapeHtml(s.name || s.email) || '—'}</td>
+      <td><span class="pill pill-role-${s.role}">${ETIQUETAS_ROL[s.role] || s.role}</span></td>
+      <td>${escapeHtml(s.ip) || '—'}</td>
+      <td>${formatearFechaHora(s.createdAt)}</td>`);
+
+    renderTablaSec('tablaSecLogins', 'notaSecLoginsVacia', datos.ultimosLogins, (r) => `
+      <td>${escapeHtml(r.email) || '—'}</td>
+      <td>${formatearFechaHora(r.createdAt)}</td>
+      <td>${escapeHtml(r.ip) || '—'}</td>`);
+
+    renderTablaSec('tablaSecFallidosCuenta', 'notaSecFallidosCuentaVacia', datos.intentosFallidos.porCuenta, (u) => `
+      <td>${escapeHtml(u.name || u.email) || '—'}</td>
+      <td>${u.failed_attempts}</td>
+      <td>${u.locked_until && new Date(u.locked_until) > new Date() ? formatearFechaHora(u.locked_until) : '—'}</td>`);
+
+    renderTablaSec('tablaSecFallidosIp', 'notaSecFallidosIpVacia', datos.intentosFallidos.porIp, (r) => `
+      <td>${escapeHtml(r.ip) || '—'}</td>
+      <td>${r.intentos}</td>
+      <td>${formatearFechaHora(r.ultimo)}</td>`);
+
+    const mapaEl = $('secMapaActividad');
+    const pestanas = datos.actividadPestanas || [];
+    $('notaSecMapaVacia').style.display = pestanas.length ? 'none' : 'block';
+    const maxVisitas = pestanas.length ? Math.max(...pestanas.map(p => p.visitas)) : 0;
+    mapaEl.innerHTML = pestanas.map(p => `
+      <div class="sec-bar-row">
+        <div class="sec-bar-label">${escapeHtml(ETIQUETAS_PESTANA[p.tab] || p.tab)}</div>
+        <div class="sec-bar-track"><div class="sec-bar-fill" style="width:${maxVisitas ? Math.round((p.visitas / maxVisitas) * 100) : 0}%;"></div></div>
+        <div class="sec-bar-count">${p.visitas}</div>
+      </div>`).join('');
+
+    const alertasEl = $('secAlertas');
+    const items = [];
+    for (const b of datos.alertas.ipsBloqueadas) {
+      items.push(`<div class="alert-item alert-danger"><span class="alert-icon">🚫</span> IP <strong>${escapeHtml(b.ip)}</strong> bloqueada hasta ${formatearFechaHora(b.blocked_until)}</div>`);
+    }
+    for (const c of datos.alertas.cuentasBloqueadas) {
+      items.push(`<div class="alert-item alert-danger"><span class="alert-icon">🔒</span> Cuenta <strong>${escapeHtml(c.name || c.email)}</strong> bloqueada hasta ${formatearFechaHora(c.locked_until)}</div>`);
+    }
+    for (const a of datos.alertas.actividadSospechosa) {
+      const d = a.detail && typeof a.detail === 'object' ? a.detail : {};
+      items.push(`<div class="alert-item alert-warn"><span class="alert-icon">⚠️</span> Acceso no autorizado de <strong>${escapeHtml(a.email) || 'desconocido'}</strong> a ${escapeHtml(d.ruta) || '—'} (${d.intentos || '?'} intentos) · ${formatearFechaHora(a.createdAt)}</div>`);
+    }
+    alertasEl.innerHTML = items.join('');
+    $('notaSecAlertasVacia').style.display = items.length ? 'none' : 'block';
+
+    // Vista compacta de las ultimas acciones; la tabla completa con
+    // paginacion sigue mas abajo en "Panel de auditoría".
+    renderTablaSec('tablaSecAuditoria', null, datos.auditoriaReciente, (r) => `
+      <td>${escapeHtml(r.email) || '—'}</td>
+      <td>${escapeHtml(ETIQUETAS_ACCION_AUDITORIA[r.action] || r.action)}</td>
+      <td class="wrap-cell">${detalleAuditoriaTexto(r)}</td>
+      <td>${formatearFechaHora(r.createdAt)}</td>`);
+  }
 
   /* ---------- Zona de peligro: resetear datos de prueba ---------- */
   function abrirModalResetDatos() {
@@ -749,7 +987,8 @@
 
   (async () => {
     if (!(await comprobarSesion())) return;
-    await Promise.all([cargarSolicitudes(), cargarUsuarios(), cargarAuditoria(), cargarActividadRetencion()]);
+    await Promise.all([cargarDashboardSeguridad(), cargarSolicitudes(), cargarUsuarios(), cargarAuditoria(), cargarActividadRetencion()]);
+    setInterval(cargarDashboardSeguridad, 20000);
   })();
 </script>
 </body>

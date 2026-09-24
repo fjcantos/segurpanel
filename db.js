@@ -1209,6 +1209,122 @@ function actividadTiempoReal() {
     .all();
 }
 
+/* ---------- Dashboard de seguridad (panel Super Admin, /admin) ----------
+   Consultas de solo lectura que agregan datos ya recogidos por otras partes
+   del sistema (sesiones, intentos de login, tab_visits, audit_log) en la
+   forma que necesita el panel "Dashboard de seguridad": nada de esto crea
+   tablas nuevas. */
+
+// Sesiones activas AHORA MISMO (no revocadas y sin caducar): una fila por
+// sesion, no por usuario (si alguien tiene dos dispositivos abiertos, sale
+// dos veces) — mismo criterio de validez que usa auth.js al comprobar una
+// sesion existente.
+function sesionesActivasAhora() {
+  return db
+    .prepare(
+      `SELECT s.id, s.created_at, s.expires_at, s.ip, s.user_agent,
+              u.id AS user_id, u.email, u.name, u.role
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.revoked = 0 AND s.expires_at > ?
+       ORDER BY s.created_at DESC`
+    )
+    .all(ahoraISO());
+}
+
+// Ultimos inicios de sesion con exito, haya seguido activa la sesion o no
+// (accion 'login' del audit_log; 'login_dispositivo_nuevo' se registra
+// ADEMAS de 'login', asi que no se incluye aqui para no duplicar filas).
+function ultimosLogins(limit = 10) {
+  const tope = Math.min(Math.max(Number(limit) || 10, 1), 50);
+  return db.prepare("SELECT * FROM audit_log WHERE action = 'login' ORDER BY id DESC LIMIT ?").all(tope);
+}
+
+// Cuentas con intentos fallidos de contraseña recientes (aunque ya no esten
+// bloqueadas): failed_attempts es la misma columna que actualizan
+// registrarIntentoFallido/limpiarIntentosFallidos.
+function cuentasConIntentosFallidos() {
+  return db
+    .prepare(
+      `SELECT id, email, name, failed_attempts, locked_until
+       FROM users
+       WHERE failed_attempts > 0
+       ORDER BY failed_attempts DESC, updated_at DESC
+       LIMIT 20`
+    )
+    .all();
+}
+
+// IPs con intentos de login fallidos en la ultima hora, agregadas (ver
+// registrarIntentoFallidoIP): senal de "quien esta probando contraseñas
+// ahora mismo" aunque no haya llegado a activarse un bloqueo.
+function ipsConIntentosFallidosRecientes() {
+  const desde = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT ip, COUNT(*) AS intentos, MAX(created_at) AS ultimo
+       FROM ip_login_attempts
+       WHERE created_at > ?
+       GROUP BY ip
+       ORDER BY intentos DESC
+       LIMIT 20`
+    )
+    .all(desde);
+}
+
+// IPs bloqueadas ahora mismo (mismo criterio que ipBloqueadaHasta, pero
+// listando todas las que haya en vez de comprobar una sola).
+function ipsBloqueadasActivas() {
+  return db
+    .prepare(
+      `SELECT ip, MAX(blocked_until) AS blocked_until
+       FROM ip_blocks
+       WHERE blocked_until > ?
+       GROUP BY ip
+       ORDER BY blocked_until DESC`
+    )
+    .all(ahoraISO());
+}
+
+// Cuentas bloqueadas ahora mismo por 5 intentos fallidos seguidos (ver
+// registrarIntentoFallido: UMBRAL_BLOQUEO/MINUTOS_BLOQUEO).
+function cuentasBloqueadasActivas() {
+  return db
+    .prepare(
+      `SELECT id, email, name, locked_until
+       FROM users
+       WHERE locked_until IS NOT NULL AND locked_until > ?
+       ORDER BY locked_until DESC`
+    )
+    .all(ahoraISO());
+}
+
+// Intentos recientes de acceder a una pestaña/accion sin permiso (ver
+// notificarActividadSospechosaSegura en server.js), para la seccion de
+// alertas del dashboard.
+function actividadSospechosaReciente(limit = 10) {
+  const tope = Math.min(Math.max(Number(limit) || 10, 1), 50);
+  return db.prepare("SELECT * FROM audit_log WHERE action = 'actividad_sospechosa' ORDER BY id DESC LIMIT ?").all(tope);
+}
+
+// Visitas por pestaña en los ultimos `dias` dias, agregadas por pestaña
+// (para el "mapa de actividad" del dashboard: que pestañas se usan mas,
+// independientemente de quien las use). A diferencia de
+// conteoVisitasPorUsuarioYTab (agrupado tambien por usuario, para
+// Estadisticas), aqui solo interesa el total por pestaña.
+function conteoVisitasPorTab(dias = 30) {
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT tab, COUNT(*) AS visitas
+       FROM tab_visits
+       WHERE created_at > ?
+       GROUP BY tab
+       ORDER BY visitas DESC`
+    )
+    .all(desde);
+}
+
 /* ---------- Logs de auditoria ---------- */
 //
 // Registra acciones importantes (login, logout, analisis de contrato,
@@ -1365,6 +1481,14 @@ module.exports = {
   alternarVigilanciaEmpresa,
   borrarNotasEmpresas,
   actividadTiempoReal,
+  sesionesActivasAhora,
+  ultimosLogins,
+  cuentasConIntentosFallidos,
+  ipsConIntentosFallidosRecientes,
+  ipsBloqueadasActivas,
+  cuentasBloqueadasActivas,
+  actividadSospechosaReciente,
+  conteoVisitasPorTab,
   registrarAuditoria,
   listarAuditoria,
   borrarAuditoria,
