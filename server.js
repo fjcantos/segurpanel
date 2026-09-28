@@ -3290,6 +3290,68 @@ async function apiOfertasSync(req, res) {
   enviarJSON(res, 200, { insertadas: count, recibidas: lista.length, validas: validas.length });
 }
 
+/* ================================================================
+   API: ping de ejecucion diaria de los scrapers (reporte 09:00)
+   ================================================================ */
+//
+// POST /api/scrapers/reporte: endpoint dedicado SOLO a avisar "el scraper
+// se ha ejecutado hoy" para el reporte diario por email de las 09:00 (ver
+// reportes.js), independiente del endpoint que cada scraper use para los
+// datos en si (/api/alianzas/sync, /api/alianzas/nueva o
+// /api/ofertas/sync). Hace falta porque /api/alianzas/nueva no admite
+// envios vacios ni registra la ejecucion (ver apiAlianzasNueva mas abajo):
+// sin este ping, un dia sin alianzas nuevas se veia en el reporte como "no
+// se ejecuto" en vez de "se ejecuto sin novedades". Se llama SIEMPRE, tenga
+// o no el scraper algo nuevo que enviar. Autenticacion identica a
+// /api/alianzas/sync y /api/ofertas/sync: header X-Scraper-Token frente a
+// SCRAPER_TOKEN.
+//
+// Cuerpo esperado: { scraper: "precios"|"alianzas", estado: "ok"|"error",
+// encontradas, enviadas, hora_ejecucion }. "precios" se guarda como tipo
+// "ofertas" en `scraper_runs`, que es como lo guarda historicamente
+// apiOfertasSync (misma tabla, mismo bloque en el email de reportes.js).
+
+const SCRAPERS_REPORTE_VALIDOS = new Map([
+  ["alianzas", "alianzas"],
+  ["precios", "ofertas"],
+]);
+
+async function apiScrapersReporte(req, res) {
+  const tokenEsperado = process.env.SCRAPER_TOKEN;
+  if (!tokenEsperado) {
+    return enviarJSON(res, 503, {
+      error: "El servidor no tiene configurada la variable de entorno SCRAPER_TOKEN.",
+    });
+  }
+  const tokenRecibido = req.headers["x-scraper-token"];
+  if (tokenRecibido !== tokenEsperado) {
+    return enviarJSON(res, 401, { error: "Token de scraper inválido." });
+  }
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const tipo = SCRAPERS_REPORTE_VALIDOS.get(cuerpo.scraper);
+  if (!tipo) {
+    return enviarJSON(res, 400, { error: 'El campo "scraper" debe ser "precios" o "alianzas".' });
+  }
+  if (cuerpo.estado !== "ok" && cuerpo.estado !== "error") {
+    return enviarJSON(res, 400, { error: 'El campo "estado" debe ser "ok" o "error".' });
+  }
+
+  const encontradas = Number.isFinite(cuerpo.encontradas) ? cuerpo.encontradas : 0;
+  const enviadas = Number.isFinite(cuerpo.enviadas) ? cuerpo.enviadas : 0;
+  const horaEjecucion = new Date(cuerpo.hora_ejecucion);
+  const creadoEn = Number.isNaN(horaEjecucion.getTime()) ? undefined : horaEjecucion.toISOString();
+
+  db.registrarEjecucionScraper({ tipo, encontradas, enviadas, estado: cuerpo.estado, creadoEn });
+  enviarJSON(res, 200, { ok: true });
+}
+
 // ---------------------------------------------------------------
 // POST /api/alianzas/nueva: variante de ingesta pensada para el scraper de
 // la Raspberry Pi tal y como esta escrito hoy: un array JSON con todas las
@@ -3688,6 +3750,7 @@ async function manejarPeticion(req, res) {
 
     if (req.method === "GET" && ruta === "/api/ofertas") return await apiOfertasGet(req, res);
     if (req.method === "POST" && ruta === "/api/ofertas/sync") return await apiOfertasSync(req, res);
+    if (req.method === "POST" && ruta === "/api/scrapers/reporte") return await apiScrapersReporte(req, res);
 
     if (esLectura && ESTATICOS_PERMITIDOS.has(ruta)) return await servirEstatico(ruta, res);
 
@@ -3739,7 +3802,7 @@ servidor.listen(PORT, () => {
 
   if (!process.env.SCRAPER_TOKEN) {
     console.warn(
-      "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync y POST /api/ofertas/sync (usados por scraper_alianzas.py y scraper_precios.py en la Raspberry Pi) rechazarán todas las peticiones hasta que la definas."
+      "AVISO: SCRAPER_TOKEN no está configurada. POST /api/alianzas/sync, POST /api/ofertas/sync y POST /api/scrapers/reporte (usados por scraper_alianzas.py y scraper_precios.py en la Raspberry Pi) rechazarán todas las peticiones hasta que la definas."
     );
   }
 

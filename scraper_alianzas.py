@@ -39,16 +39,15 @@ Comportamiento:
   - Si hay alianzas nuevas, las envía a SegurPanel (POST /api/alianzas/sync)
     para que entren como pendientes de revisión del Super Admin, que activa
     el punto rojo de notificación en la pestaña "Alianzas".
-  - SIEMPRE llama a /api/alianzas/sync al final de la ejecución, aunque no
-    haya ninguna alianza nueva que enviar (con la lista vacía) o aunque la
-    búsqueda haya fallado con un error inesperado: es la única forma que
-    tiene el servidor de saber que el scraper se ejecutó hoy, para el reporte
-    diario por email de las 09:00 (ver DOCUMENTACION.md). Junto al envío se
-    informa también de "scraper" ("alianzas"), "estado" ("ok" o "error"),
-    "encontradas" (total detectado esta ejecución), "enviadas" (nº de
-    alianzas en este envío), "hora_ejecucion" (timestamp) y de los avisos no
-    fatales (p.ej. Google News sin responder para alguna empresa), aunque no
-    se hayan enviado alianzas.
+  - Al final de la ejecución, SIEMPRE llama a POST /api/scrapers/reporte con
+    "scraper" ("alianzas"), "estado" ("ok" o "error"), "encontradas" (total
+    detectado esta ejecución), "enviadas" (nº de alianzas sincronizadas con
+    éxito) y "hora_ejecucion" (timestamp): es la única forma que tiene el
+    servidor de saber que el scraper se ejecutó hoy, para el reporte diario
+    por email de las 09:00 (ver DOCUMENTACION.md). Este ping es independiente
+    de si hay alianzas nuevas que enviar y de si SEGURPANEL_SYNC_URL apunta a
+    /api/alianzas/sync o a /api/alianzas/nueva (que no acepta envíos vacíos
+    ni registra la ejecución por sí mismo).
   - Si SegurPanel no está configurado (o no responde), las nuevas alianzas
     quedan igualmente guardadas en el cache local y se reintentará el envío
     en la siguiente ejecución (se vuelven a considerar "nuevas" hasta que
@@ -650,6 +649,52 @@ def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None, estado=
         return False
 
 
+def _url_reporte_diario(url):
+    """Deriva la URL de POST /api/scrapers/reporte a partir de
+    SEGURPANEL_SYNC_URL, quedandose solo con su esquema y host: el ping del
+    reporte diario tiene que llegar siempre, sea /api/alianzas/sync o
+    /api/alianzas/nueva el endpoint de datos configurado en esta máquina."""
+    partes = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((partes.scheme, partes.netloc, "/api/scrapers/reporte", "", ""))
+
+
+def enviar_reporte_diario(encontradas, enviadas, estado):
+    """Envia SIEMPRE el ping de ejecución a POST /api/scrapers/reporte,
+    independientemente de si SEGURPANEL_SYNC_URL apunta a /api/alianzas/sync
+    o a /api/alianzas/nueva y de si esa llamada ha tenido algo que enviar:
+    es la señal que usa el reporte diario por email de las 09:00 para saber
+    que el scraper se ha ejecutado hoy (ver /api/scrapers/reporte en
+    server.js). Requiere que SEGURPANEL_SCRAPER_TOKEN (o su alias
+    SEGURPANEL_TOKEN) coincida con el SCRAPER_TOKEN configurado en el
+    servidor, el mismo secreto que usa scraper_precios.py para
+    /api/ofertas/sync. Es best-effort: un fallo aquí solo se registra en el
+    log, nunca interrumpe la ejecución."""
+    if not SYNC_URL or not SYNC_TOKEN:
+        return
+
+    payload = {
+        "scraper": "alianzas",
+        "estado": estado,
+        "encontradas": encontradas,
+        "enviadas": enviadas,
+        "hora_ejecucion": datetime.now(timezone.utc).isoformat(),
+    }
+    req = urllib.request.Request(
+        _url_reporte_diario(SYNC_URL),
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Scraper-Token": SYNC_TOKEN},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+            respuesta = json.loads(resp.read().decode("utf-8"))
+            log("ok", f"SegurPanel confirmó el reporte diario: {respuesta}")
+    except urllib.error.HTTPError as e:
+        log("error", f"SegurPanel rechazó el reporte diario (HTTP {e.code}): {e.read().decode('utf-8', 'ignore')}", archivo=sys.stderr)
+    except (urllib.error.URLError, TimeoutError) as e:
+        log("error", f"No se pudo contactar con SegurPanel para el reporte diario: {e}", archivo=sys.stderr)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -752,13 +797,19 @@ def main():
     if not nuevas:
         log("info", "Sin cambios respecto a ejecuciones anteriores: se avisa a SegurPanel igualmente (lista vacía) para el reporte diario.")
 
-    # Se llama SIEMPRE, aunque `nuevas` este vacia o haya fallado la busqueda
-    # (estado="error"): es la senal que usa SegurPanel para saber que el
-    # scraper se ha ejecutado hoy (ver db.registrarEjecucionScraper en el
-    # servidor).
     enviado_ok = sincronizar_con_segurpanel(nuevas, encontradas=len(todas_detectadas), errores=ERRORES_EJECUCION, estado=estado)
     if nuevas and enviado_ok:
         enviados.update(a["externalId"] for a in nuevas)
+
+    # Se llama SIEMPRE (aunque `nuevas` este vacia, haya fallado la busqueda,
+    # o SEGURPANEL_SYNC_URL apunte a /api/alianzas/nueva, que no acepta
+    # envios vacios): es la senal que usa el reporte diario de las 09:00 para
+    # saber que el scraper se ha ejecutado hoy (ver /api/scrapers/reporte).
+    enviar_reporte_diario(
+        encontradas=len(todas_detectadas),
+        enviadas=len(nuevas) if enviado_ok else 0,
+        estado=estado,
+    )
 
     vistos.update(a["externalId"] for a in todas_detectadas)
     guardar_cache({"vistos": list(vistos), "enviados": list(enviados)})

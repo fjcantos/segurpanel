@@ -398,9 +398,12 @@ async function enviarEmailActividadSospechosa({ usuario, ruta, intentos, ip, fec
    ================================================================ */
 //
 // `alianzas` y `ofertas` son, cada uno, o bien null (el scraper no ha
-// llamado ni una sola vez hoy a /api/alianzas/sync o /api/ofertas/sync,
-// ver db.ultimaEjecucionScraperHoy) o bien la fila de scraper_runs de su
-// ULTIMA ejecucion de hoy: { encontradas, enviadas, errores, created_at }.
+// llamado ni una sola vez hoy a /api/alianzas/sync, /api/ofertas/sync o
+// /api/scrapers/reporte, ver db.ultimaEjecucionScraperHoy) o bien la fila de
+// scraper_runs de su ULTIMA ejecucion de hoy: { encontradas, enviadas,
+// errores, estado, created_at }. `estado` ("ok"/"error") lo manda el propio
+// scraper y se trata como incidencia igual que `errores`, aunque venga sin
+// texto de error (p.ej. una excepcion inesperada que no dejo avisar()).
 
 function bloqueEjecucionScraperHtml(titulo, ejecucion) {
   if (!ejecucion) {
@@ -413,8 +416,9 @@ function bloqueEjecucionScraperHtml(titulo, ejecucion) {
 
   const hora = new Date(ejecucion.created_at).toLocaleString("es-ES", { timeStyle: "short" });
   const errores = ejecucion.errores ? ejecucion.errores.split("\n").filter(Boolean) : [];
-  const colorBorde = errores.length ? "#c0392b" : "#2e8b57";
-  const fondoBloque = errores.length ? "#fdf1f1" : "#f2faf5";
+  const hayIncidencia = ejecucion.estado === "error" || errores.length > 0;
+  const colorBorde = hayIncidencia ? "#c0392b" : "#2e8b57";
+  const fondoBloque = hayIncidencia ? "#fdf1f1" : "#f2faf5";
 
   return `
     <div style="margin:0 0 20px;padding:14px 16px;background:${fondoBloque};border-left:4px solid ${colorBorde};border-radius:6px;">
@@ -423,6 +427,8 @@ function bloqueEjecucionScraperHtml(titulo, ejecucion) {
       ${
         errores.length
           ? `<p style="margin:8px 0 2px;color:#c0392b;font-size:13px;font-weight:700;">Errores durante la ejecución:</p>${listaHtml(errores)}`
+          : ejecucion.estado === "error"
+          ? `<p style="margin:0;color:#c0392b;font-size:13px;">Se ejecutó con un error inesperado (sin más detalle disponible).</p>`
           : `<p style="margin:0;color:#2e8b57;font-size:13px;">Sin errores.</p>`
       }
     </div>`;
@@ -430,7 +436,8 @@ function bloqueEjecucionScraperHtml(titulo, ejecucion) {
 
 function construirHtmlReporteDiario({ fecha, alianzas, ofertas }) {
   const fechaTexto = new Date(fecha || Date.now()).toLocaleString("es-ES", { dateStyle: "long" });
-  const todoOk = !!alianzas && !!ofertas && !alianzas.errores && !ofertas.errores;
+  const sinIncidencias = (e) => !!e && e.estado !== "error" && !e.errores;
+  const todoOk = sinIncidencias(alianzas) && sinIncidencias(ofertas);
   const badge = todoOk
     ? `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#2e8b57;color:#fff;font-size:12px;font-weight:700;">OK</span>`
     : `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#c0392b;color:#fff;font-size:12px;font-weight:700;">CON INCIDENCIAS</span>`;

@@ -226,6 +226,7 @@ db.exec(`
     encontradas   INTEGER NOT NULL DEFAULT 0,
     enviadas      INTEGER NOT NULL DEFAULT 0,
     errores       TEXT,
+    estado        TEXT NOT NULL DEFAULT 'ok',
     created_at    TEXT NOT NULL
   );
 
@@ -273,6 +274,9 @@ if (!columnaExiste("tab_visits", "duration_seconds")) {
 }
 if (!columnaExiste("tab_visits", "copy_intentos")) {
   db.exec("ALTER TABLE tab_visits ADD COLUMN copy_intentos INTEGER NOT NULL DEFAULT 0");
+}
+if (!columnaExiste("scraper_runs", "estado")) {
+  db.exec("ALTER TABLE scraper_runs ADD COLUMN estado TEXT NOT NULL DEFAULT 'ok'");
 }
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
@@ -776,11 +780,18 @@ function fechaUltimaOferta() {
 
 /* ---------- Ejecuciones de los scrapers (reporte diario 09:00) ---------- */
 
-function registrarEjecucionScraper({ tipo, encontradas, enviadas, errores }) {
+function registrarEjecucionScraper({ tipo, encontradas, enviadas, errores, estado, creadoEn }) {
   db.prepare(
-    `INSERT INTO scraper_runs (tipo, encontradas, enviadas, errores, created_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(tipo, Number(encontradas) || 0, Number(enviadas) || 0, errores || null, ahoraISO());
+    `INSERT INTO scraper_runs (tipo, encontradas, enviadas, errores, estado, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    tipo,
+    Number(encontradas) || 0,
+    Number(enviadas) || 0,
+    errores || null,
+    estado === "error" ? "error" : "ok",
+    creadoEn || ahoraISO()
+  );
 }
 
 // Ultima ejecucion de HOY (dia calendario UTC, igual que ahoraISO()) de este
