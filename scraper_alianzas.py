@@ -40,12 +40,15 @@ Comportamiento:
     para que entren como pendientes de revisión del Super Admin, que activa
     el punto rojo de notificación en la pestaña "Alianzas".
   - SIEMPRE llama a /api/alianzas/sync al final de la ejecución, aunque no
-    haya ninguna alianza nueva que enviar (con la lista vacía): es la única
-    forma que tiene el servidor de saber que el scraper se ejecutó hoy, para
-    el reporte diario por email de las 09:00 (ver DOCUMENTACION.md). Junto al
-    envío se informa también de cuántas alianzas se detectaron en total esta
-    ejecución y de los avisos no fatales (p.ej. Google News sin responder
-    para alguna empresa), aunque no se hayan enviado alianzas.
+    haya ninguna alianza nueva que enviar (con la lista vacía) o aunque la
+    búsqueda haya fallado con un error inesperado: es la única forma que
+    tiene el servidor de saber que el scraper se ejecutó hoy, para el reporte
+    diario por email de las 09:00 (ver DOCUMENTACION.md). Junto al envío se
+    informa también de "scraper" ("alianzas"), "estado" ("ok" o "error"),
+    "encontradas" (total detectado esta ejecución), "enviadas" (nº de
+    alianzas en este envío), "hora_ejecucion" (timestamp) y de los avisos no
+    fatales (p.ej. Google News sin responder para alguna empresa), aunque no
+    se hayan enviado alianzas.
   - Si SegurPanel no está configurado (o no responde), las nuevas alianzas
     quedan igualmente guardadas en el cache local y se reintentará el envío
     en la siguiente ejecución (se vuelven a considerar "nuevas" hasta que
@@ -53,6 +56,9 @@ Comportamiento:
   - Cada ejecución normal también vuelca TODAS las alianzas detectadas (sean
     novedad o no) en ALIANZAS_JSON, que sirve de base para --force-send y
     --test.
+  - Cada línea de log se imprime con fecha y hora (formato
+    "[2026-09-28 06:00:01] [info] mensaje"), para poder saber cuándo pasó
+    cada cosa al revisar el log de cron.
 
 Argumentos de línea de comandos:
   --force-send  No hace ninguna búsqueda nueva: envía a SegurPanel todas las
@@ -243,10 +249,19 @@ MAX_ERRORES_REPORTADOS = 20  # tope de avisos que se envian a SegurPanel por eje
 ERRORES_EJECUCION = []
 
 
+def log(nivel, mensaje, archivo=None):
+    """Imprime `mensaje` con fecha y hora, p.ej.
+    «[2026-09-28 06:00:01] [info] mensaje». Usado por todos los mensajes del
+    script para que el log en disco (cron > archivo.log) registre tambien
+    cuando pasó cada cosa, no solo qué pasó."""
+    marca = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{marca}] [{nivel}] {mensaje}", file=archivo or sys.stdout)
+
+
 def avisar(mensaje):
     """Registra un aviso no fatal: lo imprime en stderr (como antes) y lo
     guarda para incluirlo en el proximo envio a SegurPanel."""
-    print(f"[aviso] {mensaje}", file=sys.stderr)
+    log("aviso", mensaje, archivo=sys.stderr)
     if len(ERRORES_EJECUCION) < MAX_ERRORES_REPORTADOS:
         ERRORES_EJECUCION.append(mensaje)
 
@@ -558,16 +573,21 @@ def _alianza_a_formato_nueva(a):
     }
 
 
-def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None):
+def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None, estado="ok"):
     """Envia `alianzas` a SEGURPANEL_SYNC_URL, adaptando el formato del
     cuerpo al endpoint de destino:
 
     - /api/alianzas/sync: cuerpo {"alianzas": [...]}  (camelCase, tal cual
-      genera este scraper) junto con los metadatos opcionales `encontradas`
-      (total detectado en esta ejecucion, antes de filtrar lo ya conocido) y
-      `errores` (avisos no fatales recogidos durante la busqueda). Acepta una
-      lista vacia: sirve igualmente de aviso de "el scraper se ha ejecutado
-      hoy" para el reporte diario de SegurPanel.
+      genera este scraper) junto con los metadatos que necesita el reporte
+      diario de las 09:00 para saber, aunque no haya alianzas nuevas, que el
+      scraper se ha ejecutado hoy correctamente: `scraper` (nombre fijo
+      "alianzas"), `estado` ("ok" o "error", ver main()), `encontradas`
+      (total detectado en esta ejecucion, antes de filtrar lo ya conocido),
+      `enviadas` (numero de alianzas en este envio) y `hora_ejecucion`
+      (timestamp ISO de este intento). `errores` (avisos no fatales
+      recogidos durante la busqueda) se incluye solo si hay alguno. Acepta
+      una lista vacia de alianzas: sirve igualmente de aviso de "el scraper
+      se ha ejecutado hoy" para el reporte diario de SegurPanel.
     - /api/alianzas/nueva: cuerpo = array JSON en snake_case (ver
       _alianza_a_formato_nueva), sin envolver y sin los metadatos anteriores
       (ese endpoint no los admite ni registra la ejecucion diaria del
@@ -575,22 +595,27 @@ def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None):
       hay alianzas nuevas no se envia peticion alguna.
     """
     if not SYNC_URL or not SYNC_TOKEN:
-        print("[info] SEGURPANEL_SYNC_URL / SEGURPANEL_SCRAPER_TOKEN no configurados: "
-              "las alianzas nuevas se han guardado en el cache local pero no se han enviado.")
+        log("info", "SEGURPANEL_SYNC_URL / SEGURPANEL_SCRAPER_TOKEN no configurados: "
+            "las alianzas nuevas se han guardado en el cache local pero no se han enviado.")
         return False
 
     es_nueva = _url_es_alianzas_nueva(SYNC_URL)
 
     if es_nueva:
         if not alianzas:
-            print("[info] Sin alianzas nuevas: no se envía nada a /api/alianzas/nueva "
-                  "(ese endpoint no acepta envíos vacíos ni registra la ejecución diaria del scraper).")
+            log("info", "Sin alianzas nuevas: no se envía nada a /api/alianzas/nueva "
+                "(ese endpoint no acepta envíos vacíos ni registra la ejecución diaria del scraper).")
             return True
         cuerpo = json.dumps([_alianza_a_formato_nueva(a) for a in alianzas]).encode("utf-8")
     else:
-        payload = {"alianzas": alianzas}
-        if encontradas is not None:
-            payload["encontradas"] = encontradas
+        payload = {
+            "alianzas": alianzas,
+            "scraper": "alianzas",
+            "estado": estado,
+            "encontradas": encontradas if encontradas is not None else len(alianzas),
+            "enviadas": len(alianzas),
+            "hora_ejecucion": datetime.now(timezone.utc).isoformat(),
+        }
         if errores:
             payload["errores"] = errores
         cuerpo = json.dumps(payload).encode("utf-8")
@@ -615,13 +640,13 @@ def sincronizar_con_segurpanel(alianzas, encontradas=None, errores=None):
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
             respuesta = json.loads(resp.read().decode("utf-8"))
-            print(f"[ok] SegurPanel confirmó la sincronización: {respuesta}")
+            log("ok", f"SegurPanel confirmó la sincronización: {respuesta}")
             return True
     except urllib.error.HTTPError as e:
-        print(f"[error] SegurPanel rechazó la sincronización (HTTP {e.code}): {e.read().decode('utf-8', 'ignore')}", file=sys.stderr)
+        log("error", f"SegurPanel rechazó la sincronización (HTTP {e.code}): {e.read().decode('utf-8', 'ignore')}", archivo=sys.stderr)
         return False
     except (urllib.error.URLError, TimeoutError) as e:
-        print(f"[error] No se pudo contactar con SegurPanel: {e}", file=sys.stderr)
+        log("error", f"No se pudo contactar con SegurPanel: {e}", archivo=sys.stderr)
         return False
 
 
@@ -655,16 +680,17 @@ def parsear_argumentos():
 def enviar_desde_archivo(solo_prueba):
     alianzas_guardadas = cargar_alianzas_json()
     if not alianzas_guardadas:
-        print(
-            f"[error] No hay alianzas guardadas en {ALIANZAS_JSON}. "
+        log(
+            "error",
+            f"No hay alianzas guardadas en {ALIANZAS_JSON}. "
             "Ejecuta el scraper una vez sin --force-send/--test para generarlo.",
-            file=sys.stderr,
+            archivo=sys.stderr,
         )
         return False
 
     a_enviar = alianzas_guardadas[:NUM_ALIANZAS_TEST] if solo_prueba else alianzas_guardadas
     etiqueta = f"prueba de conexión ({len(a_enviar)} primeras)" if solo_prueba else "reenvío forzado"
-    print(f"[info] {etiqueta}: enviando {len(a_enviar)} de {len(alianzas_guardadas)} alianzas guardadas en {ALIANZAS_JSON}.")
+    log("info", f"{etiqueta}: enviando {len(a_enviar)} de {len(alianzas_guardadas)} alianzas guardadas en {ALIANZAS_JSON}.")
     return sincronizar_con_segurpanel(a_enviar)
 
 
@@ -679,17 +705,29 @@ def main():
     vistos = set(cache["vistos"])
     enviados = set(cache["enviados"])
 
+    # `estado` viaja con el ping a SegurPanel para que el reporte diario
+    # distinga "se ejecutó sin novedades" de "se ejecutó pero algo rompió".
+    # Se atrapa cualquier excepcion (no solo las ya controladas dentro de
+    # buscar_en_google_news/buscar_en_sala_prensa/buscar_en_fuente_adicional)
+    # para que un fallo inesperado no impida llegar a
+    # sincronizar_con_segurpanel() mas abajo: sin ese ping, el reporte de las
+    # 09:00 no distinguiria "fallo" de "no se ejecuto".
+    estado = "ok"
     todas_detectadas = []
-    for alarma in ALARM_COMPANIES:
-        todas_detectadas.extend(buscar_en_google_news(alarma))
-        time.sleep(REQUEST_DELAY_SEGUNDOS)
-        for url_pagina in SALAS_PRENSA.get(alarma, []):
-            todas_detectadas.extend(buscar_en_sala_prensa(alarma, url_pagina))
+    try:
+        for alarma in ALARM_COMPANIES:
+            todas_detectadas.extend(buscar_en_google_news(alarma))
             time.sleep(REQUEST_DELAY_SEGUNDOS)
+            for url_pagina in SALAS_PRENSA.get(alarma, []):
+                todas_detectadas.extend(buscar_en_sala_prensa(alarma, url_pagina))
+                time.sleep(REQUEST_DELAY_SEGUNDOS)
 
-    for nombre_fuente, dominio in FUENTES_ADICIONALES.items():
-        todas_detectadas.extend(buscar_en_fuente_adicional(nombre_fuente, dominio))
-        time.sleep(REQUEST_DELAY_SEGUNDOS)
+        for nombre_fuente, dominio in FUENTES_ADICIONALES.items():
+            todas_detectadas.extend(buscar_en_fuente_adicional(nombre_fuente, dominio))
+            time.sleep(REQUEST_DELAY_SEGUNDOS)
+    except Exception as e:
+        estado = "error"
+        avisar(f"Fallo inesperado durante la búsqueda de alianzas: {e}")
 
     # Deduplicar dentro de esta misma ejecución (misma alianza vista por
     # varias fuentes o varias veces en el RSS).
@@ -699,21 +737,26 @@ def main():
     todas_detectadas = list(por_id.values())
 
     # Volcado completo (novedad o no): es lo que leen --force-send y --test.
-    guardar_alianzas_json(todas_detectadas)
+    try:
+        guardar_alianzas_json(todas_detectadas)
+    except OSError as e:
+        estado = "error"
+        avisar(f"No se pudo guardar {ALIANZAS_JSON}: {e}")
 
     # "Cambios respecto al día anterior": lo que no estaba ya en el cache de
     # ejecuciones previas, o que sí estaba pero aún no se había podido enviar
     # con éxito a SegurPanel (reintento).
     nuevas = [a for a in todas_detectadas if a["externalId"] not in vistos or a["externalId"] not in enviados]
 
-    print(f"[info] {len(todas_detectadas)} alianzas detectadas en total, {len(nuevas)} nuevas o pendientes de envío.")
+    log("info", f"{len(todas_detectadas)} alianzas detectadas en total, {len(nuevas)} nuevas o pendientes de envío.")
     if not nuevas:
-        print("[info] Sin cambios respecto a ejecuciones anteriores: se avisa a SegurPanel igualmente (lista vacía) para el reporte diario.")
+        log("info", "Sin cambios respecto a ejecuciones anteriores: se avisa a SegurPanel igualmente (lista vacía) para el reporte diario.")
 
-    # Se llama SIEMPRE, aunque `nuevas` este vacia: es la senal que usa
-    # SegurPanel para saber que el scraper se ha ejecutado hoy (ver
-    # db.registrarEjecucionScraper en el servidor).
-    enviado_ok = sincronizar_con_segurpanel(nuevas, encontradas=len(todas_detectadas), errores=ERRORES_EJECUCION)
+    # Se llama SIEMPRE, aunque `nuevas` este vacia o haya fallado la busqueda
+    # (estado="error"): es la senal que usa SegurPanel para saber que el
+    # scraper se ha ejecutado hoy (ver db.registrarEjecucionScraper en el
+    # servidor).
+    enviado_ok = sincronizar_con_segurpanel(nuevas, encontradas=len(todas_detectadas), errores=ERRORES_EJECUCION, estado=estado)
     if nuevas and enviado_ok:
         enviados.update(a["externalId"] for a in nuevas)
 
