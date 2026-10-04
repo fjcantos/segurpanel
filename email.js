@@ -581,6 +581,25 @@ async function enviarEmailSolicitudAcceso({ correo, name, message, enlaceAdmin }
   }
 }
 
+// Envío genérico: permite enviar cualquier email puntual sin necesitar una
+// función específica por cada caso (p.ej. avisos de login al super_admin).
+async function enviarEmailGenerico({ para, asunto, html }) {
+  const t = obtenerTransportador();
+  if (!t) return { ok: false, motivo: "sin_credenciales" };
+  try {
+    await t.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: para,
+      subject: asunto,
+      html,
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error(`Error enviando email genérico a ${para}:`, e.message || e);
+    return { ok: false, motivo: e.message };
+  }
+}
+
 module.exports = {
   enviarEmailAlianzasNuevas,
   enviarEmailCambioClausulas,
@@ -591,4 +610,6 @@ module.exports = {
   enviarEmailReporteDiario,
   enviarEmailSolicitudAcceso,
   enviarEmailRecuperacion,
+  enviarEmailGenerico,
 };
+
