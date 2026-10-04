@@ -465,9 +465,36 @@ async function apiResetPassword(req, res) {
 // dispara un bloqueo NUEVO (no si ya estaba bloqueada de un intento
 // anterior en la misma racha), avisa por email a todo super_admin activo
 // y deja constancia en el panel de auditoria.
+// Umbral a partir del cual se envía aviso previo al bloqueo (el bloqueo
+// definitivo ocurre a los 5 intentos, ver db.UMBRAL_INTENTOS_IP).
+const UMBRAL_AVISO_FALLOS_LOGIN = 3;
+
 function registrarFalloLoginIP(ip) {
   if (!ip) return;
   const resultado = db.registrarIntentoFallidoIP(ip);
+
+  // Aviso previo al bloqueo: al alcanzar UMBRAL_AVISO_FALLOS_LOGIN intentos
+  // fallidos desde la misma IP se notifica al super_admin para que pueda
+  // actuar antes de que la IP quede bloqueada del todo.
+  if (!resultado.bloqueada && resultado.intentos === UMBRAL_AVISO_FALLOS_LOGIN) {
+    const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+    const asunto = `[SegurPanel] ⚠️ ${resultado.intentos} intentos fallidos de login desde ${ip}`;
+    const html = `
+      <p>Se han detectado <strong>${resultado.intentos} intentos fallidos</strong> de inicio de sesión desde la misma IP.</p>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">IP</td><td><strong>${ip}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Intentos</td><td>${resultado.intentos} de 5 (bloqueo al 5º)</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Fecha</td><td>${fecha}</td></tr>
+      </table>
+      <p style="color:#888;font-size:12px;margin-top:16px">Si llega a 5 intentos la IP quedará bloqueada 30 minutos automáticamente.</p>
+    `;
+    for (const dest of EMAILS_SUPERVISION) {
+      email
+        .enviarEmailGenerico({ para: dest, asunto, html })
+        .catch((e) => console.error(`Error enviando aviso de fallos login a ${dest}:`, e));
+    }
+  }
+
   if (!resultado.bloqueada || resultado.yaAvisada) return;
 
   const destinatarios = db.listarSuperAdminsActivos().map((u) => u.email).filter(Boolean);
