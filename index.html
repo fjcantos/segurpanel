@@ -2252,6 +2252,30 @@
         </table>
       </div>
     </div>
+
+    <div class="card" id="cardActividadUsuarios" data-visible-only="super_admin">
+      <div class="chart-title">Actividad detallada por usuario</div>
+      <div class="chart-sub">Resumen completo de cada persona que se conecta: sesiones, tiempo en la app, pestañas visitadas e intentos de copia. Haz clic en una fila para ver el desglose por pestaña.</div>
+      <div class="table-wrap">
+        <table class="compare" id="tablaActividadUsuarios">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Sesiones</th>
+              <th>Activas ahora</th>
+              <th>Primera conexión</th>
+              <th>Última conexión</th>
+              <th>Tiempo total</th>
+              <th>Intentos copia</th>
+            </tr>
+          </thead>
+          <tbody id="actividadUsuariosBody"><tr><td colspan="10" class="empty-note">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <!-- ===== REPOSITORIO (solo super_admin y admin) ===== -->
@@ -5411,6 +5435,93 @@
     } catch (e) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="empty-note">No se pudo conectar con el servidor.</td></tr>';
     }
+    // Panel de actividad detallada (solo super_admin)
+    if (rolActual === 'super_admin') cargarActividadUsuarios();
+  }
+
+  async function cargarActividadUsuarios() {
+    const tbody = document.getElementById('actividadUsuariosBody');
+    if (!tbody) return;
+    try {
+      const { ok, datos } = await llamarAPI('/api/admin/actividad-usuarios');
+      if (!ok) {
+        tbody.innerHTML = `<tr><td colspan="10" class="empty-note">${escapeHtml((datos && datos.error) || 'Error cargando datos.')}</td></tr>`;
+        return;
+      }
+      renderActividadUsuarios(datos.usuarios || []);
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-note">No se pudo conectar con el servidor.</td></tr>';
+    }
+  }
+
+  function formatSegundos(seg) {
+    if (!seg || seg < 1) return '—';
+    const h = Math.floor(seg / 3600);
+    const m = Math.floor((seg % 3600) / 60);
+    const s = seg % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function formatFecha(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderActividadUsuarios(usuarios) {
+    const tbody = document.getElementById('actividadUsuariosBody');
+    if (!tbody) return;
+    if (!usuarios.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-note">No hay datos de actividad registrados.</td></tr>';
+      return;
+    }
+    const rolLabel = { super_admin: 'Super Admin', admin: 'Admin', retencion: 'Retención' };
+    const estadoLabel = { active: 'Activo', suspended: 'Suspendido', pending: 'Pendiente' };
+    tbody.innerHTML = usuarios.map((u, i) => {
+      const tabsHtml = (u.tabs && u.tabs.length)
+        ? `<tr class="actividad-tabs-detalle" id="tabs-detalle-${i}" style="display:none"><td colspan="10" style="padding:0 1rem 0.75rem 2.5rem">
+            <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+              <thead><tr style="color:var(--text-muted);border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:4px 8px">Pestaña</th>
+                <th style="text-align:right;padding:4px 8px">Visitas</th>
+                <th style="text-align:right;padding:4px 8px">Tiempo</th>
+              </tr></thead>
+              <tbody>${u.tabs.map(t => `<tr>
+                <td style="padding:3px 8px">${escapeHtml(t.tab)}</td>
+                <td style="text-align:right;padding:3px 8px">${t.nVisitas}</td>
+                <td style="text-align:right;padding:3px 8px">${formatSegundos(t.segundos)}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </td></tr>`
+        : '';
+      return `<tr class="actividad-usuario-fila" data-idx="${i}" style="cursor:${u.tabs && u.tabs.length ? 'pointer' : 'default'}">
+        <td style="text-align:center;color:var(--text-muted)">${u.tabs && u.tabs.length ? '▶' : ''}</td>
+        <td><strong>${escapeHtml(u.name || u.email)}</strong><br><small style="color:var(--text-muted)">${escapeHtml(u.email)}</small></td>
+        <td>${escapeHtml(rolLabel[u.role] || u.role)}</td>
+        <td>${escapeHtml(estadoLabel[u.status] || u.status)}</td>
+        <td style="text-align:center">${u.totalSesiones}</td>
+        <td style="text-align:center">${u.sesionesActivas > 0 ? `<span style="color:var(--success);font-weight:600">${u.sesionesActivas} ●</span>` : '—'}</td>
+        <td>${formatFecha(u.primeraSesion)}</td>
+        <td>${formatFecha(u.ultimaSesion)}</td>
+        <td>${formatSegundos(u.segundosTotalApp)}</td>
+        <td style="text-align:center">${u.intentosCopia > 0 ? `<span style="color:var(--warning)">${u.intentosCopia}</span>` : '0'}</td>
+      </tr>${tabsHtml}`;
+    }).join('');
+
+    // Toggle filas de detalle
+    tbody.querySelectorAll('.actividad-usuario-fila').forEach(fila => {
+      fila.addEventListener('click', () => {
+        const idx = fila.dataset.idx;
+        const detalle = document.getElementById(`tabs-detalle-${idx}`);
+        if (!detalle) return;
+        const oculto = detalle.style.display === 'none';
+        detalle.style.display = oculto ? 'table-row' : 'none';
+        const flecha = fila.querySelector('td:first-child');
+        if (flecha) flecha.textContent = oculto ? '▼' : '▶';
+      });
+    });
   }
 
   document.getElementById('btnExportEstadisticas').addEventListener('click', async (e) => {

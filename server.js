@@ -2383,6 +2383,21 @@ async function apiAdminActividadRetencion(req, res, query) {
   enviarJSON(res, 200, { registros });
 }
 
+// Resumen completo de actividad por usuario (super_admin).
+// Devuelve todos los usuarios con: sesiones, tiempo en app, pestañas visitadas,
+// intentos de copia. Usado por el nuevo panel "Actividad de usuarios".
+async function apiAdminActividadUsuarios(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+  try {
+    const usuarios = db.resumenActividadPorUsuario();
+    enviarJSON(res, 200, { usuarios });
+  } catch (e) {
+    console.error("Error en apiAdminActividadUsuarios:", e);
+    enviarJSON(res, 500, { error: "Error interno del servidor." });
+  }
+}
+
 /* ================================================================
    API: exportar a Excel (protegido por sesion, cualquier rol autenticado)
    ================================================================ */
@@ -3958,6 +3973,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/admin/actividad-retencion") {
       return await apiAdminActividadRetencion(req, res, url.searchParams);
     }
+    if (req.method === "GET" && ruta === "/api/admin/actividad-usuarios") return await apiAdminActividadUsuarios(req, res);
 
     if (req.method === "GET" && ruta === "/api/repositorio") return await apiRepositorioGet(req, res, url.searchParams);
     if (req.method === "POST") {

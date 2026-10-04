@@ -1749,5 +1749,72 @@ module.exports = {
   listarSuscripcionesPorRoles,
   listarCompetidores,
   actualizarCompetidor,
+  resumenActividadPorUsuario,
 };
+
+// ── NUEVA FUNCIÓN: resumen completo de actividad por usuario ─────────────────
+// Devuelve una fila por usuario con:
+//   - Datos del usuario (id, email, name, role)
+//   - Total de logins
+//   - Primera y última conexión
+//   - Tiempo total en la app (suma de duraciones de tab_visits)
+//   - Pestañas más visitadas (agregado)
+//   - Total de intentos de copia
+//   - Número de sesiones activas ahora mismo
+// Se usa en el nuevo panel "Actividad de usuarios" del super_admin.
+function resumenActividadPorUsuario() {
+  const usuarios = db.prepare(
+    `SELECT u.id, u.email, u.name, u.role, u.status, u.created_at,
+            COUNT(DISTINCT s.id) AS total_sesiones,
+            MIN(s.created_at)    AS primera_sesion,
+            MAX(s.created_at)    AS ultima_sesion,
+            (SELECT COUNT(*) FROM sessions s2
+             WHERE s2.user_id = u.id AND s2.revoked = 0 AND s2.expires_at > ?) AS sesiones_activas
+     FROM users u
+     LEFT JOIN sessions s ON s.user_id = u.id
+     GROUP BY u.id
+     ORDER BY ultima_sesion DESC`
+  ).all(ahoraISO());
+
+  const visitas = db.prepare(
+    `SELECT user_id,
+            tab,
+            COUNT(*)                        AS n_visitas,
+            SUM(COALESCE(duration_seconds,0)) AS segundos_total,
+            SUM(copy_intentos)              AS copias
+     FROM tab_visits
+     GROUP BY user_id, tab`
+  ).all();
+
+  // Agregar visitas por usuario
+  const visitasPorUsuario = {};
+  for (const v of visitas) {
+    if (!visitasPorUsuario[v.user_id]) {
+      visitasPorUsuario[v.user_id] = { tabs: [], segundosTotal: 0, copiasTotal: 0 };
+    }
+    visitasPorUsuario[v.user_id].tabs.push({ tab: v.tab, nVisitas: v.n_visitas, segundos: v.segundos_total });
+    visitasPorUsuario[v.user_id].segundosTotal += v.segundos_total;
+    visitasPorUsuario[v.user_id].copiasTotal  += v.copias;
+  }
+
+  return usuarios.map((u) => {
+    const act = visitasPorUsuario[u.id] || { tabs: [], segundosTotal: 0, copiasTotal: 0 };
+    const tabsOrdenadas = act.tabs.sort((a, b) => b.nVisitas - a.nVisitas);
+    return {
+      id:             u.id,
+      email:          u.email,
+      name:           u.name,
+      role:           u.role,
+      status:         u.status,
+      creadoEn:       u.created_at,
+      totalSesiones:  u.total_sesiones || 0,
+      primeraSesion:  u.primera_sesion || null,
+      ultimaSesion:   u.ultima_sesion  || null,
+      sesionesActivas: u.sesiones_activas || 0,
+      segundosTotalApp: act.segundosTotal,
+      intentosCopia:  act.copiasTotal,
+      tabs:           tabsOrdenadas,
+    };
+  });
+}
 
