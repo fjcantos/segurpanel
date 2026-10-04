@@ -492,6 +492,39 @@ function registrarFalloLoginIP(ip) {
 // Se llama justo ANTES de crear la sesion completa (auth.crearSesionParaUsuario),
 // tanto si el login no necesita 2FA como tras superarlo, para que la sesion
 // que se esta a punto de crear no cuente ella misma como "ya conocida" al
+// Envía un correo de aviso a las cuentas de supervisión del super_admin cada
+// vez que alguien inicia sesión correctamente. Fire-and-forget: nunca debe
+// retrasar ni romper el login.
+const EMAILS_SUPERVISION = [
+  "fjose.cantos@verisure.es",
+  "fjose.cantoss@gmail.com",
+];
+
+function notificarLoginSuperAdminSegura(req, usuario, ip) {
+  try {
+    const userAgent = (req.headers["user-agent"] || "").slice(0, 300);
+    const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+    const asunto = `[SegurPanel] Inicio de sesión: ${usuario.email}`;
+    const cuerpoHtml = `
+      <p>Se ha iniciado sesión en SegurPanel.</p>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Usuario</td><td><strong>${usuario.email}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Rol</td><td>${usuario.role}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Fecha</td><td>${fecha}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">IP</td><td>${ip}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Navegador</td><td style="word-break:break-all">${userAgent}</td></tr>
+      </table>
+    `;
+    for (const dest of EMAILS_SUPERVISION) {
+      email
+        .enviarEmailGenerico({ para: dest, asunto, html: cuerpoHtml })
+        .catch((e) => console.error(`Error enviando aviso login a ${dest}:`, e));
+    }
+  } catch (e) {
+    console.error("Error en notificarLoginSuperAdminSegura:", e);
+  }
+}
+
 // comparar contra el historial en la tabla sessions (ver
 // db.dispositivoConocidoDeUsuario). Fire-and-forget: nunca debe retrasar ni
 // romper el login.
@@ -612,6 +645,7 @@ async function apiLogin(req, res) {
   }
 
   notificarSiDispositivoNuevoSegura(req, usuario, ip);
+  notificarLoginSuperAdminSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
@@ -678,6 +712,7 @@ async function apiVerificar2FA(req, res) {
   db.marcarCodigo2FAUsado(registro.id);
   const ip = obtenerIP(req);
   notificarSiDispositivoNuevoSegura(req, usuario, ip);
+  notificarLoginSuperAdminSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
