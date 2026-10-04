@@ -2478,6 +2478,74 @@ async function apiComparadorVigilarPost(req, res) {
 }
 
 /* ================================================================
+   API: datos del Comparador de competencia
+   ================================================================ */
+//
+// GET /api/competidores — devuelve todas las empresas con sus datos
+// (precios, permanencia, equipos…). Accesible a cualquier rol autenticado.
+//
+// PUT /api/competidores/:empresa — actualiza los datos de una empresa.
+// Solo super_admin. El nombre de empresa va en la URL codificado como
+// encodeURIComponent (p.ej. "MPA%2FProsegur").
+
+async function apiCompetidoresGet(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+  enviarJSON(res, 200, { competidores: db.listarCompetidores() });
+}
+
+async function apiCompetidoresPut(req, res, empresa) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const precioMin = Number(cuerpo.precioMin);
+  const precioMax = Number(cuerpo.precioMax);
+  const precioMedio = Number(cuerpo.precioMedio);
+  const permanenciaMeses = Number(cuerpo.permanenciaMeses);
+  const valoracion = Number(cuerpo.valoracion);
+
+  if ([precioMin, precioMax, precioMedio, permanenciaMeses, valoracion].some((v) => !Number.isFinite(v))) {
+    return enviarJSON(res, 400, { error: "Faltan campos numéricos (precioMin, precioMax, precioMedio, permanenciaMeses, valoracion)." });
+  }
+  if (valoracion < 0 || valoracion > 5) {
+    return enviarJSON(res, 400, { error: "La valoración debe estar entre 0 y 5." });
+  }
+
+  const equipos = Array.isArray(cuerpo.equipos) ? cuerpo.equipos : [];
+  const changes = db.actualizarCompetidor({
+    empresa,
+    precioMin, precioMax, precioMedio,
+    permanenciaMeses, valoracion,
+    marca: typeof cuerpo.marca === "string" ? cuerpo.marca.slice(0, 200) : null,
+    conectividad: typeof cuerpo.conectividad === "string" ? cuerpo.conectividad.slice(0, 500) : null,
+    confianza: typeof cuerpo.confianza === "string" ? cuerpo.confianza.slice(0, 300) : null,
+    equipos,
+    color: typeof cuerpo.color === "string" ? cuerpo.color.slice(0, 200) : null,
+  });
+
+  if (!changes) return enviarJSON(res, 404, { error: "Empresa no encontrada." });
+
+  try {
+    db.registrarAuditoria({
+      userId: sesion.usuario.id,
+      email: sesion.usuario.email,
+      action: "comparador_actualizar",
+      detail: `Empresa: ${empresa}`,
+      ip: req.socket?.remoteAddress,
+    });
+  } catch (_) {}
+
+  enviarJSON(res, 200, { ok: true });
+}
+
+/* ================================================================
    API: repositorio de contratos (solo super_admin y admin)
    ================================================================ */
 //
@@ -3659,6 +3727,12 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/comparador/notas") return await apiComparadorNotasGet(req, res);
     if (req.method === "POST" && ruta === "/api/comparador/notas") return await apiComparadorNotasPost(req, res);
     if (req.method === "POST" && ruta === "/api/comparador/vigilar") return await apiComparadorVigilarPost(req, res);
+
+    if (req.method === "GET" && ruta === "/api/competidores") return await apiCompetidoresGet(req, res);
+    if (req.method === "PUT" && ruta.startsWith("/api/competidores/")) {
+      const empresa = decodeURIComponent(ruta.slice("/api/competidores/".length));
+      if (empresa) return await apiCompetidoresPut(req, res, empresa);
+    }
 
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
