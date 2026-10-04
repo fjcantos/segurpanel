@@ -1179,6 +1179,18 @@ function conteoVisitasPorUsuarioYTab() {
     .all();
 }
 
+// Total de logins exitosos por usuario (accion 'login' en audit_log).
+function conteoLoginsPorUsuario() {
+  return db
+    .prepare(
+      `SELECT user_id, COUNT(*) AS total
+       FROM audit_log
+       WHERE action = 'login' AND user_id IS NOT NULL
+       GROUP BY user_id`
+    )
+    .all();
+}
+
 /* ---------- Notas privadas y vigilancia de empresas (Comparador) ---------- */
 //
 // Solo super_admin puede leer/escribir (ver server.js): notas internas por
@@ -1714,6 +1726,7 @@ module.exports = {
   listarActividadRetencion,
   actividadUsuariosActivos,
   conteoVisitasPorUsuarioYTab,
+  conteoLoginsPorUsuario,
   listarNotasEmpresas,
   guardarNotaEmpresa,
   alternarVigilanciaEmpresa,
@@ -1737,3 +1750,4 @@ module.exports = {
   listarCompetidores,
   actualizarCompetidor,
 };
+

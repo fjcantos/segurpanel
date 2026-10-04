@@ -1300,6 +1300,47 @@ function sesionActivaPublica(s) {
   };
 }
 
+// Estadísticas de uso por usuario: total logins, última conexión, pestañas
+// más usadas. Solo super_admin.
+async function apiAdminStatsUsuarios(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const usuarios = db.listarUsuarios();
+  const visitasPorUsuarioTab = db.conteoVisitasPorUsuarioYTab();
+  const actividadAhora = db.actividadTiempoReal();
+
+  // Agrupar visitas por usuario
+  const visitasMap = {};
+  for (const v of visitasPorUsuarioTab) {
+    if (!visitasMap[v.user_id]) visitasMap[v.user_id] = {};
+    visitasMap[v.user_id][v.tab] = v.n;
+  }
+
+  // Logins totales por usuario desde audit_log
+  const loginsMap = {};
+  const filas = db.conteoLoginsPorUsuario ? db.conteoLoginsPorUsuario() : [];
+  for (const f of filas) loginsMap[f.user_id] = f.total;
+
+  const actividadMap = {};
+  for (const a of actividadAhora) actividadMap[a.id] = a;
+
+  const stats = usuarios.map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    status: u.status,
+    ultimaConexion: u.ultima_conexion || null,
+    pestanaActiva: actividadMap[u.id]?.pestana_activa || null,
+    horaPestana: actividadMap[u.id]?.hora_pestana || null,
+    tabVisits: visitasMap[u.id] || {},
+    totalLogins: loginsMap[u.id] || 0,
+  }));
+
+  enviarJSON(res, 200, { stats });
+}
+
 async function apiAdminSecurityDashboard(req, res) {
   const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
   if (!sesion) return;
@@ -3800,6 +3841,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/audit") return await apiAdminAuditoria(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/security-dashboard") return await apiAdminSecurityDashboard(req, res);
+    if (req.method === "GET" && ruta === "/api/admin/stats-usuarios") return await apiAdminStatsUsuarios(req, res);
     if (req.method === "POST" && ruta === "/api/admin/audit/clear") return await apiAdminLimpiarAuditoria(req, res);
 
     if (req.method === "POST") {
