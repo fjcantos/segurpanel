@@ -1910,79 +1910,8 @@
             <th>Valoración</th>
           </tr>
         </thead>
-        <tbody>
-          <tr data-precio-min="44" data-permanencia-meses="24" data-valoracion="4.2">
-            <td class="company-name"><span class="company-swatch" data-company="Verisure" style="background:#CC0000"></span></td>
-            <td>Desde 0€ (promo)</td>
-            <td>~44 – 55 €/mes</td>
-            <td>24 – 60 meses</td>
-            <td>Central, sensores movimiento/apertura, cámaras, sirena</td>
-            <td class="rating">4.2 / 5</td>
-          </tr>
-          <tr data-precio-min="35" data-permanencia-meses="24" data-valoracion="4.0">
-            <td class="company-name"><span class="company-swatch" data-company="Sector Alarm" style="background:linear-gradient(135deg, #000000 50%, #CC0000 50%)"></span></td>
-            <td>Desde 0€ (promo)</td>
-            <td>~35 – 45 €/mes</td>
-            <td>24 – 36 meses</td>
-            <td>Central, sensores movimiento/apertura, cámara, app propia</td>
-            <td class="rating">4.0 / 5</td>
-          </tr>
-          <tr data-precio-min="28" data-permanencia-meses="12" data-valoracion="3.8">
-            <td class="company-name"><span class="company-swatch" data-company="Sicor" style="background:#1B5E20"></span></td>
-            <td>Variable según instalador</td>
-            <td>~28 – 38 €/mes</td>
-            <td>12 – 24 meses</td>
-            <td>Central, detectores volumétricos, contactos magnéticos</td>
-            <td class="rating">3.8 / 5</td>
-          </tr>
-          <tr data-precio-min="25" data-permanencia-meses="12" data-valoracion="3.6">
-            <td class="company-name"><span class="company-swatch" data-company="Segurma" style="background:#F57C00"></span></td>
-            <td>Variable según instalador</td>
-            <td>~25 – 35 €/mes</td>
-            <td>12 – 24 meses</td>
-            <td>Central, sensores básicos, sirena interior/exterior</td>
-            <td class="rating">3.6 / 5</td>
-          </tr>
-          <tr data-precio-min="35" data-permanencia-meses="24" data-valoracion="3.9">
-            <td class="company-name"><span class="company-swatch" data-company="ADT" style="background:#0D47A1"></span></td>
-            <td>Desde 0€ (promo)</td>
-            <td>~35 – 45 €/mes</td>
-            <td>24 – 36 meses</td>
-            <td>Central, sensores movimiento/apertura, videoverificación</td>
-            <td class="rating">3.9 / 5</td>
-          </tr>
-          <tr data-precio-min="25" data-permanencia-meses="0" data-valoracion="3.7">
-            <td class="company-name"><span class="company-swatch" data-company="Seguridad 3D" style="background:linear-gradient(135deg, #FDD835 50%, #00796B 50%)"></span></td>
-            <td>Variable según instalador</td>
-            <td>~25 – 32 €/mes</td>
-            <td>Sin permanencia / 12 meses</td>
-            <td>Central, sensores, app de control remoto</td>
-            <td class="rating">3.7 / 5</td>
-          </tr>
-          <tr data-precio-min="30" data-permanencia-meses="0" data-valoracion="3.9">
-            <td class="company-name"><span class="company-swatch" data-company="Grupo Control" style="background:#7B1C2B"></span></td>
-            <td>Desde 0€ (promo)</td>
-            <td>~30 – 42 €/mes</td>
-            <td>Sin permanencia / 12 meses</td>
-            <td>Central, sensores, app propia</td>
-            <td class="rating">3.9 / 5</td>
-          </tr>
-          <tr data-precio-min="28" data-permanencia-meses="12" data-valoracion="3.6">
-            <td class="company-name"><span class="company-swatch" data-company="Trablisa" style="background:linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)"></span></td>
-            <td>Variable según instalador</td>
-            <td>~28 – 38 €/mes</td>
-            <td>12 – 24 meses</td>
-            <td>Central, sensores, videovigilancia opcional</td>
-            <td class="rating">3.6 / 5</td>
-          </tr>
-          <tr data-precio-min="29" data-permanencia-meses="12" data-valoracion="3.9">
-            <td class="company-name"><span class="company-swatch" data-company="MPA/Prosegur" style="background:#FDD835"></span></td>
-            <td>Desde 0€ (promo)</td>
-            <td>~29 – 39 €/mes</td>
-            <td>12 – 36 meses</td>
-            <td>Central, sensores, videoverificación, app propia</td>
-            <td class="rating">3.9 / 5</td>
-          </tr>
+        <tbody id="comparadorTbody">
+          <!-- cargado dinámicamente desde /api/competidores -->
         </tbody>
       </table>
     </div>
@@ -3053,102 +2982,10 @@
   // vez de inventar un modelo. El nombre de la empresa no se muestra: solo
   // su circulo de color corporativo (COLORES_EMPRESA).
   const TIPO_EQUIPO_COLOR = { 'Central': '#0b2545', 'Sensor': '#1f6fb8', 'Cámara': '#1f9d55', 'Sirena': '#c0392b', 'Otro': '#7b8794' };
-  const EQUIPOS_EMPRESA = [
-    {
-      empresa: 'Sector Alarm',
-      marca: 'Marca propia (no divulgada)',
-      confianza: 'Sistema cerrado, no multimarca',
-      conectividad: '4G + WiFi + Ethernet · batería Li-ion, ~24 h de autonomía',
-      equipos: [
-        { tipo: 'Central', desc: 'Unidad Central (con sirena interior integrada)' },
-        { tipo: 'Sensor', desc: 'Detector de movimiento con cámara integrada (foto-verificación)' },
-        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
-        { tipo: 'Cámara', desc: 'Cámara HD exterior (opcional)' },
-        { tipo: 'Sirena', desc: 'Sirena exterior (opcional)' },
-      ],
-    },
-    {
-      empresa: 'Sicor',
-      marca: 'Ajax Systems',
-      confianza: null,
-      conectividad: 'Doble canal 4G/5G + internet del hogar, con anti-inhibición',
-      equipos: [
-        { tipo: 'Central', desc: 'Hub 2' },
-        { tipo: 'Sensor', desc: 'MotionCam (PIR + foto-verificación)' },
-        { tipo: 'Sensor', desc: 'DoorProtect (contacto magnético)' },
-      ],
-    },
-    {
-      empresa: 'Segurma',
-      marca: 'Jablotron (+ cámaras Hikvision en catálogo)',
-      confianza: null,
-      conectividad: 'Central Jablotron 100+',
-      equipos: [
-        { tipo: 'Central', desc: 'Jablotron 100+' },
-        { tipo: 'Sensor', desc: 'Detector PIR inalámbrico' },
-        { tipo: 'Sensor', desc: 'Contacto magnético' },
-        { tipo: 'Cámara', desc: 'Cámaras CCTV Hikvision (videovigilancia adicional)' },
-      ],
-    },
-    {
-      empresa: 'ADT',
-      marca: 'Visonic (Johnson Controls / Tyco)',
-      confianza: null,
-      conectividad: 'Central PowerMaster-20 (PW20)',
-      equipos: [
-        { tipo: 'Central', desc: 'PowerMaster-20 (PW20)' },
-        { tipo: 'Sensor', desc: 'Detector PIR inalámbrico Visonic' },
-        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
-        { tipo: 'Sirena', desc: 'Sirena interior/exterior' },
-      ],
-    },
-    {
-      empresa: 'Seguridad 3D',
-      marca: 'No confirmada (multimarca)',
-      confianza: 'Información pública limitada',
-      conectividad: 'Central radio compacta, dual IP + GPRS (kit "3D Premium Protect")',
-      equipos: [
-        { tipo: 'Central', desc: 'Central compacta dual IP + GPRS' },
-        { tipo: 'Sensor', desc: 'Detector anti-mascota' },
-        { tipo: 'Sensor', desc: 'Contacto magnético' },
-        { tipo: 'Cámara', desc: '2 cámaras IP + grabador DVR de 4 canales' },
-        { tipo: 'Sirena', desc: 'Sirena interior' },
-      ],
-    },
-    {
-      empresa: 'Grupo Control',
-      marca: 'No confirmada (multimarca)',
-      confianza: 'Información pública limitada',
-      conectividad: 'Panel con comunicación anti-sabotaje',
-      equipos: [
-        { tipo: 'Central', desc: 'Panel con teclado y sirena interior integrada' },
-        { tipo: 'Sensor', desc: 'Detector de movimiento con captura de imagen' },
-        { tipo: 'Sensor', desc: 'Contacto magnético puerta/ventana' },
-        { tipo: 'Otro', desc: 'Mando a distancia / tag de proximidad' },
-      ],
-    },
-    {
-      empresa: 'Trablisa',
-      marca: 'Ajax Systems',
-      confianza: null,
-      conectividad: 'Instalación sin obra, en menos de 2 h',
-      equipos: [
-        { tipo: 'Central', desc: 'Kit Ajax (Hub)' },
-        { tipo: 'Sensor', desc: 'Detectores exteriores compatibles' },
-        { tipo: 'Sensor', desc: 'Detector de humo / calor' },
-      ],
-    },
-    {
-      empresa: 'MPA/Prosegur',
-      marca: 'Climax (actual) · anteriormente Vesta',
-      confianza: 'Confianza media — fuente de foro de usuarios',
-      conectividad: 'Ecosistema Climax',
-      equipos: [
-        { tipo: 'Central', desc: 'Panel Climax' },
-        { tipo: 'Sensor', desc: 'Sensores del ecosistema Climax (PIR, contacto magnético)' },
-      ],
-    },
-  ];
+  // EQUIPOS_EMPRESA, PRICE_DATA y MARGIN_DATA se cargan desde /api/competidores
+  let EQUIPOS_EMPRESA = [];
+  let PRICE_DATA = [];
+  let MARGIN_DATA = [];
 
   function equipoTipoChip(tipo) {
     const color = TIPO_EQUIPO_COLOR[tipo] || TIPO_EQUIPO_COLOR.Otro;
@@ -3175,7 +3012,7 @@
     `).join('');
   }
 
-  renderEquiposEmpresas();
+  // renderEquiposEmpresas() se llama desde cargarCompetidores() tras cargar la API
 
   /* ---------- Normativa ---------- */
   //
@@ -5088,34 +4925,13 @@
   }
 
   /* ---------- Inteligencia: gráficas ---------- */
-  const PRICE_DATA = [
-    { label: 'Verisure', value: 49.5, color: '#0b2545' },
-    { label: 'Sector Alarm', value: 40, color: '#1f6fb8' },
-    { label: 'Sicor', value: 33, color: '#1f9d55' },
-    { label: 'Segurma', value: 30, color: '#1f6fb8' },
-    { label: 'ADT', value: 40, color: '#0b2545' },
-    { label: 'Seguridad 3D', value: 28.5, color: '#1f9d55' },
-    { label: 'Grupo Control', value: 36, color: '#1f6fb8' },
-    { label: 'Trablisa', value: 33, color: '#1f9d55' },
-    { label: 'MPA/Prosegur', value: 35, color: '#0b2545' }
-  ];
+  // PRICE_DATA y MARGIN_DATA se rellenan desde /api/competidores (ver cargarCompetidores)
   const EQUIPO_DATA = [
     { label: 'Ajax MotionCam', value: 32, color: '#1f9d55' },
     { label: 'Ajax Hub 2', value: 24, color: '#1f9d55' },
     { label: 'Jablotron JA-107K', value: 18, color: '#1f6fb8' },
     { label: 'Ajax DoorProtect', value: 15, color: '#1f9d55' },
     { label: 'Jablotron JA-150P', value: 11, color: '#1f6fb8' }
-  ];
-  const MARGIN_DATA = [
-    { label: 'Verisure', value: 49.5 },
-    { label: 'Sector Alarm', value: 40 },
-    { label: 'Sicor', value: 33 },
-    { label: 'Segurma', value: 30 },
-    { label: 'ADT', value: 40 },
-    { label: 'Seguridad 3D', value: 28.5 },
-    { label: 'Grupo Control', value: 36 },
-    { label: 'Trablisa', value: 33 },
-    { label: 'MPA/Prosegur', value: 35 }
   ];
 
   function renderHBarChart(containerId, data, unit, useCompanySwatch) {
@@ -5147,9 +4963,148 @@
     }).join('');
   }
 
-  renderHBarChart('priceChart', PRICE_DATA, '€', true);
-  renderHBarChart('equipoChart', EQUIPO_DATA, '%');
-  renderMarginChart();
+  // Panel de edición de competidores (solo super_admin)
+  function renderAdminCompetidores(competidores) {
+    const existente = document.getElementById('adminCompetidoresPanel');
+    if (existente) existente.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'adminCompetidoresPanel';
+    panel.style.cssText = 'margin:1.5rem 0;padding:1rem;background:#f0f4ff;border:1px solid #c0d0f0;border-radius:8px';
+    panel.innerHTML = `
+      <h3 style="margin:0 0 .75rem;font-size:.95rem;color:#1a2f5e">⚙️ Editar datos de competidores</h3>
+      <div id="adminCompetidoresGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem"></div>
+      <div id="adminCompetidoresMsg" style="margin-top:.5rem;font-size:.85rem"></div>
+    `;
+
+    const grid = panel.querySelector('#adminCompetidoresGrid');
+    competidores.forEach(c => {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border:1px solid #dde;border-radius:6px;padding:.75rem;font-size:.85rem';
+      card.innerHTML = `
+        <div style="font-weight:600;margin-bottom:.5rem">${swatchHtml(c.empresa)} ${escapeHtml(c.empresa)}</div>
+        <label>Precio mín (€/mes)<input type="number" step="0.5" class="adm-input" data-field="precioMin" data-empresa="${escapeHtml(c.empresa)}" value="${c.precioMin || ''}" style="width:100%;margin:.25rem 0 .5rem;padding:.3rem;border:1px solid #ccc;border-radius:4px"></label>
+        <label>Precio máx (€/mes)<input type="number" step="0.5" class="adm-input" data-field="precioMax" data-empresa="${escapeHtml(c.empresa)}" value="${c.precioMax || ''}" style="width:100%;margin:.25rem 0 .5rem;padding:.3rem;border:1px solid #ccc;border-radius:4px"></label>
+        <label>Permanencia (meses)<input type="number" class="adm-input" data-field="permanenciaMeses" data-empresa="${escapeHtml(c.empresa)}" value="${c.permanenciaMeses || ''}" style="width:100%;margin:.25rem 0 .5rem;padding:.3rem;border:1px solid #ccc;border-radius:4px"></label>
+        <label>Valoración (0–5)<input type="number" step="0.1" min="0" max="5" class="adm-input" data-field="valoracion" data-empresa="${escapeHtml(c.empresa)}" value="${c.valoracion || ''}" style="width:100%;margin:.25rem 0 .5rem;padding:.3rem;border:1px solid #ccc;border-radius:4px"></label>
+        <button class="adm-save-btn" data-empresa="${escapeHtml(c.empresa)}" style="margin-top:.25rem;padding:.35rem .75rem;background:#1a2f5e;color:#fff;border:none;border-radius:4px;cursor:pointer">Guardar</button>
+      `;
+      grid.appendChild(card);
+    });
+
+    // Guardar cambios
+    grid.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.adm-save-btn');
+      if (!btn) return;
+      const empresa = btn.dataset.empresa;
+      const inputs = grid.querySelectorAll(`.adm-input[data-empresa="${empresa}"]`);
+      const payload = {};
+      inputs.forEach(inp => { payload[inp.dataset.field] = inp.value !== '' ? Number(inp.value) : null; });
+      const msg = document.getElementById('adminCompetidoresMsg');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/competidores/' + encodeURIComponent(empresa), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await r.json();
+        if (r.ok) {
+          msg.style.color = '#1f9d55';
+          msg.textContent = `✓ ${empresa} actualizado`;
+          setTimeout(() => cargarCompetidores(), 300);
+        } else {
+          msg.style.color = '#c0392b';
+          msg.textContent = json.error || 'Error al guardar';
+        }
+      } catch (err) {
+        msg.style.color = '#c0392b';
+        msg.textContent = 'Error de red';
+      }
+      btn.disabled = false;
+    });
+
+    // Insertar el panel antes de la tabla del Comparador
+    const tabla = document.getElementById('compareTable');
+    if (tabla) tabla.closest('section')?.insertBefore(panel, tabla.closest('.table-wrap') || tabla);
+  }
+
+  // Carga los datos de competidores desde la API y actualiza todas las secciones del Comparador
+  async function cargarCompetidores() {
+    let competidores = [];
+    try {
+      const r = await fetch('/api/competidores');
+      if (r.ok) {
+        const data = await r.json();
+        competidores = data.competidores || [];
+      }
+    } catch (e) {
+      console.warn('No se pudo cargar /api/competidores:', e);
+    }
+
+    // Actualizar COLORES_EMPRESA con los colores de la BD
+    competidores.forEach(c => {
+      if (c.color) COLORES_EMPRESA[c.empresa] = c.color;
+    });
+
+    // Rellenar tabla del Comparador
+    const tbody = document.getElementById('comparadorTbody');
+    if (tbody && competidores.length) {
+      tbody.innerHTML = competidores.map(c => {
+        const permText = c.permanenciaMeses
+          ? `${c.permanenciaMeses} meses`
+          : 'Sin permanencia';
+        const precioText = c.precioMin && c.precioMax
+          ? `~${c.precioMin} – ${c.precioMax} €/mes`
+          : (c.precioMedio ? `~${c.precioMedio} €/mes` : '—');
+        const equiposTexto = (c.equipos || []).slice(0, 3).map(eq => eq.desc || eq).join(', ') || '—';
+        const colorEmpresa = COLORES_EMPRESA[c.empresa] || '#9aa5b1';
+        return `<tr data-precio-min="${c.precioMin || 0}" data-permanencia-meses="${c.permanenciaMeses || 0}" data-valoracion="${c.valoracion || 0}">
+          <td class="company-name"><span class="company-swatch" data-company="${escapeHtml(c.empresa)}" style="background:${colorEmpresa}"></span></td>
+          <td>Variable según instalador</td>
+          <td>${escapeHtml(precioText)}</td>
+          <td>${escapeHtml(permText)}</td>
+          <td>${escapeHtml(equiposTexto)}</td>
+          <td class="rating">${c.valoracion ? c.valoracion.toFixed(1) + ' / 5' : '—'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Poblar EQUIPOS_EMPRESA
+    EQUIPOS_EMPRESA = competidores.filter(c => c.equipos && c.equipos.length).map(c => ({
+      empresa: c.empresa,
+      marca: c.marca || '',
+      confianza: c.confianza || null,
+      conectividad: c.conectividad || '',
+      equipos: c.equipos,
+    }));
+    renderEquiposEmpresas();
+
+    // Poblar PRICE_DATA y MARGIN_DATA
+    const CHART_COLORS = ['#0b2545', '#1f6fb8', '#1f9d55', '#c0392b', '#7b8794', '#e67e22', '#8e44ad', '#16a085', '#2c3e50'];
+    PRICE_DATA = competidores.map((c, i) => ({
+      label: c.empresa,
+      value: c.precioMedio || ((c.precioMin || 0) + (c.precioMax || 0)) / 2 || 0,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    })).filter(d => d.value > 0);
+    MARGIN_DATA = PRICE_DATA.map(d => ({ label: d.label, value: d.value }));
+
+    renderHBarChart('priceChart', PRICE_DATA, '€', true);
+    renderHBarChart('equipoChart', EQUIPO_DATA, '%');
+    renderMarginChart();
+
+    // Mostrar panel de edición y columna de vigilar para super_admin
+    if (rolActual === 'super_admin') {
+      renderAdminCompetidores(competidores);
+      // Volver a configurar la columna de notas/vigilar (la tabla fue reconstruida)
+      const watchTh = document.querySelector('#compareTable thead tr .watch-col-th');
+      if (watchTh) watchTh.remove();
+      document.querySelectorAll('#compareTable tbody tr td.watch-col-td').forEach(td => td.remove());
+      configurarComparadorSuperAdmin();
+    }
+  }
+
+  cargarCompetidores();
 
   document.getElementById('btnExportComparador').addEventListener('click', (e) => {
     const { columnas, filas } = extraerTablaParaExcel(document.getElementById('compareTable'));
