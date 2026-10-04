@@ -2598,8 +2598,16 @@ async function apiCompetidoresGet(req, res) {
 }
 
 async function apiCompetidoresPut(req, res, empresa) {
-  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
-  if (!sesion) return;
+  // Acepta tanto sesión de super_admin como X-Scraper-Token (Raspberry Pi)
+  const tokenScraper = process.env.SCRAPER_TOKEN;
+  const tokenRecibido = req.headers["x-scraper-token"];
+  const esScraper = tokenScraper && tokenRecibido === tokenScraper;
+
+  let sesion = null;
+  if (!esScraper) {
+    sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+    if (!sesion) return;
+  }
 
   let cuerpo;
   try {
@@ -2611,39 +2619,105 @@ async function apiCompetidoresPut(req, res, empresa) {
   const precioMin = Number(cuerpo.precioMin);
   const precioMax = Number(cuerpo.precioMax);
   const precioMedio = Number(cuerpo.precioMedio);
-  const permanenciaMeses = Number(cuerpo.permanenciaMeses);
-  const valoracion = Number(cuerpo.valoracion);
 
-  if ([precioMin, precioMax, precioMedio, permanenciaMeses, valoracion].some((v) => !Number.isFinite(v))) {
-    return enviarJSON(res, 400, { error: "Faltan campos numéricos (precioMin, precioMax, precioMedio, permanenciaMeses, valoracion)." });
+  // Cuando viene del scraper, permanencia y valoracion son opcionales
+  const permanenciaMeses = Number.isFinite(Number(cuerpo.permanenciaMeses))
+    ? Number(cuerpo.permanenciaMeses) : null;
+  const valoracion = Number.isFinite(Number(cuerpo.valoracion))
+    ? Number(cuerpo.valoracion) : null;
+
+  if (![precioMin, precioMax, precioMedio].every((v) => Number.isFinite(v))) {
+    return enviarJSON(res, 400, { error: "Faltan campos numéricos obligatorios (precioMin, precioMax, precioMedio)." });
   }
-  if (valoracion < 0 || valoracion > 5) {
+  if (valoracion !== null && (valoracion < 0 || valoracion > 5)) {
     return enviarJSON(res, 400, { error: "La valoración debe estar entre 0 y 5." });
   }
 
-  const equipos = Array.isArray(cuerpo.equipos) ? cuerpo.equipos : [];
+  // Obtener precios anteriores para detectar cambio (solo si viene del scraper)
+  let preciosAnteriores = null;
+  if (esScraper) {
+    try {
+      const todos = db.listarCompetidores();
+      preciosAnteriores = todos.find((c) => c.empresa === empresa) || null;
+    } catch (_) {}
+  }
+
+  const equipos = Array.isArray(cuerpo.equipos) ? cuerpo.equipos : undefined;
   const changes = db.actualizarCompetidor({
     empresa,
     precioMin, precioMax, precioMedio,
-    permanenciaMeses, valoracion,
-    marca: typeof cuerpo.marca === "string" ? cuerpo.marca.slice(0, 200) : null,
-    conectividad: typeof cuerpo.conectividad === "string" ? cuerpo.conectividad.slice(0, 500) : null,
-    confianza: typeof cuerpo.confianza === "string" ? cuerpo.confianza.slice(0, 300) : null,
-    equipos,
-    color: typeof cuerpo.color === "string" ? cuerpo.color.slice(0, 200) : null,
+    ...(permanenciaMeses !== null && { permanenciaMeses }),
+    ...(valoracion !== null && { valoracion }),
+    ...(typeof cuerpo.marca === "string" && { marca: cuerpo.marca.slice(0, 200) }),
+    ...(typeof cuerpo.conectividad === "string" && { conectividad: cuerpo.conectividad.slice(0, 500) }),
+    ...(typeof cuerpo.confianza === "string" && { confianza: cuerpo.confianza.slice(0, 300) }),
+    ...(equipos !== undefined && { equipos }),
+    ...(typeof cuerpo.color === "string" && { color: cuerpo.color.slice(0, 200) }),
   });
 
   if (!changes) return enviarJSON(res, 404, { error: "Empresa no encontrada." });
 
   try {
     db.registrarAuditoria({
-      userId: sesion.usuario.id,
-      email: sesion.usuario.email,
+      userId: sesion ? sesion.usuario.id : null,
+      email: sesion ? sesion.usuario.email : "scraper@raspberry",
       action: "comparador_actualizar",
-      detail: `Empresa: ${empresa}`,
+      detail: `Empresa: ${empresa} | min:${precioMin} max:${precioMax} medio:${precioMedio}`,
       ip: req.socket?.remoteAddress,
     });
   } catch (_) {}
+
+  // Si viene del scraper, enviar email de alerta con el cambio de precio
+  if (esScraper) {
+    try {
+      const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+      const pAntMin = preciosAnteriores?.precio_min ?? "—";
+      const pAntMax = preciosAnteriores?.precio_max ?? "—";
+      const pAntMed = preciosAnteriores?.precio_medio ?? "—";
+      const fmt = (v) => (typeof v === "number" ? `${v.toFixed(2)} €` : String(v));
+      const hayDiff = preciosAnteriores && (
+        Math.abs(precioMin - (preciosAnteriores.precio_min ?? precioMin)) >= 1 ||
+        Math.abs(precioMax - (preciosAnteriores.precio_max ?? precioMax)) >= 1
+      );
+      const asunto = hayDiff
+        ? `[SegurPanel] ⚠️ Cambio de precio detectado: ${empresa}`
+        : `[SegurPanel] 📊 Precio actualizado por scraper: ${empresa}`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:${hayDiff ? "#c0392b" : "#2d6cdf"};color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+            <h2 style="margin:0">${hayDiff ? "⚠️ Cambio de precio detectado" : "📊 Precio actualizado"}</h2>
+            <p style="margin:4px 0 0">${empresa} · ${fecha}</p>
+          </div>
+          <div style="border:1px solid #ddd;padding:20px 24px;border-radius:0 0 8px 8px">
+            <table style="width:100%;border-collapse:collapse;margin:12px 0">
+              <thead><tr style="background:#f5f5f5">
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Métrica</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right">Antes</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right">Ahora</th>
+              </tr></thead>
+              <tbody>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio mínimo</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMin)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMin)}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio máximo</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMax)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMax)}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio medio</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMed)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMedio)}</td></tr>
+              </tbody>
+            </table>
+            <p style="color:#888;font-size:12px">Actualizado automáticamente por el scraper de la Raspberry Pi.</p>
+          </div>
+        </div>`;
+      for (const dest of EMAILS_SUPERVISION) {
+        email.enviarEmailGenerico({ para: dest, asunto, html })
+          .catch((e) => console.error(`Error enviando alerta precio a ${dest}:`, e));
+      }
+    } catch (e) {
+      console.error("Error enviando email alerta competidor:", e);
+    }
+  }
 
   enviarJSON(res, 200, { ok: true });
 }
