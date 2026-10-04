@@ -214,6 +214,25 @@ db.exec(`
     created_at         TEXT NOT NULL
   );
 
+  -- Datos del Comparador de competencia: una fila por empresa, con precios,
+  -- permanencia, valoracion, equipos y metadatos. Se inicializa con los datos
+  -- que antes estaban hardcodeados en index.html y se puede actualizar desde
+  -- el panel de Super Admin (PUT /api/competidores/:empresa).
+  CREATE TABLE IF NOT EXISTS competidores (
+    empresa           TEXT PRIMARY KEY,
+    precio_min        REAL NOT NULL DEFAULT 0,
+    precio_max        REAL NOT NULL DEFAULT 0,
+    precio_medio      REAL NOT NULL DEFAULT 0,
+    permanencia_meses INTEGER NOT NULL DEFAULT 0,
+    valoracion        REAL NOT NULL DEFAULT 0,
+    marca             TEXT,
+    conectividad      TEXT,
+    confianza         TEXT,
+    equipos_json      TEXT,
+    color             TEXT,
+    updated_at        TEXT
+  );
+
   -- Una fila por cada vez que scraper_alianzas.py o scraper_precios.py (en
   -- la Raspberry Pi) llaman a POST /api/alianzas/sync o /api/ofertas/sync,
   -- AUNQUE no tengan nada nuevo que enviar ese dia (ver apiAlianzasSync /
@@ -1372,6 +1391,210 @@ function borrarAuditoria() {
   return info.changes;
 }
 
+/* ---------- Competidores (datos del Comparador) ---------- */
+//
+// Una fila por empresa competidora. Se inicializa con los datos que antes
+// estaban hardcodeados en index.html; el Super Admin puede actualizarlos
+// desde el panel (PUT /api/competidores/:empresa en server.js).
+
+const COMPETIDORES_INICIALES = [
+  {
+    empresa: "Verisure",
+    precio_min: 44, precio_max: 55, precio_medio: 49.5,
+    permanencia_meses: 24, valoracion: 4.2,
+    marca: "Propia (Verisure Technology)",
+    conectividad: "4G + WiFi · batería de respaldo",
+    confianza: null,
+    equipos: [
+      { tipo: "Central", desc: "Central Verisure con sirena integrada" },
+      { tipo: "Sensor", desc: "Detector de movimiento con cámara (DECT)" },
+      { tipo: "Sensor", desc: "Contacto magnético puerta/ventana" },
+      { tipo: "Cámara", desc: "Cámara interior SmartCam" },
+      { tipo: "Sirena", desc: "Sirena exterior" },
+    ],
+    color: "#ED002F",
+  },
+  {
+    empresa: "Sector Alarm",
+    precio_min: 35, precio_max: 45, precio_medio: 40,
+    permanencia_meses: 24, valoracion: 4.0,
+    marca: "Marca propia (no divulgada)",
+    conectividad: "4G + WiFi + Ethernet · batería Li-ion, ~24 h de autonomía",
+    confianza: "Sistema cerrado, no multimarca",
+    equipos: [
+      { tipo: "Central", desc: "Unidad Central (con sirena interior integrada)" },
+      { tipo: "Sensor", desc: "Detector de movimiento con cámara integrada (foto-verificación)" },
+      { tipo: "Sensor", desc: "Contacto magnético puerta/ventana" },
+      { tipo: "Cámara", desc: "Cámara HD exterior (opcional)" },
+      { tipo: "Sirena", desc: "Sirena exterior (opcional)" },
+    ],
+    color: "linear-gradient(135deg, #000000 50%, #CC0000 50%)",
+  },
+  {
+    empresa: "Sicor",
+    precio_min: 28, precio_max: 38, precio_medio: 33,
+    permanencia_meses: 12, valoracion: 3.8,
+    marca: "Ajax Systems",
+    conectividad: "Doble canal 4G/5G + internet del hogar, con anti-inhibición",
+    confianza: null,
+    equipos: [
+      { tipo: "Central", desc: "Hub 2" },
+      { tipo: "Sensor", desc: "MotionCam (PIR + foto-verificación)" },
+      { tipo: "Sensor", desc: "DoorProtect (contacto magnético)" },
+    ],
+    color: "#1B5E20",
+  },
+  {
+    empresa: "Segurma",
+    precio_min: 25, precio_max: 35, precio_medio: 30,
+    permanencia_meses: 12, valoracion: 3.6,
+    marca: "Jablotron (+ cámaras Hikvision en catálogo)",
+    conectividad: "Central Jablotron 100+",
+    confianza: null,
+    equipos: [
+      { tipo: "Central", desc: "Jablotron 100+" },
+      { tipo: "Sensor", desc: "Detector PIR inalámbrico" },
+      { tipo: "Sensor", desc: "Contacto magnético" },
+      { tipo: "Cámara", desc: "Cámaras CCTV Hikvision (videovigilancia adicional)" },
+    ],
+    color: "#F57C00",
+  },
+  {
+    empresa: "ADT",
+    precio_min: 35, precio_max: 45, precio_medio: 40,
+    permanencia_meses: 24, valoracion: 3.9,
+    marca: "Visonic (Johnson Controls / Tyco)",
+    conectividad: "Central PowerMaster-20 (PW20)",
+    confianza: null,
+    equipos: [
+      { tipo: "Central", desc: "PowerMaster-20 (PW20)" },
+      { tipo: "Sensor", desc: "Detector PIR inalámbrico Visonic" },
+      { tipo: "Sensor", desc: "Contacto magnético puerta/ventana" },
+      { tipo: "Sirena", desc: "Sirena interior/exterior" },
+    ],
+    color: "#0D47A1",
+  },
+  {
+    empresa: "Seguridad 3D",
+    precio_min: 25, precio_max: 32, precio_medio: 28.5,
+    permanencia_meses: 0, valoracion: 3.7,
+    marca: "No confirmada (multimarca)",
+    conectividad: "Central radio compacta, dual IP + GPRS (kit \"3D Premium Protect\")",
+    confianza: "Información pública limitada",
+    equipos: [
+      { tipo: "Central", desc: "Central compacta dual IP + GPRS" },
+      { tipo: "Sensor", desc: "Detector anti-mascota" },
+      { tipo: "Sensor", desc: "Contacto magnético" },
+      { tipo: "Cámara", desc: "2 cámaras IP + grabador DVR de 4 canales" },
+      { tipo: "Sirena", desc: "Sirena interior" },
+    ],
+    color: "linear-gradient(135deg, #FDD835 50%, #00796B 50%)",
+  },
+  {
+    empresa: "Grupo Control",
+    precio_min: 30, precio_max: 42, precio_medio: 36,
+    permanencia_meses: 0, valoracion: 3.9,
+    marca: "No confirmada (multimarca)",
+    conectividad: "Panel con comunicación anti-sabotaje",
+    confianza: "Información pública limitada",
+    equipos: [
+      { tipo: "Central", desc: "Panel con teclado y sirena interior integrada" },
+      { tipo: "Sensor", desc: "Detector de movimiento con captura de imagen" },
+      { tipo: "Sensor", desc: "Contacto magnético puerta/ventana" },
+      { tipo: "Otro", desc: "Mando a distancia / tag de proximidad" },
+    ],
+    color: "#7B1C2B",
+  },
+  {
+    empresa: "Trablisa",
+    precio_min: 28, precio_max: 38, precio_medio: 33,
+    permanencia_meses: 12, valoracion: 3.6,
+    marca: "Ajax Systems",
+    conectividad: "Instalación sin obra, en menos de 2 h",
+    confianza: null,
+    equipos: [
+      { tipo: "Central", desc: "Kit Ajax (Hub)" },
+      { tipo: "Sensor", desc: "Detectores exteriores compatibles" },
+      { tipo: "Sensor", desc: "Detector de humo / calor" },
+    ],
+    color: "linear-gradient(135deg, #0D1B3E 50%, #F57C00 50%)",
+  },
+  {
+    empresa: "MPA/Prosegur",
+    precio_min: 29, precio_max: 39, precio_medio: 35,
+    permanencia_meses: 12, valoracion: 3.9,
+    marca: "Climax (actual) · anteriormente Vesta",
+    conectividad: "Ecosistema Climax",
+    confianza: "Confianza media — fuente de foro de usuarios",
+    equipos: [
+      { tipo: "Central", desc: "Panel Climax" },
+      { tipo: "Sensor", desc: "Sensores del ecosistema Climax (PIR, contacto magnético)" },
+    ],
+    color: "#FDD835",
+  },
+];
+
+// Inicializa la tabla con los datos por defecto si está vacía.
+// Se llama una sola vez al arrancar el servidor (ver más abajo).
+function inicializarCompetidores() {
+  const n = db.prepare("SELECT COUNT(*) AS n FROM competidores").get().n;
+  if (n > 0) return;
+  const insertar = db.prepare(
+    `INSERT OR IGNORE INTO competidores
+      (empresa, precio_min, precio_max, precio_medio, permanencia_meses, valoracion,
+       marca, conectividad, confianza, equipos_json, color, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const c of COMPETIDORES_INICIALES) {
+    insertar.run(
+      c.empresa, c.precio_min, c.precio_max, c.precio_medio,
+      c.permanencia_meses, c.valoracion,
+      c.marca || null, c.conectividad || null, c.confianza || null,
+      JSON.stringify(c.equipos || []),
+      c.color || null,
+      ahoraISO()
+    );
+  }
+}
+inicializarCompetidores();
+
+function listarCompetidores() {
+  return db.prepare("SELECT * FROM competidores ORDER BY precio_medio ASC").all().map((c) => ({
+    empresa: c.empresa,
+    precioMin: c.precio_min,
+    precioMax: c.precio_max,
+    precioMedio: c.precio_medio,
+    permanenciaMeses: c.permanencia_meses,
+    valoracion: c.valoracion,
+    marca: c.marca,
+    conectividad: c.conectividad,
+    confianza: c.confianza,
+    equipos: c.equipos_json ? JSON.parse(c.equipos_json) : [],
+    color: c.color,
+    updatedAt: c.updated_at,
+  }));
+}
+
+function actualizarCompetidor({ empresa, precioMin, precioMax, precioMedio, permanenciaMeses, valoracion, marca, conectividad, confianza, equipos, color }) {
+  const info = db.prepare(
+    `UPDATE competidores SET
+       precio_min = ?, precio_max = ?, precio_medio = ?,
+       permanencia_meses = ?, valoracion = ?,
+       marca = ?, conectividad = ?, confianza = ?,
+       equipos_json = ?, color = ?, updated_at = ?
+     WHERE empresa = ?`
+  ).run(
+    Number(precioMin), Number(precioMax), Number(precioMedio),
+    Number(permanenciaMeses), Number(valoracion),
+    marca || null, conectividad || null, confianza || null,
+    JSON.stringify(equipos || []),
+    color || null,
+    ahoraISO(),
+    empresa
+  );
+  return info.changes;
+}
+
 /* ---------- Suscripciones push (notificaciones web) ---------- */
 //
 // Un mismo usuario puede tener varias suscripciones (una por navegador o
@@ -1511,4 +1734,6 @@ module.exports = {
   borrarSuscripcionPush,
   listarSuscripcionesPorUsuario,
   listarSuscripcionesPorRoles,
+  listarCompetidores,
+  actualizarCompetidor,
 };
