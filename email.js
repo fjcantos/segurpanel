@@ -481,7 +481,7 @@ async function enviarEmailReporteDiario({ fecha, alianzas, ofertas }) {
   try {
     await transporte.sendMail({
       from: `"SegurPanel" <${process.env.SMTP_USER}>`,
-      to: EMAIL_SUPER_ADMIN_PRINCIPAL,
+      to: [EMAIL_SUPER_ADMIN_PRINCIPAL, "fjose.cantoss@gmail.com"].join(", "),
       subject: `SegurPanel - Reporte diario de scrapers (${new Date(fecha || Date.now()).toLocaleDateString("es-ES")})`,
       html: construirHtmlReporteDiario({ fecha, alianzas, ofertas }),
       attachments: [adjuntoLogoUIC()],
