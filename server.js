@@ -3901,6 +3901,44 @@ const idPdfRepositorioAvanzado = RUTA_CON_ID("/api/repositorio-avanzado", "/pdf"
 const idDuracionVisitaTab = RUTA_CON_ID("/api/actividad/tab", "/duracion");
 const idCopiaVisitaTab = RUTA_CON_ID("/api/actividad/tab", "/copia");
 
+// ---------------------------------------------------------------------------
+// Rate limiting en memoria (sin dependencias externas)
+// Limites:
+//   - /api/auth/login y /api/auth/verify-2fa: 10 peticiones / IP / minuto
+//   - Resto de rutas /api/*: 120 peticiones / IP / minuto
+// Nota: en un despliegue multi-instancia detras de un balanceador los contadores
+// son por proceso; para produccion de alta disponibilidad se usaria Redis, pero
+// para un servidor de instancia unica (Render free/starter) esto es suficiente.
+// ---------------------------------------------------------------------------
+const _rl = new Map(); // ip -> { [ruta]: { count, resetAt } }
+
+function _limpiarRateLimiter() {
+  const ahora = Date.now();
+  for (const [ip, ventanas] of _rl) {
+    for (const ruta of Object.keys(ventanas)) {
+      if (ventanas[ruta].resetAt <= ahora) delete ventanas[ruta];
+    }
+    if (Object.keys(ventanas).length === 0) _rl.delete(ip);
+  }
+}
+setInterval(_limpiarRateLimiter, 60_000).unref();
+
+/**
+ * Comprueba el rate limit para (ip, clave).
+ * @returns {boolean} true si la peticion se permite, false si se supera el limite.
+ */
+function _permitir(ip, clave, limite) {
+  const ahora = Date.now();
+  if (!_rl.has(ip)) _rl.set(ip, {});
+  const ventanas = _rl.get(ip);
+  if (!ventanas[clave] || ventanas[clave].resetAt <= ahora) {
+    ventanas[clave] = { count: 1, resetAt: ahora + 60_000 };
+    return true;
+  }
+  ventanas[clave].count++;
+  return ventanas[clave].count <= limite;
+}
+
 async function manejarPeticion(req, res) {
   // Todo el cuerpo va dentro del try, incluido el parseo de la URL (una ruta
   // mal formada puede hacer que decodeURIComponent lance) y cada `await` a
@@ -3913,6 +3951,22 @@ async function manejarPeticion(req, res) {
     const url = new URL(req.url, "http://localhost");
     const ruta = decodeURIComponent(url.pathname);
     const esLectura = req.method === "GET" || req.method === "HEAD";
+
+    // --- Rate limiting ---
+    if (ruta.startsWith("/api/")) {
+      const ip =
+        (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+        req.socket?.remoteAddress ||
+        "unknown";
+      const esAuth = ruta === "/api/auth/login" || ruta === "/api/auth/verify-2fa";
+      const limite = esAuth ? 10 : 120;
+      const clave = esAuth ? ruta : "api";
+      if (!_permitir(ip, clave, limite)) {
+        res.writeHead(429, { "Content-Type": "application/json; charset=utf-8", "Retry-After": "60" });
+        res.end(JSON.stringify({ error: "Demasiadas peticiones. Espera un minuto e inténtalo de nuevo." }));
+        return;
+      }
+    }
 
     if (esLectura && (ruta === "/" || ruta === "/index.html")) return await servirApp(req, res);
     if (esLectura && ruta === "/admin") return await servirAdmin(req, res);
