@@ -137,6 +137,23 @@ function leerCuerpoJSON(req) {
   });
 }
 
+// Cabeceras de seguridad que se añaden a todas las respuestas HTML/estaticas.
+// - CSP: solo permite recursos del mismo origen; inline scripts permitidos
+//   porque la app los usa, pero se bloquean iframes, objetos y plugins.
+// - X-Frame-Options: evita que la app sea embebida en un iframe externo
+//   (clickjacking).
+// - X-Content-Type-Options: el navegador no intenta adivinar el MIME.
+// - Referrer-Policy: no se filtra la URL a terceros.
+// - Permissions-Policy: desactiva acceso a microfono, camara y geolocalizacion.
+const CABECERAS_SEGURIDAD = {
+  "Content-Security-Policy":
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "microphone=(), camera=(), geolocation=()",
+};
+
 function servirArchivo(res, rutaAbsoluta, tipo, cabecerasExtra) {
   fs.readFile(rutaAbsoluta, (err, contenido) => {
     if (err) {
@@ -144,7 +161,11 @@ function servirArchivo(res, rutaAbsoluta, tipo, cabecerasExtra) {
       res.end("No se pudo leer " + path.basename(rutaAbsoluta) + ": " + err.message);
       return;
     }
-    res.writeHead(200, { "Content-Type": tipo, ...cabecerasExtra });
+    const esCabHTML = tipo.startsWith("text/html");
+    const cabeceras = esCabHTML
+      ? { "Content-Type": tipo, ...CABECERAS_SEGURIDAD, ...cabecerasExtra }
+      : { "Content-Type": tipo, "X-Content-Type-Options": "nosniff", ...cabecerasExtra };
+    res.writeHead(200, cabeceras);
     res.end(contenido);
   });
 }
