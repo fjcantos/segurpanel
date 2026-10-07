@@ -58,8 +58,9 @@ const MAX_TOKENS_BATCH_COMPLETA = 8000;
 const NUM_LOTES_CONTENIDO_COMPLETA = 3;
 
 const LOGO_PATH = path.join(__dirname, "assets", "LOGO_UIC_limpio.png");
+const LOGO_VERISURE_PATH = path.join(__dirname, "assets", "LOGO_Verisure.png");
 
-const ROJO_UIC = "E8003D";
+const ROJO_UIC = "ED002F"; // Rojo corporativo Verisure (antes E8003D UIC)
 const NEGRO_UIC = "111111";
 const BLANCO_UIC = "FFFFFF";
 const GRIS_UIC = "6B7280";
@@ -706,8 +707,8 @@ async function generarFormacionCompletaConProgreso({ empresa, contexto, onProgre
 }
 
 /* ================================================================
-   5. Construccion del PPTX (marca UIC: rojo Verisure, negro, blanco,
-      Fira Sans, logo en cada diapositiva)
+   5. Construccion del PPTX (marca Verisure: rojo ED002F, negro, blanco,
+      Fira Sans, logo corporativo en portada y cierre)
    ================================================================ */
 //
 // pptxgenjs no embebe la fuente en el .pptx, solo referencia el nombre; si
@@ -731,6 +732,21 @@ async function obtenerLogoDataUri() {
   const buffer = await sharp(LOGO_PATH).resize({ width: 360 }).png({ compressionLevel: 9 }).toBuffer();
   logoDataUriCache = "image/png;base64," + buffer.toString("base64");
   return logoDataUriCache;
+}
+
+// Logo corporativo Verisure (PNG con transparencia, flor roja + "verisure"):
+// se redimensiona con sharp a 700px de ancho para que se vea nítido en
+// pantalla/proyector y se cachea igual que el logo UIC.
+let logoVerisureDataUriCache = null;
+async function obtenerLogoVerisureDataUri() {
+  if (logoVerisureDataUriCache !== null) return logoVerisureDataUriCache;
+  if (!fs.existsSync(LOGO_VERISURE_PATH)) {
+    logoVerisureDataUriCache = false;
+    return false;
+  }
+  const buffer = await sharp(LOGO_VERISURE_PATH).resize({ width: 700 }).png({ compressionLevel: 9 }).toBuffer();
+  logoVerisureDataUriCache = "image/png;base64," + buffer.toString("base64");
+  return logoVerisureDataUriCache;
 }
 
 // Envuelve el <path> de un icono de Heroicons (ver ICONOS_SVG) en un <svg>
@@ -882,7 +898,7 @@ function anadirCabeceraComun(slide, logoDataUri) {
 }
 
 function anadirPie(slide, numero, total, colorTexto) {
-  slide.addText(`SegurPanel · Formación UIC   ·   ${numero}/${total}`, {
+  slide.addText(`SegurPanel · Formación Verisure   ·   ${numero}/${total}`, {
     x: 0.4,
     y: 5.32,
     w: 6,
@@ -913,7 +929,7 @@ function anadirNotas(slide, d) {
   if (texto) slide.addNotes(texto);
 }
 
-function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, imagenFondo) {
+function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, imagenFondo, logoVerisureDataUri) {
   const slide = pptx.addSlide();
   if (imagenFondo) {
     // Lavado de color de marca (negro) mas fuerte que en las diapositivas de
@@ -924,8 +940,10 @@ function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, image
     slide.background = { color: NEGRO_UIC };
   }
   slide.addShape("rect", { x: 0, y: 2.55, w: "100%", h: 0.06, fill: { color: ROJO_UIC }, line: { type: "none" } });
-  if (logoDataUri) {
-    slide.addImage({ data: logoDataUri, x: 4.15, y: 0.55, w: 1.7, h: 0.96 });
+  // Logo Verisure corporativo centrado en portada (como en la plantilla .potx)
+  const logoPortada = logoVerisureDataUri || logoDataUri;
+  if (logoPortada) {
+    slide.addImage({ data: logoPortada, x: 4.1, y: 0.42, w: 1.8, h: 1.75 });
   }
   slide.addText(d.titulo, {
     x: 0.6,
@@ -956,7 +974,7 @@ function diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, image
   anadirPie(slide, numero, total, imagenFondo ? "D1D5DB" : GRIS_UIC);
 }
 
-function diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo) {
+function diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo, logoVerisureDataUri) {
   const slide = pptx.addSlide();
   if (imagenFondo) {
     pintarFondoConImagen(slide, imagenFondo, ROJO_UIC, 35);
@@ -987,8 +1005,10 @@ function diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo) {
       color: BLANCO_UIC,
     });
   }
-  if (logoDataUri) {
-    slide.addImage({ data: logoDataUri, x: 4.15, y: 4.3, w: 1.7, h: 0.96 });
+  // Logo Verisure corporativo centrado en diapositiva de cierre
+  const logoCierre = logoVerisureDataUri || logoDataUri;
+  if (logoCierre) {
+    slide.addImage({ data: logoCierre, x: 4.1, y: 4.0, w: 1.8, h: 1.75 });
   }
   anadirNotas(slide, d);
   pintarCreditoUnsplash(slide, imagenFondo, "FBD5D5");
@@ -1299,11 +1319,14 @@ function diapositivaInfografia(pptx, d, numero, total, logoDataUri) {
 async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_16x9";
-  pptx.title = tituloPresentacion || "Formación SegurPanel · UIC";
+  pptx.title = tituloPresentacion || "Formación SegurPanel · Verisure";
   pptx.author = "SegurPanel";
-  pptx.company = "UIC";
+  pptx.company = "Verisure";
 
-  const logoDataUri = await obtenerLogoDataUri();
+  const [logoDataUri, logoVerisureDataUri] = await Promise.all([
+    obtenerLogoDataUri(),
+    obtenerLogoVerisureDataUri(),
+  ]);
 
   // Resuelve en paralelo solo los TEMAS UNICOS presentes en esta
   // presentacion concreta (catalogo cerrado de 12, ver TEMAS_UNSPLASH):
@@ -1320,10 +1343,10 @@ async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
     const imagenFondo = d.tema ? imagenesPorTema.get(d.tema) || null : null;
     switch (d.tipo) {
       case "titulo":
-        diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, imagenFondo);
+        diapositivaTitulo(pptx, d, numero, total, subtitulo, logoDataUri, imagenFondo, logoVerisureDataUri);
         break;
       case "cierre":
-        diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo);
+        diapositivaCierre(pptx, d, numero, total, logoDataUri, imagenFondo, logoVerisureDataUri);
         break;
       case "cita":
         diapositivaCita(pptx, d, numero, total, logoDataUri, imagenFondo);
@@ -1355,7 +1378,7 @@ async function construirPPTX({ tituloPresentacion, subtitulo, diapositivas }) {
 //
 // Distinto de todo lo anterior: aqui el usuario sube una presentacion ya
 // existente (de cualquier origen, no generada por SegurPanel) y la IA la
-// resume en UNA sola diapositiva imprimible con el diseño corporativo UIC.
+// resume en UNA sola diapositiva imprimible con el diseño corporativo Verisure.
 // No hay libreria de parsing de .pptx entre las dependencias del proyecto;
 // un .pptx es un ZIP (formato OOXML) y JSZip (ya usado para leer .odt en
 // analisis.js) es suficiente para extraer el texto de cada diapositiva con
@@ -1504,9 +1527,9 @@ function diapositivaInfografiaResumen(pptx, { titulo, subtitulo, puntos }, logoD
 async function construirInfografiaResumenPPTX({ titulo, subtitulo, puntos }) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_16x9";
-  pptx.title = titulo || "Infografía · SegurPanel UIC";
+  pptx.title = titulo || "Infografía · SegurPanel Verisure";
   pptx.author = "SegurPanel";
-  pptx.company = "UIC";
+  pptx.company = "Verisure";
 
   const logoDataUri = await obtenerLogoDataUri();
   diapositivaInfografiaResumen(pptx, { titulo, subtitulo, puntos }, logoDataUri);

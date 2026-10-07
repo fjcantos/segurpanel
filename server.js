@@ -465,9 +465,36 @@ async function apiResetPassword(req, res) {
 // dispara un bloqueo NUEVO (no si ya estaba bloqueada de un intento
 // anterior en la misma racha), avisa por email a todo super_admin activo
 // y deja constancia en el panel de auditoria.
+// Umbral a partir del cual se envía aviso previo al bloqueo (el bloqueo
+// definitivo ocurre a los 5 intentos, ver db.UMBRAL_INTENTOS_IP).
+const UMBRAL_AVISO_FALLOS_LOGIN = 3;
+
 function registrarFalloLoginIP(ip) {
   if (!ip) return;
   const resultado = db.registrarIntentoFallidoIP(ip);
+
+  // Aviso previo al bloqueo: al alcanzar UMBRAL_AVISO_FALLOS_LOGIN intentos
+  // fallidos desde la misma IP se notifica al super_admin para que pueda
+  // actuar antes de que la IP quede bloqueada del todo.
+  if (!resultado.bloqueada && resultado.intentos === UMBRAL_AVISO_FALLOS_LOGIN) {
+    const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+    const asunto = `[SegurPanel] ⚠️ ${resultado.intentos} intentos fallidos de login desde ${ip}`;
+    const html = `
+      <p>Se han detectado <strong>${resultado.intentos} intentos fallidos</strong> de inicio de sesión desde la misma IP.</p>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">IP</td><td><strong>${ip}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Intentos</td><td>${resultado.intentos} de 5 (bloqueo al 5º)</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Fecha</td><td>${fecha}</td></tr>
+      </table>
+      <p style="color:#888;font-size:12px;margin-top:16px">Si llega a 5 intentos la IP quedará bloqueada 30 minutos automáticamente.</p>
+    `;
+    for (const dest of EMAILS_SUPERVISION) {
+      email
+        .enviarEmailGenerico({ para: dest, asunto, html })
+        .catch((e) => console.error(`Error enviando aviso de fallos login a ${dest}:`, e));
+    }
+  }
+
   if (!resultado.bloqueada || resultado.yaAvisada) return;
 
   const destinatarios = db.listarSuperAdminsActivos().map((u) => u.email).filter(Boolean);
@@ -492,6 +519,39 @@ function registrarFalloLoginIP(ip) {
 // Se llama justo ANTES de crear la sesion completa (auth.crearSesionParaUsuario),
 // tanto si el login no necesita 2FA como tras superarlo, para que la sesion
 // que se esta a punto de crear no cuente ella misma como "ya conocida" al
+// Envía un correo de aviso a las cuentas de supervisión del super_admin cada
+// vez que alguien inicia sesión correctamente. Fire-and-forget: nunca debe
+// retrasar ni romper el login.
+const EMAILS_SUPERVISION = [
+  "fjose.cantos@verisure.es",
+  "fjose.cantoss@gmail.com",
+];
+
+function notificarLoginSuperAdminSegura(req, usuario, ip) {
+  try {
+    const userAgent = (req.headers["user-agent"] || "").slice(0, 300);
+    const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+    const asunto = `[SegurPanel] Inicio de sesión: ${usuario.email}`;
+    const cuerpoHtml = `
+      <p>Se ha iniciado sesión en SegurPanel.</p>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Usuario</td><td><strong>${usuario.email}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Rol</td><td>${usuario.role}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Fecha</td><td>${fecha}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">IP</td><td>${ip}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Navegador</td><td style="word-break:break-all">${userAgent}</td></tr>
+      </table>
+    `;
+    for (const dest of EMAILS_SUPERVISION) {
+      email
+        .enviarEmailGenerico({ para: dest, asunto, html: cuerpoHtml })
+        .catch((e) => console.error(`Error enviando aviso login a ${dest}:`, e));
+    }
+  } catch (e) {
+    console.error("Error en notificarLoginSuperAdminSegura:", e);
+  }
+}
+
 // comparar contra el historial en la tabla sessions (ver
 // db.dispositivoConocidoDeUsuario). Fire-and-forget: nunca debe retrasar ni
 // romper el login.
@@ -612,6 +672,7 @@ async function apiLogin(req, res) {
   }
 
   notificarSiDispositivoNuevoSegura(req, usuario, ip);
+  notificarLoginSuperAdminSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
@@ -678,6 +739,7 @@ async function apiVerificar2FA(req, res) {
   db.marcarCodigo2FAUsado(registro.id);
   const ip = obtenerIP(req);
   notificarSiDispositivoNuevoSegura(req, usuario, ip);
+  notificarLoginSuperAdminSegura(req, usuario, ip);
   const { token } = auth.crearSesionParaUsuario(req, usuario, recordar);
 
   registrarAuditoriaSegura({
@@ -1236,6 +1298,47 @@ function sesionActivaPublica(s) {
     createdAt: s.created_at,
     expiresAt: s.expires_at,
   };
+}
+
+// Estadísticas de uso por usuario: total logins, última conexión, pestañas
+// más usadas. Solo super_admin.
+async function apiAdminStatsUsuarios(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+
+  const usuarios = db.listarUsuarios();
+  const visitasPorUsuarioTab = db.conteoVisitasPorUsuarioYTab();
+  const actividadAhora = db.actividadTiempoReal();
+
+  // Agrupar visitas por usuario
+  const visitasMap = {};
+  for (const v of visitasPorUsuarioTab) {
+    if (!visitasMap[v.user_id]) visitasMap[v.user_id] = {};
+    visitasMap[v.user_id][v.tab] = v.n;
+  }
+
+  // Logins totales por usuario desde audit_log
+  const loginsMap = {};
+  const filas = db.conteoLoginsPorUsuario ? db.conteoLoginsPorUsuario() : [];
+  for (const f of filas) loginsMap[f.user_id] = f.total;
+
+  const actividadMap = {};
+  for (const a of actividadAhora) actividadMap[a.id] = a;
+
+  const stats = usuarios.map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    status: u.status,
+    ultimaConexion: u.ultima_conexion || null,
+    pestanaActiva: actividadMap[u.id]?.pestana_activa || null,
+    horaPestana: actividadMap[u.id]?.hora_pestana || null,
+    tabVisits: visitasMap[u.id] || {},
+    totalLogins: loginsMap[u.id] || 0,
+  }));
+
+  enviarJSON(res, 200, { stats });
 }
 
 async function apiAdminSecurityDashboard(req, res) {
@@ -2280,6 +2383,21 @@ async function apiAdminActividadRetencion(req, res, query) {
   enviarJSON(res, 200, { registros });
 }
 
+// Resumen completo de actividad por usuario (super_admin).
+// Devuelve todos los usuarios con: sesiones, tiempo en app, pestañas visitadas,
+// intentos de copia. Usado por el nuevo panel "Actividad de usuarios".
+async function apiAdminActividadUsuarios(req, res) {
+  const sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+  if (!sesion) return;
+  try {
+    const usuarios = db.resumenActividadPorUsuario();
+    enviarJSON(res, 200, { usuarios });
+  } catch (e) {
+    console.error("Error en apiAdminActividadUsuarios:", e);
+    enviarJSON(res, 500, { error: "Error interno del servidor." });
+  }
+}
+
 /* ================================================================
    API: exportar a Excel (protegido por sesion, cualquier rol autenticado)
    ================================================================ */
@@ -2475,6 +2593,148 @@ async function apiComparadorVigilarPost(req, res) {
 
   const fila = db.alternarVigilanciaEmpresa({ empresa, vigilada: !!cuerpo.vigilada, userId: sesion.usuario.id });
   enviarJSON(res, 200, { nota: fila });
+}
+
+/* ================================================================
+   API: datos del Comparador de competencia
+   ================================================================ */
+//
+// GET /api/competidores — devuelve todas las empresas con sus datos
+// (precios, permanencia, equipos…). Accesible a cualquier rol autenticado.
+//
+// PUT /api/competidores/:empresa — actualiza los datos de una empresa.
+// Solo super_admin. El nombre de empresa va en la URL codificado como
+// encodeURIComponent (p.ej. "MPA%2FProsegur").
+
+async function apiCompetidoresGet(req, res) {
+  const sesion = exigirSesion(req, res);
+  if (!sesion) return;
+  enviarJSON(res, 200, { competidores: db.listarCompetidores() });
+}
+
+async function apiCompetidoresPut(req, res, empresa) {
+  // Acepta tanto sesión de super_admin como X-Scraper-Token (Raspberry Pi)
+  const tokenScraper = process.env.SCRAPER_TOKEN;
+  const tokenRecibido = req.headers["x-scraper-token"];
+  const esScraper = tokenScraper && tokenRecibido === tokenScraper;
+
+  let sesion = null;
+  if (!esScraper) {
+    sesion = exigirSesion(req, res, { roles: [auth.ROLES.SUPER_ADMIN] });
+    if (!sesion) return;
+  }
+
+  let cuerpo;
+  try {
+    cuerpo = await leerCuerpoJSON(req);
+  } catch (e) {
+    return enviarJSON(res, 400, { error: e.message });
+  }
+
+  const precioMin = Number(cuerpo.precioMin);
+  const precioMax = Number(cuerpo.precioMax);
+  const precioMedio = Number(cuerpo.precioMedio);
+
+  // Cuando viene del scraper, permanencia y valoracion son opcionales
+  const permanenciaMeses = Number.isFinite(Number(cuerpo.permanenciaMeses))
+    ? Number(cuerpo.permanenciaMeses) : null;
+  const valoracion = Number.isFinite(Number(cuerpo.valoracion))
+    ? Number(cuerpo.valoracion) : null;
+
+  if (![precioMin, precioMax, precioMedio].every((v) => Number.isFinite(v))) {
+    return enviarJSON(res, 400, { error: "Faltan campos numéricos obligatorios (precioMin, precioMax, precioMedio)." });
+  }
+  if (valoracion !== null && (valoracion < 0 || valoracion > 5)) {
+    return enviarJSON(res, 400, { error: "La valoración debe estar entre 0 y 5." });
+  }
+
+  // Obtener precios anteriores para detectar cambio (solo si viene del scraper)
+  let preciosAnteriores = null;
+  if (esScraper) {
+    try {
+      const todos = db.listarCompetidores();
+      preciosAnteriores = todos.find((c) => c.empresa === empresa) || null;
+    } catch (_) {}
+  }
+
+  const equipos = Array.isArray(cuerpo.equipos) ? cuerpo.equipos : undefined;
+  const changes = db.actualizarCompetidor({
+    empresa,
+    precioMin, precioMax, precioMedio,
+    ...(permanenciaMeses !== null && { permanenciaMeses }),
+    ...(valoracion !== null && { valoracion }),
+    ...(typeof cuerpo.marca === "string" && { marca: cuerpo.marca.slice(0, 200) }),
+    ...(typeof cuerpo.conectividad === "string" && { conectividad: cuerpo.conectividad.slice(0, 500) }),
+    ...(typeof cuerpo.confianza === "string" && { confianza: cuerpo.confianza.slice(0, 300) }),
+    ...(equipos !== undefined && { equipos }),
+    ...(typeof cuerpo.color === "string" && { color: cuerpo.color.slice(0, 200) }),
+  });
+
+  if (!changes) return enviarJSON(res, 404, { error: "Empresa no encontrada." });
+
+  try {
+    db.registrarAuditoria({
+      userId: sesion ? sesion.usuario.id : null,
+      email: sesion ? sesion.usuario.email : "scraper@raspberry",
+      action: "comparador_actualizar",
+      detail: `Empresa: ${empresa} | min:${precioMin} max:${precioMax} medio:${precioMedio}`,
+      ip: req.socket?.remoteAddress,
+    });
+  } catch (_) {}
+
+  // Si viene del scraper, enviar email de alerta con el cambio de precio
+  if (esScraper) {
+    try {
+      const fecha = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+      const pAntMin = preciosAnteriores?.precio_min ?? "—";
+      const pAntMax = preciosAnteriores?.precio_max ?? "—";
+      const pAntMed = preciosAnteriores?.precio_medio ?? "—";
+      const fmt = (v) => (typeof v === "number" ? `${v.toFixed(2)} €` : String(v));
+      const hayDiff = preciosAnteriores && (
+        Math.abs(precioMin - (preciosAnteriores.precio_min ?? precioMin)) >= 1 ||
+        Math.abs(precioMax - (preciosAnteriores.precio_max ?? precioMax)) >= 1
+      );
+      const asunto = hayDiff
+        ? `[SegurPanel] ⚠️ Cambio de precio detectado: ${empresa}`
+        : `[SegurPanel] 📊 Precio actualizado por scraper: ${empresa}`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:${hayDiff ? "#c0392b" : "#2d6cdf"};color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+            <h2 style="margin:0">${hayDiff ? "⚠️ Cambio de precio detectado" : "📊 Precio actualizado"}</h2>
+            <p style="margin:4px 0 0">${empresa} · ${fecha}</p>
+          </div>
+          <div style="border:1px solid #ddd;padding:20px 24px;border-radius:0 0 8px 8px">
+            <table style="width:100%;border-collapse:collapse;margin:12px 0">
+              <thead><tr style="background:#f5f5f5">
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Métrica</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right">Antes</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:right">Ahora</th>
+              </tr></thead>
+              <tbody>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio mínimo</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMin)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMin)}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio máximo</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMax)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMax)}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #ddd">Precio medio</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right">${fmt(pAntMed)}</td>
+                    <td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold;color:${hayDiff ? "#c0392b" : "#27ae60"}">${fmt(precioMedio)}</td></tr>
+              </tbody>
+            </table>
+            <p style="color:#888;font-size:12px">Actualizado automáticamente por el scraper de la Raspberry Pi.</p>
+          </div>
+        </div>`;
+      for (const dest of EMAILS_SUPERVISION) {
+        email.enviarEmailGenerico({ para: dest, asunto, html })
+          .catch((e) => console.error(`Error enviando alerta precio a ${dest}:`, e));
+      }
+    } catch (e) {
+      console.error("Error enviando email alerta competidor:", e);
+    }
+  }
+
+  enviarJSON(res, 200, { ok: true });
 }
 
 /* ================================================================
@@ -3660,10 +3920,17 @@ async function manejarPeticion(req, res) {
     if (req.method === "POST" && ruta === "/api/comparador/notas") return await apiComparadorNotasPost(req, res);
     if (req.method === "POST" && ruta === "/api/comparador/vigilar") return await apiComparadorVigilarPost(req, res);
 
+    if (req.method === "GET" && ruta === "/api/competidores") return await apiCompetidoresGet(req, res);
+    if (req.method === "PUT" && ruta.startsWith("/api/competidores/")) {
+      const empresa = decodeURIComponent(ruta.slice("/api/competidores/".length));
+      if (empresa) return await apiCompetidoresPut(req, res, empresa);
+    }
+
     if (req.method === "GET" && ruta === "/api/admin/users") return await apiAdminUsers(req, res);
     if (req.method === "GET" && ruta === "/api/admin/requests") return await apiAdminRequests(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/audit") return await apiAdminAuditoria(req, res, url.searchParams);
     if (req.method === "GET" && ruta === "/api/admin/security-dashboard") return await apiAdminSecurityDashboard(req, res);
+    if (req.method === "GET" && ruta === "/api/admin/stats-usuarios") return await apiAdminStatsUsuarios(req, res);
     if (req.method === "POST" && ruta === "/api/admin/audit/clear") return await apiAdminLimpiarAuditoria(req, res);
 
     if (req.method === "POST") {
@@ -3706,6 +3973,7 @@ async function manejarPeticion(req, res) {
     if (req.method === "GET" && ruta === "/api/admin/actividad-retencion") {
       return await apiAdminActividadRetencion(req, res, url.searchParams);
     }
+    if (req.method === "GET" && ruta === "/api/admin/actividad-usuarios") return await apiAdminActividadUsuarios(req, res);
 
     if (req.method === "GET" && ruta === "/api/repositorio") return await apiRepositorioGet(req, res, url.searchParams);
     if (req.method === "POST") {
