@@ -1086,7 +1086,6 @@
   .repo-classify-inline { background: var(--fill-subtle); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-top: 16px !important; }
   .repo-classify-row button { border: 1px solid var(--border); background: var(--card); padding: 5px 12px; border-radius: 999px; cursor: pointer; font-size: 0.78rem; color: var(--heading); }
   .repo-classify-row button:hover { border-color: var(--accent); color: var(--accent-dark); }
-  .repo-view-text-btn { margin-top: 12px; border: 1px solid var(--border); background: var(--card); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: var(--heading); }
   .repo-full-text { margin-top: 10px; max-height: 300px; overflow-y: auto; background: var(--fill-subtle); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.8rem; white-space: pre-wrap; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
 
   .repo-hist-tipo { margin: 12px 0 18px; }
@@ -5725,10 +5724,6 @@
           ${renderClausulasChips(c.clausulas)}
           ${tieneCambios ? renderCambiosBox(c.cambios) : ''}
           ${!c.tipo ? renderFilaClasificar(c.id, null) : ''}
-          <div>
-            <button class="repo-view-text-btn" type="button" data-id="${c.id}">Ver texto anonimizado completo</button>
-            <pre class="repo-full-text" hidden></pre>
-          </div>
         </div>
       </div>
     `;
