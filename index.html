@@ -2376,6 +2376,10 @@
           <div class="repo-filter-label">Hasta</div>
           <input type="date" id="repoFiltroHasta">
         </div>
+        <div class="repo-filter-group" style="flex:1;min-width:180px;">
+          <div class="repo-filter-label">Buscar</div>
+          <input type="search" id="repoBusqueda" placeholder="Empresa, provincia, cláusula…" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:0.85rem;background:var(--bg);color:var(--heading);width:100%;">
+        </div>
       </div>
 
       <div class="repo-list" id="repoLista"><div class="empty-note">Cargando…</div></div>
@@ -5590,6 +5594,7 @@
     ['repoFiltroProvincia', 'repoFiltroNivel', 'repoFiltroDesde', 'repoFiltroHasta'].forEach(id => {
       document.getElementById(id).addEventListener('change', aplicarFiltrosRepositorioYRenderizar);
     });
+    document.getElementById('repoBusqueda').addEventListener('input', aplicarFiltrosRepositorioYRenderizar);
   }
 
   async function cargarRepositorio() {
@@ -5665,6 +5670,7 @@
     const desde = document.getElementById('repoFiltroDesde').value;
     const hasta = document.getElementById('repoFiltroHasta').value;
 
+    const busqueda = (document.getElementById('repoBusqueda').value || '').toLowerCase().trim();
     let lista = repoDatosCompletos;
     if (repoFiltroEmpresa) lista = lista.filter(c => c.empresa === repoFiltroEmpresa);
     if (repoFiltroTipo === '__sin_clasificar__') lista = lista.filter(c => !c.tipo);
@@ -5673,6 +5679,10 @@
     if (nivel) lista = lista.filter(c => c.nivel === nivel);
     if (desde) lista = lista.filter(c => c.fecha.slice(0, 10) >= desde);
     if (hasta) lista = lista.filter(c => c.fecha.slice(0, 10) <= hasta);
+    if (busqueda) lista = lista.filter(c => {
+      const campos = [(c.empresa || ''), (c.provincia || ''), (c.clausulas || []).join(' ')].join(' ').toLowerCase();
+      return campos.includes(busqueda);
+    });
 
     renderRepoLista(lista);
   }
