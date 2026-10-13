@@ -5395,9 +5395,17 @@
         const rect = container.getBoundingClientRect();
         tooltip.style.left = (e.clientX - rect.left) + 'px';
         tooltip.style.top = (e.clientY - rect.top) + 'px';
-        tooltip.innerHTML = info
-          ? `<strong>${escapeHtml(nombre)}</strong>${swatchHtml(info.empresaDominante)} ${info.total} contrato${info.total === 1 ? '' : 's'}`
-          : `<strong>${escapeHtml(nombre)}</strong>Sin contratos analizados todavía`;
+        if (info) {
+          const desglose = (info.desglose && info.desglose.length > 1)
+            ? '<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;">' +
+              info.desglose.map(d =>
+                `<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">${swatchHtml(d.empresa, 'company-swatch')} <span>${escapeHtml(d.empresa)}: <b>${d.n}</b></span></div>`
+              ).join('') + '</div>'
+            : '';
+          tooltip.innerHTML = `<strong>${escapeHtml(nombre)}</strong>${swatchHtml(info.empresaDominante)} ${info.total} contrato${info.total === 1 ? '' : 's'}${desglose}`;
+        } else {
+          tooltip.innerHTML = `<strong>${escapeHtml(nombre)}</strong>Sin contratos analizados todavía`;
+        }
         tooltip.hidden = false;
       });
       path.addEventListener('mouseleave', () => { tooltip.hidden = true; });
