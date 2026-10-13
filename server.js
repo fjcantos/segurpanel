@@ -1626,6 +1626,11 @@ async function apiAnalisis(req, res) {
     // version anterior de la misma empresa+tipo (construirRepositorioCompleto
     // ya calcula esa comparacion para el Repositorio; aqui se reutiliza en
     // caliente justo tras insertar el contrato nuevo).
+    //
+    // Ademas se detectan clausulas que NUNCA habian aparecido antes en ningun
+    // contrato del historial de esa empresa (sin importar el tipo): estas son
+    // las "clausulas nuevas" que se destacan en el resultado al usuario.
+    let clausulasNuevasEnHistorial = [];
     if (empresa) {
       try {
         const repositorio = construirRepositorioCompleto();
@@ -1642,6 +1647,16 @@ async function apiAnalisis(req, res) {
             })
             .catch((e) => console.error("Error enviando email de cambio de cláusulas:", e));
         }
+
+        // Clausulas que nunca habian aparecido en el historial de esta empresa
+        const idsHistorial = new Set(
+          repositorio
+            .filter((c) => c.id !== contratoId && c.empresa === empresa)
+            .flatMap((c) => c.clausulas.map((cl) => cl.id))
+        );
+        clausulasNuevasEnHistorial = clausulasCompletas
+          .filter((c) => !idsHistorial.has(c.id))
+          .map((c) => c.label);
       } catch (e) {
         console.error("Error comprobando cambios de cláusulas:", e);
       }
@@ -1655,6 +1670,7 @@ async function apiAnalisis(req, res) {
       clausulas: clausulasCompletas,
       tipo,
       tipoDetectadoConCerteza,
+      clausulasNuevasEnHistorial,
     };
     const cabeceraResumen = Buffer.from(JSON.stringify(resumen), "utf-8").toString("base64");
 

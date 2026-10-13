@@ -5189,6 +5189,20 @@
       });
     }
 
+    // Alerta de cláusulas nuevas en el historial de esta empresa
+    const clausulasNuevas = resumen.clausulasNuevasEnHistorial || [];
+    if (clausulasNuevas.length > 0) {
+      const alerta = document.createElement('div');
+      alerta.className = 'clause-item level-danger';
+      alerta.style.cssText = 'border-left-color:#e74c3c;background:rgba(231,76,60,0.08);margin-top:12px;';
+      alerta.innerHTML = `
+        <div>
+          <div class="clause-label" style="color:#e74c3c;">⚠️ Cláusula${clausulasNuevas.length > 1 ? 's' : ''} nueva${clausulasNuevas.length > 1 ? 's' : ''} — primera vez detectada${clausulasNuevas.length > 1 ? 's' : ''} en contratos de esta empresa</div>
+          <div class="clause-snippet" style="margin-top:4px;">${clausulasNuevas.map(c => escapeHtml(c)).join(' · ')}</div>
+        </div>`;
+      resultsEl.appendChild(alerta);
+    }
+
     // Repositorio: el tipo (Hogar/Negocio) ya se eligio ANTES de analizar
     // (selector previo a la subida) y se guardo junto con el contrato, asi
     // que aqui solo se confirma. Si por lo que sea llegase sin tipo, se
