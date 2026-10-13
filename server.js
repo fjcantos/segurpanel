@@ -3224,6 +3224,9 @@ const SECTORES_ALIANZA = new Set([
   "Seguros",
   "Inmobiliarias",
   "Suministros (luz, gas, agua)",
+  "Banca y finanzas",
+  "Automoción",
+  "Salud y bienestar",
 ]);
 const MAX_ALIANZAS_POR_SYNC = 200;
 
@@ -3906,8 +3909,11 @@ const idCopiaVisitaTab = RUTA_CON_ID("/api/actividad/tab", "/copia");
 // Limites:
 //   - /api/auth/login y /api/auth/verify-2fa: 10 peticiones / IP / minuto
 //   - Resto de rutas /api/*: 120 peticiones / IP / minuto
+// Nota: en un despliegue multi-instancia detras de un balanceador los contadores
+// son por proceso; para produccion de alta disponibilidad se usaria Redis, pero
+// para un servidor de instancia unica (Render free/starter) esto es suficiente.
 // ---------------------------------------------------------------------------
-const _rl = new Map();
+const _rl = new Map(); // ip -> { [ruta]: { count, resetAt } }
 
 function _limpiarRateLimiter() {
   const ahora = Date.now();
@@ -3920,6 +3926,10 @@ function _limpiarRateLimiter() {
 }
 setInterval(_limpiarRateLimiter, 60_000).unref();
 
+/**
+ * Comprueba el rate limit para (ip, clave).
+ * @returns {boolean} true si la peticion se permite, false si se supera el limite.
+ */
 function _permitir(ip, clave, limite) {
   const ahora = Date.now();
   if (!_rl.has(ip)) _rl.set(ip, {});
