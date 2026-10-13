@@ -2266,6 +2266,43 @@ function calcularClausulasMasFrecuentes() {
   return Object.values(conteo).sort((a, b) => b.count - a.count);
 }
 
+// Calcula la evolución del riesgo promedio por empresa a lo largo del tiempo,
+// agrupando contratos por trimestre (YYYY-QN). Devuelve un array de
+// { empresa, puntos: [{ periodo, promedio, n }] } ordenado por empresa.
+function calcularTendenciaRiesgoPorEmpresa() {
+  const contratos = construirRepositorioCompleto();
+  // Solo contratos con empresa y puntuación conocidas
+  const validos = contratos.filter((c) => c.empresa && c.puntuacion != null);
+
+  // Agrupar por empresa → trimestre
+  const mapaEmpresa = new Map();
+  validos.forEach((c) => {
+    const d = new Date(c.fecha);
+    const q = Math.floor(d.getMonth() / 3) + 1;
+    const periodo = `${d.getFullYear()}-Q${q}`;
+    if (!mapaEmpresa.has(c.empresa)) mapaEmpresa.set(c.empresa, new Map());
+    const mapaPeriodo = mapaEmpresa.get(c.empresa);
+    if (!mapaPeriodo.has(periodo)) mapaPeriodo.set(periodo, { suma: 0, n: 0 });
+    const p = mapaPeriodo.get(periodo);
+    p.suma += c.puntuacion;
+    p.n += 1;
+  });
+
+  const resultado = [];
+  mapaEmpresa.forEach((mapaPeriodo, empresa) => {
+    const puntos = Array.from(mapaPeriodo.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([periodo, { suma, n }]) => ({
+        periodo,
+        promedio: Math.round((suma / n) * 10) / 10,
+        n,
+      }));
+    if (puntos.length > 0) resultado.push({ empresa, puntos });
+  });
+
+  return resultado.sort((a, b) => a.empresa.localeCompare(b.empresa));
+}
+
 async function apiEstadisticas(req, res) {
   const sesion = exigirSesion(req, res, { roles: ROLES_ESTADISTICAS });
   if (!sesion) return;
@@ -2318,6 +2355,8 @@ async function apiEstadisticas(req, res) {
     horaAccion: u.hora_accion,
   }));
 
+  const tendenciaEmpresas = calcularTendenciaRiesgoPorEmpresa();
+
   enviarJSON(res, 200, {
     resumen: {
       totalContratos: db.contarContratosAnalizados(),
@@ -2331,6 +2370,7 @@ async function apiEstadisticas(req, res) {
     clausulas,
     actividad,
     actividadTiempoReal,
+    tendenciaEmpresas,
   });
 }
 

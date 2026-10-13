@@ -2330,6 +2330,13 @@
       <p class="intel-note">Cartografía: <a href="https://www.amcharts.com" target="_blank" rel="noopener noreferrer">amCharts</a>. Provincias en gris: todavía sin contratos analizados.</p>
     </div>
 
+    <div class="card">
+      <div class="chart-title">Tendencia de riesgo por empresa</div>
+      <div class="chart-sub">Puntuación de riesgo promedio (1–10) por trimestre, calculada sobre los contratos analizados en el Repositorio</div>
+      <div id="statsTendenciaChart"><div class="empty-note">Todavía no hay suficientes contratos para mostrar la tendencia.</div></div>
+      <div id="statsTendenciaLeyenda" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;"></div>
+    </div>
+
     <div class="intel-grid">
       <div class="card">
         <div class="chart-title">Cláusulas más frecuentes</div>
@@ -5559,6 +5566,84 @@
   }
   renderStatsPrecios();
 
+  function renderStatsTendencia(tendencia) {
+    const contenedor = document.getElementById('statsTendenciaChart');
+    const leyenda = document.getElementById('statsTendenciaLeyenda');
+    if (!contenedor) return;
+
+    // Filtrar empresas con al menos 2 puntos para que la línea tenga sentido
+    const series = tendencia.filter(e => e.puntos.length >= 1);
+    if (series.length === 0) {
+      contenedor.innerHTML = '<div class="empty-note">Todavía no hay suficientes contratos para mostrar la tendencia.</div>';
+      leyenda.innerHTML = '';
+      return;
+    }
+
+    // Recopilar todos los períodos únicos ordenados
+    const todosLosPeriodos = [...new Set(series.flatMap(e => e.puntos.map(p => p.periodo)))].sort();
+
+    const W = contenedor.clientWidth || 600;
+    const H = 200;
+    const padL = 36, padR = 16, padT = 16, padB = 32;
+    const anchoGrafico = W - padL - padR;
+    const altoGrafico = H - padT - padB;
+
+    // Escala X: períodos
+    const xPos = (i) => padL + (todosLosPeriodos.length <= 1 ? anchoGrafico / 2 : (i / (todosLosPeriodos.length - 1)) * anchoGrafico);
+    // Escala Y: riesgo 1–10
+    const yPos = (v) => padT + altoGrafico - ((v - 1) / 9) * altoGrafico;
+
+    // Líneas de cuadrícula Y (2, 4, 6, 8, 10)
+    let grid = '';
+    [2, 4, 6, 8, 10].forEach(v => {
+      const y = yPos(v);
+      grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>`;
+      grid += `<text x="${padL - 4}" y="${y + 4}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.4)">${v}</text>`;
+    });
+
+    // Etiquetas X
+    let etiquetasX = '';
+    todosLosPeriodos.forEach((p, i) => {
+      // Mostrar solo si no están muy juntas
+      if (todosLosPeriodos.length <= 8 || i % Math.ceil(todosLosPeriodos.length / 8) === 0) {
+        etiquetasX += `<text x="${xPos(i)}" y="${H - 4}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.4)">${p}</text>`;
+      }
+    });
+
+    // Líneas por empresa
+    let lineas = '';
+    let puntos = '';
+    series.forEach(({ empresa, puntos: pts }) => {
+      const color = COLORES_EMPRESA[empresa] || '#888';
+      const coordenadas = pts.map(pt => {
+        const xi = todosLosPeriodos.indexOf(pt.periodo);
+        return { x: xPos(xi), y: yPos(pt.promedio), promedio: pt.promedio, n: pt.n, periodo: pt.periodo };
+      });
+
+      if (coordenadas.length >= 2) {
+        const d = coordenadas.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x},${c.y}`).join(' ');
+        lineas += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+      }
+
+      coordenadas.forEach(c => {
+        puntos += `<circle cx="${c.x}" cy="${c.y}" r="4" fill="${color}" stroke="var(--bg)" stroke-width="1.5">
+          <title>${escapeHtml(empresa)} · ${c.periodo}: ${c.promedio} (${c.n} contrato${c.n === 1 ? '' : 's'})</title>
+        </circle>`;
+      });
+    });
+
+    contenedor.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible;">${grid}${etiquetasX}${lineas}${puntos}</svg>`;
+
+    // Leyenda
+    leyenda.innerHTML = series.map(({ empresa }) => {
+      const color = COLORES_EMPRESA[empresa] || '#888';
+      return `<span style="display:flex;align-items:center;gap:5px;font-size:12px;">
+        <span style="display:inline-block;width:24px;height:3px;background:${color};border-radius:2px;"></span>
+        ${escapeHtml(empresa)}
+      </span>`;
+    }).join('');
+  }
+
   async function cargarEstadisticas() {
     const tbody = document.getElementById('statsActividadBody');
     try {
@@ -5570,6 +5655,7 @@
       renderStatsResumen(datos.resumen);
       inicializarMapaSiHaceFalta();
       pintarMapaEstadisticas(datos.provincias);
+      renderStatsTendencia(datos.tendenciaEmpresas || []);
       renderStatsClausulas(datos.clausulas);
       renderStatsActividad(datos.actividad);
       renderStatsActividadTiempoReal(datos.actividadTiempoReal);
