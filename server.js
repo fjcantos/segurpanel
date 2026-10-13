@@ -2273,10 +2273,22 @@ async function apiEstadisticas(req, res) {
   const clausulas = calcularClausulasMasFrecuentes();
   const riesgoPromedio = db.riesgoPromedioContratos();
 
-  const provincias = db.estadisticasPorProvincia().map((f) => ({
-    provincia: f.provincia,
-    empresaDominante: f.empresa,
-    total: f.n,
+  // Agrupar filas por provincia; la primera fila de cada grupo es la dominante
+  // (ORDER BY n DESC en la query de db.js).
+  const _provMap = new Map();
+  db.estadisticasPorProvincia().forEach((f) => {
+    if (!_provMap.has(f.provincia)) {
+      _provMap.set(f.provincia, { empresaDominante: f.empresa, total: 0, desglose: [] });
+    }
+    const p = _provMap.get(f.provincia);
+    p.total += f.n;
+    p.desglose.push({ empresa: f.empresa, n: f.n });
+  });
+  const provincias = Array.from(_provMap.entries()).map(([provincia, p]) => ({
+    provincia,
+    empresaDominante: p.empresaDominante,
+    total: p.total,
+    desglose: p.desglose,
   }));
 
   const visitasPorUsuario = {};
