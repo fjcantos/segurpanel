@@ -2015,6 +2015,49 @@
     </div>
 
     <h3 class="section-subtitle">Acuerdos publicados</h3>
+
+    <!-- Filtros de alianzas -->
+    <div class="repo-filters" id="alianzasFiltros" style="margin-bottom:16px;">
+      <div class="repo-filter-group" style="flex:1;min-width:180px;">
+        <div class="repo-filter-label">Buscar</div>
+        <input type="search" id="alianzaBusqueda" placeholder="Empresa, socio, titular…" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:0.85rem;background:var(--bg);color:var(--heading);width:100%;">
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Sector</div>
+        <select id="alianzaSector" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:0.85rem;background:var(--bg);color:var(--heading);">
+          <option value="">Todos</option>
+          <option value="móviles">Móviles</option>
+          <option value="grandes superficies">Grandes superficies</option>
+          <option value="seguros">Seguros</option>
+          <option value="inmobiliarias">Inmobiliarias</option>
+          <option value="suministros">Suministros</option>
+          <option value="banca">Banca y finanzas</option>
+          <option value="automoción">Automoción</option>
+          <option value="salud">Salud y bienestar</option>
+        </select>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Empresa alarma</div>
+        <select id="alianzaEmpresa" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:0.85rem;background:var(--bg);color:var(--heading);">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="repo-filter-group">
+        <div class="repo-filter-label">Período</div>
+        <select id="alianzaPeriodo" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:0.85rem;background:var(--bg);color:var(--heading);">
+          <option value="">Todos</option>
+          <option value="hoy">Hoy</option>
+          <option value="semana">Esta semana</option>
+          <option value="mes">Este mes</option>
+          <option value="historico">Histórico</option>
+        </select>
+      </div>
+      <div class="repo-filter-group" style="align-self:flex-end;">
+        <button type="button" id="alianzaLimpiarFiltros" class="btn-secondary" style="padding:6px 14px;font-size:0.85rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;">✕ Limpiar</button>
+      </div>
+    </div>
+
+    <div id="alianzasPublicadasFiltradas"></div>
     <div id="alianzasPublicadasPeriodos">
       <div class="empty-note">Cargando…</div>
     </div>
@@ -4352,6 +4395,7 @@
       activarMedidasSeguridadRetencion(usuario);
     }
 
+    inicializarFiltrosAlianzas();
     cargarAlianzas();
     cargarOfertas();
     cargarResumenInicio();
@@ -4525,6 +4569,59 @@
     }
   }
 
+  function aplicarFiltrosAlianzas() {
+    const grupos = window._alianzasGrupos;
+    if (!grupos) return;
+
+    const busqueda = (document.getElementById('alianzaBusqueda')?.value || '').toLowerCase().trim();
+    const sector   = (document.getElementById('alianzaSector')?.value || '').toLowerCase();
+    const empresa  = (document.getElementById('alianzaEmpresa')?.value || '').toLowerCase();
+    const periodo  = document.getElementById('alianzaPeriodo')?.value || '';
+
+    const hasFiltro = busqueda || sector || empresa || periodo;
+    const contFiltradas = document.getElementById('alianzasPublicadasFiltradas');
+    const contPeriodos  = document.getElementById('alianzasPublicadasPeriodos');
+
+    if (!hasFiltro) {
+      // Sin filtros: mostrar vista normal por períodos
+      if (contFiltradas) contFiltradas.innerHTML = '';
+      if (contPeriodos)  contPeriodos.hidden = false;
+      return;
+    }
+
+    // Con filtros: ocultar períodos y mostrar lista plana filtrada
+    if (contPeriodos) contPeriodos.hidden = true;
+
+    const periodosActivos = periodo ? [periodo] : PERIODOS_ALIANZAS.map(p => p.clave);
+    let lista = periodosActivos.flatMap(p => grupos[p] || []);
+
+    if (busqueda) lista = lista.filter(a =>
+      [a.empresaAlarma, a.socio, a.titular, a.tipoAcuerdo].join(' ').toLowerCase().includes(busqueda)
+    );
+    if (sector)  lista = lista.filter(a => (a.sector || '').toLowerCase().includes(sector));
+    if (empresa) lista = lista.filter(a => (a.empresaAlarma || '').toLowerCase() === empresa);
+
+    if (contFiltradas) {
+      contFiltradas.innerHTML = lista.length
+        ? `<div class="alliance-grid">${lista.map(a => tarjetaAlianza(a, false)).join('')}</div>`
+        : `<div class="empty-note">No hay alianzas que coincidan con los filtros.</div>`;
+    }
+  }
+
+  function inicializarFiltrosAlianzas() {
+    ['alianzaBusqueda', 'alianzaSector', 'alianzaEmpresa', 'alianzaPeriodo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', aplicarFiltrosAlianzas);
+    });
+    document.getElementById('alianzaLimpiarFiltros')?.addEventListener('click', () => {
+      ['alianzaBusqueda', 'alianzaSector', 'alianzaEmpresa', 'alianzaPeriodo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      aplicarFiltrosAlianzas();
+    });
+  }
+
   async function cargarAlianzas() {
     const contPublicadas = document.getElementById('alianzasPublicadasPeriodos');
     if (!contPublicadas) return; // sesion aun no resuelta o markup no presente
@@ -4546,6 +4643,18 @@
     // Se guarda en plano para la busqueda global (ver construirIndiceBusqueda):
     // evita volver a pedir /api/alianzas solo para buscar.
     ultimasAlianzasPublicadas = PERIODOS_ALIANZAS.flatMap((p) => (datos.publicadas || {})[p.clave] || []);
+
+    // Rellenar select de empresas con las que haya en los datos
+    const selectEmpresa = document.getElementById('alianzaEmpresa');
+    if (selectEmpresa) {
+      const empresas = [...new Set(ultimasAlianzasPublicadas.map(a => a.empresaAlarma).filter(Boolean))].sort();
+      selectEmpresa.innerHTML = '<option value="">Todas</option>' +
+        empresas.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+    }
+
+    // Guardar grupos para filtrado posterior
+    window._alianzasGrupos = datos.publicadas || {};
+    aplicarFiltrosAlianzas();
 
     const spanActualizado = document.getElementById('alianzasUpdated');
     if (spanActualizado) {

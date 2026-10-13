@@ -146,6 +146,18 @@ PARTNER_SECTORS = {
     "Seguros": ["Mapfre", "AXA", "Allianz", "Generali"],
     "Inmobiliarias": ["idealista", "Fotocasa", "pisos.com"],
     "Energia y agua": ["Endesa", "Iberdrola", "Naturgy", "Repsol"],
+    "Banca y finanzas": [
+        "CaixaBank", "Santander", "BBVA", "ING", "Bankinter", "Sabadell",
+        "Unicaja", "Ibercaja", "Kutxabank", "Abanca",
+    ],
+    "Automacion": [
+        "Volkswagen", "Toyota", "Renault", "Ford", "Seat", "Hyundai",
+        "Kia", "Stellantis", "Peugeot", "Citroën",
+    ],
+    "Salud y bienestar": [
+        "Quirónsalud", "HM Hospitales", "DomusVi", "Sanitas", "Adeslas",
+        "Asisa", "Clínica Baviera", "Vithas", "Farmacia", "Residencia",
+    ],
 }
 
 # Traduce los nombres de sector de PARTNER_SECTORS al valor EXACTO que acepta
@@ -158,6 +170,9 @@ MAPEO_SECTORES_ENDPOINT = {
     "Seguros": "Seguros",
     "Inmobiliarias": "Inmobiliarias",
     "Energia y agua": "Suministros (luz, gas, agua)",
+    "Banca y finanzas": "Banca y finanzas",
+    "Automacion": "Automoción",
+    "Salud y bienestar": "Salud y bienestar",
 }
 
 
