@@ -1626,10 +1626,6 @@ async function apiAnalisis(req, res) {
     // version anterior de la misma empresa+tipo (construirRepositorioCompleto
     // ya calcula esa comparacion para el Repositorio; aqui se reutiliza en
     // caliente justo tras insertar el contrato nuevo).
-    //
-    // Ademas se detectan clausulas que NUNCA habian aparecido antes en ningun
-    // contrato del historial de esa empresa (sin importar el tipo): estas son
-    // las "clausulas nuevas" que se destacan en el resultado al usuario.
     let clausulasNuevasEnHistorial = [];
     if (empresa) {
       try {
@@ -1647,8 +1643,7 @@ async function apiAnalisis(req, res) {
             })
             .catch((e) => console.error("Error enviando email de cambio de cláusulas:", e));
         }
-
-        // Clausulas que nunca habian aparecido en el historial de esta empresa
+        // Detectar cláusulas que nunca han aparecido antes en esta empresa
         const idsHistorial = new Set(
           repositorio
             .filter((c) => c.id !== contratoId && c.empresa === empresa)
@@ -4266,3 +4261,5 @@ servidor.listen(PORT, () => {
     console.log("============================================================\n");
   }
 });
+
+

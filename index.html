@@ -5878,7 +5878,7 @@
 
   function actualizarNotifDotRepo() {
     const dot = document.getElementById('repoNotifDot');
-    if (dot) dot.hidden = !repoDatosCompletos.some(c => c.cambios && c.cambios.tieneCambios);
+    if (dot) dot.hidden = !repoDatosCompletos.some(c => c.cambios && c.cambios.tieneCambios && !c.cambiosVistos);
   }
 
   function aplicarFiltrosRepositorioYRenderizar() {
@@ -5944,7 +5944,7 @@
             <div class="repo-card-meta">${escapeHtml(tipoTexto)} · ${escapeHtml(c.provincia || 'Provincia desconocida')}</div>
           </div>
           <span class="repo-risk-badge ${nivelClase}">${escapeHtml(nivelTexto)}</span>
-          ${tieneCambios ? `<span class="change-dot" title="${escapeHtml(resumenCambiosTexto(c.cambios))}"></span>` : ''}
+          ${tieneCambios && !c.cambiosVistos ? `<span class="change-dot" title="${escapeHtml(resumenCambiosTexto(c.cambios))}"></span>` : ''}
           <button class="repo-expand-btn" type="button">Detalle ▾</button>
         </div>
         <div class="repo-card-detail" hidden>
@@ -5965,10 +5965,24 @@
     cont.innerHTML = lista.map(c => tarjetaRepositorio(c)).join('');
 
     cont.querySelectorAll('.repo-expand-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const detalle = btn.closest('.repo-card').querySelector('.repo-card-detail');
+      btn.addEventListener('click', async () => {
+        const card = btn.closest('.repo-card');
+        const detalle = card.querySelector('.repo-card-detail');
         detalle.hidden = !detalle.hidden;
         btn.textContent = detalle.hidden ? 'Detalle ▾' : 'Detalle ▴';
+        // Si se abre y tiene punto rojo, marcarlo como visto
+        if (!detalle.hidden) {
+          const dot = card.querySelector('.change-dot');
+          if (dot) {
+            const id = card.dataset.id;
+            dot.remove();
+            llamarAPI(`/api/repositorio/${id}/marcar-visto`, 'POST').catch(() => {});
+            // Actualizar en memoria para que el notif dot del tab también desaparezca
+            const contrato = repoDatosCompletos.find(c => String(c.id) === String(id));
+            if (contrato) contrato.cambiosVistos = true;
+            actualizarNotifDotRepo();
+          }
+        }
       });
     });
     cont.querySelectorAll('.repo-classify-row button[data-clasificar]').forEach(btn => {

@@ -297,6 +297,9 @@ if (!columnaExiste("tab_visits", "copy_intentos")) {
 if (!columnaExiste("scraper_runs", "estado")) {
   db.exec("ALTER TABLE scraper_runs ADD COLUMN estado TEXT NOT NULL DEFAULT 'ok'");
 }
+if (!columnaExiste("contract_stats", "cambios_vistos")) {
+  db.exec("ALTER TABLE contract_stats ADD COLUMN cambios_vistos INTEGER NOT NULL DEFAULT 0");
+}
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_contract_stats_empresa_tipo ON contract_stats(empresa, tipo);");
 
@@ -901,7 +904,7 @@ function listarClausulasContratos() {
 function listarRepositorioResumen() {
   return db
     .prepare(
-      `SELECT id, provincia, empresa, tipo, puntuacion, clausulas_json, created_at, user_id
+      `SELECT id, provincia, empresa, tipo, puntuacion, clausulas_json, created_at, user_id, cambios_vistos
        FROM contract_stats
        ORDER BY created_at ASC, id ASC`
     )
